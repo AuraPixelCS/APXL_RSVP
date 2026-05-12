@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3.0] — 2026-05-12
+
+- New seating layout: **Banquet Runway** — stage at front, red carpet aisle down the center, round tables arranged on both sides of the runway. Tables alternate left/right and stack vertically. Uses `seatsPerTable` for sizing (default 10). Selectable in the event creation wizard and via Edit Layout in the seat map modal. ([types/index.ts](types/index.ts), [components/ui/SeatingConfigurator.tsx](components/ui/SeatingConfigurator.tsx), [components/ui/SeatMapModal.tsx](components/ui/SeatMapModal.tsx))
+- Email/WhatsApp `Row + Seat` derivation in [pages/api/notify.ts](pages/api/notify.ts) is now skipped for banquet/banquet-runway layouts (tables don't have meaningful row letters); those events use the existing `Table No. #X` flow.
+
 ## [1.2.1] — 2026-05-12
 
 - Ported RSVP project to the AuraPixel Vercel account (team `aurapixelcs`) and pushed the source to a fresh `AuraPixelCS/APXL_RSVP` GitHub repo. Public URL contract unchanged — `aurapixel.live/rsvp/*` now proxies via the landing-page's `next.config.ts` rewrite to `https://apxl-rsvp.vercel.app/*` instead of the legacy `aurapixel-rsvp.vercel.app`.

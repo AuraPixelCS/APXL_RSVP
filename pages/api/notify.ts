@@ -30,9 +30,15 @@ async function sendOneNotification(
     : undefined;
 
   // In seat mode, derive row + position-within-row from the global seatNumber.
+  // Only meaningful for grid/runway-style layouts; banquet variants describe seats
+  // by table number instead, so we skip the row label there.
   let rowLabel: string | undefined;
   let seatPos: number | undefined;
-  if (event.assignmentMode !== "table" && event.seatingConfig) {
+  const rowableStyle =
+    event.seatingConfig &&
+    event.seatingConfig.style !== "banquet" &&
+    event.seatingConfig.style !== "banquet-runway";
+  if (event.assignmentMode !== "table" && rowableStyle) {
     const { row, pos } = getSeatLabel(rsvp.seatNumber, event.seatingConfig);
     rowLabel = row;
     seatPos = pos;

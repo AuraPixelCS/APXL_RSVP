@@ -484,6 +484,246 @@ function BanquetSeatMap({
   );
 }
 
+// ─── Banquet-Runway seat map (stage front, red carpet aisle, round tables on each side) ───
+
+function BanquetRunwaySeatMap({
+  seats, seatsPerTable, selectionMode, highlightedSeat,
+  isTableMode,
+  onSeatAssign, onSeatInspect,
+}: {
+  seats: SeatInfo[];
+  seatsPerTable: number;
+  selectionMode: boolean;
+  highlightedSeat: number | null;
+  isTableMode: boolean;
+  onSeatAssign?: (seatNumber: number) => void;
+  onSeatInspect?: (seat: SeatInfo) => void;
+}) {
+  const tables: SeatInfo[][] = [];
+  for (let i = 0; i < seats.length; i += seatsPerTable) {
+    tables.push(seats.slice(i, i + seatsPerTable));
+  }
+
+  const TABLE_R = 34;
+  const SEAT_R  = 9;
+  const ORBIT_R = TABLE_R + SEAT_R + 5;
+  const SVG_SIZE = (ORBIT_R + SEAT_R + 4) * 2;
+
+  // Pair tables into rows: left, right. T1=left, T2=right, T3=left, T4=right, ...
+  const rows: { left: SeatInfo[][]; right: SeatInfo[][] }[] = [];
+  for (let i = 0; i < tables.length; i += 2) {
+    rows.push({ left: [tables[i]], right: tables[i + 1] ? [tables[i + 1]] : [] });
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {/* Stage */}
+      <div
+        className="rounded-lg flex items-center justify-center"
+        style={{
+          width: "100%",
+          maxWidth: SVG_SIZE * 2 + 60,
+          height: 32,
+          background: "rgba(61,155,245,0.08)",
+          border: "1px solid rgba(61,155,245,0.25)",
+          fontSize: 11,
+          fontWeight: 700,
+          color: "rgba(61,155,245,0.7)",
+          letterSpacing: "0.2em",
+        }}
+      >
+        STAGE
+      </div>
+
+      {/* Rows of left-table | aisle | right-table */}
+      <div className="flex flex-col gap-2">
+        {rows.map((rowPair, ri) => {
+          const leftTable = rowPair.left[0];
+          const rightTable = rowPair.right[0];
+          const leftTi = ri * 2;
+          const rightTi = ri * 2 + 1;
+          return (
+            <div key={ri} className="flex items-stretch gap-2">
+              <BanquetRunwayTableCell
+                tableSeats={leftTable}
+                tableIndex={leftTi}
+                seatsPerTable={seatsPerTable}
+                selectionMode={selectionMode}
+                highlightedSeat={highlightedSeat}
+                isTableMode={isTableMode}
+                onSeatAssign={onSeatAssign}
+                onSeatInspect={onSeatInspect}
+                tableR={TABLE_R}
+                seatR={SEAT_R}
+                orbitR={ORBIT_R}
+                svgSize={SVG_SIZE}
+              />
+
+              {/* Red carpet aisle */}
+              <div style={{ width: 28, display: "flex", justifyContent: "center", alignItems: "stretch" }}>
+                <div
+                  style={{
+                    width: 10,
+                    background: "rgba(220,38,38,0.18)",
+                    borderRadius: 3,
+                    border: "1px solid rgba(220,38,38,0.3)",
+                  }}
+                />
+              </div>
+
+              {rightTable ? (
+                <BanquetRunwayTableCell
+                  tableSeats={rightTable}
+                  tableIndex={rightTi}
+                  seatsPerTable={seatsPerTable}
+                  selectionMode={selectionMode}
+                  highlightedSeat={highlightedSeat}
+                  isTableMode={isTableMode}
+                  onSeatAssign={onSeatAssign}
+                  onSeatInspect={onSeatInspect}
+                  tableR={TABLE_R}
+                  seatR={SEAT_R}
+                  orbitR={ORBIT_R}
+                  svgSize={SVG_SIZE}
+                />
+              ) : (
+                <div style={{ flex: 1 }} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BanquetRunwayTableCell({
+  tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, isTableMode,
+  onSeatAssign, onSeatInspect,
+  tableR, seatR, orbitR, svgSize,
+}: {
+  tableSeats: SeatInfo[];
+  tableIndex: number;
+  seatsPerTable: number;
+  selectionMode: boolean;
+  highlightedSeat: number | null;
+  isTableMode: boolean;
+  onSeatAssign?: (seatNumber: number) => void;
+  onSeatInspect?: (seat: SeatInfo) => void;
+  tableR: number;
+  seatR: number;
+  orbitR: number;
+  svgSize: number;
+}) {
+  const occupiedSeats = tableSeats.filter((s) => s.status !== "available");
+  return (
+    <div
+      style={{
+        flex: 1,
+        border: "1px solid var(--border)",
+        borderRadius: 12,
+        padding: "12px 10px 10px",
+        background: "var(--surface-2)",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+      }}
+    >
+      <svg width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`} overflow="visible">
+        <circle cx={svgSize / 2} cy={svgSize / 2} r={tableR} fill="var(--surface-3)" stroke="var(--border)" strokeWidth="1.5" />
+        <text x={svgSize / 2} y={svgSize / 2 + 4} textAnchor="middle" fontSize="10" fill="var(--muted)" fontFamily="'Fira Code', monospace">
+          T{tableIndex + 1}
+        </text>
+        {tableSeats.map((seat, si) => {
+          const angle = (si / tableSeats.length) * Math.PI * 2 - Math.PI / 2;
+          const sx = svgSize / 2 + Math.cos(angle) * orbitR;
+          const sy = svgSize / 2 + Math.sin(angle) * orbitR;
+          const isAvailable   = seat.status === "available";
+          const isSelectable  = selectionMode && isAvailable;
+          const isDisabled    = selectionMode && !isAvailable;
+          const isInspectable = !selectionMode && !!seat.guestName;
+          const isHighlighted = highlightedSeat === seat.seatNumber;
+          const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
+
+          const fill   = isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : c.fill;
+          const stroke = isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : c.stroke;
+
+          return (
+            <circle
+              key={si}
+              cx={sx} cy={sy} r={seatR}
+              fill={fill} stroke={stroke} strokeWidth={isHighlighted ? 2 : 1.5}
+              opacity={isDisabled ? 0.4 : 1}
+              style={{
+                cursor: (isSelectable || isInspectable) ? "pointer" : isDisabled ? "not-allowed" : "default",
+                transition: "fill 120ms, stroke 120ms",
+                filter: isHighlighted ? "drop-shadow(0 0 4px rgba(61,155,245,0.5))" : "none",
+              }}
+              onClick={() => {
+                if (isSelectable) onSeatAssign?.(seat.seatNumber);
+                else if (isInspectable) onSeatInspect?.(seat);
+              }}
+              onMouseEnter={(e) => {
+                if (isHighlighted) return;
+                const el = e.currentTarget as SVGCircleElement;
+                if (isSelectable) {
+                  el.setAttribute("fill", "rgba(34,197,94,0.28)");
+                  el.setAttribute("stroke", SELECTABLE_HOVER);
+                } else if (isInspectable) {
+                  el.setAttribute("fill", c.fill.replace("0.18", "0.32"));
+                  el.setAttribute("stroke-width", "2");
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (isHighlighted) return;
+                const el = e.currentTarget as SVGCircleElement;
+                el.setAttribute("fill", fill);
+                el.setAttribute("stroke", stroke);
+                el.setAttribute("stroke-width", isHighlighted ? "2" : "1.5");
+              }}
+            >
+              <title>
+                {seat.guestName
+                  ? `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`} · ${seat.guestName}${isInspectable ? " · Click for details" : ""}`
+                  : `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`}${isSelectable ? " · Click to assign" : ""}`}
+              </title>
+            </circle>
+          );
+        })}
+      </svg>
+
+      <p className="text-[10px] font-mono uppercase tracking-wider mt-1 mb-1.5" style={{ color: "var(--muted)" }}>
+        Table {tableIndex + 1}
+      </p>
+
+      <div style={{ width: "100%", height: 1, background: "var(--border)", marginBottom: 6 }} />
+
+      <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
+        {occupiedSeats.length > 0 ? (
+          occupiedSeats.map((s) => (
+            <p
+              key={s.seatNumber}
+              style={{
+                fontSize: 10,
+                color: "var(--foreground)",
+                opacity: 0.85,
+                margin: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {s.guestName}
+            </p>
+          ))
+        ) : (
+          <p style={{ fontSize: 10, color: "var(--muted)", margin: 0, fontStyle: "italic" }}>Empty</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Seat detail panel ─────────────────────────────────────────────────────────
 
 function SeatDetailPanel({
@@ -691,7 +931,7 @@ export default function SeatMapModal({
   const seatsPerTable = config.seatsPerTable ?? 10;
   const selectionMode = !!selectingFor;
   const isTableMode   = event.assignmentMode === "table";
-  const perGroup      = config.style === "banquet" ? seatsPerTable : seatsPerRow;
+  const perGroup      = (config.style === "banquet" || config.style === "banquet-runway") ? seatsPerTable : seatsPerRow;
 
   const stats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -974,6 +1214,16 @@ export default function SeatMapModal({
             >
               {config.style === "banquet" ? (
                 <BanquetSeatMap
+                  seats={seats}
+                  seatsPerTable={seatsPerTable}
+                  selectionMode={selectionMode}
+                  highlightedSeat={selectedSeat?.seatNumber ?? null}
+                  isTableMode={isTableMode}
+                  onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
+                  onSeatInspect={!selectionMode ? handleSeatInspect : undefined}
+                />
+              ) : config.style === "banquet-runway" ? (
+                <BanquetRunwaySeatMap
                   seats={seats}
                   seatsPerTable={seatsPerTable}
                   selectionMode={selectionMode}

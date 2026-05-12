@@ -109,7 +109,7 @@ export interface FieldMapping {
 
 // ─── SEATING ─────────────────────────────────────────────────────────────────
 
-export type SeatingStyle = "theater" | "auditorium" | "banquet" | "classroom" | "runway";
+export type SeatingStyle = "theater" | "auditorium" | "banquet" | "classroom" | "runway" | "banquet-runway";
 
 export interface SeatingConfig {
   style: SeatingStyle;

@@ -21,6 +21,7 @@ const STYLES: {
   { key: "banquet",    name: "Banquet",    desc: "Round tables with chairs",            defaultSeatsPerTable: 10 },
   { key: "classroom",  name: "Classroom",  desc: "Rows of desks and chairs",           defaultSeatsPerRow: 6 },
   { key: "runway",     name: "Runway",     desc: "Stage, red carpet aisle, side seats", defaultSeatsPerRow: 5 },
+  { key: "banquet-runway", name: "Banquet Runway", desc: "Stage, red carpet aisle, round tables on each side", defaultSeatsPerTable: 10 },
 ];
 
 // ─── Style card diagrams ───────────────────────────────────────────────────────
@@ -103,6 +104,42 @@ function RunwayDiagram({ active }: { active: boolean }) {
   );
 }
 
+function BanquetRunwayDiagram({ active }: { active: boolean }) {
+  const c = active ? "#3d9bf5" : "#6b7280";
+  const sides: [number, number][] = [
+    [13, 16], [13, 32],   // left tables (x, y)
+    [47, 16], [47, 32],   // right tables
+  ];
+  const angles = [0, 72, 144, 216, 288];
+  return (
+    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
+      {/* Stage */}
+      <rect x="4" y="2" width="52" height="6" rx="2" fill={c} opacity={active ? 0.35 : 0.2} />
+      {/* Red carpet center aisle */}
+      <rect x="28" y="10" width="4" height="32" rx="1.5" fill="rgba(220,38,38,0.5)" />
+      {/* Tables on each side with orbital seats */}
+      {sides.map(([cx, cy], ti) => (
+        <g key={ti}>
+          <circle cx={cx} cy={cy} r="5" fill={c} opacity={active ? 0.18 : 0.08} stroke={c} strokeWidth="0.75" strokeOpacity={active ? 0.55 : 0.3} />
+          {angles.map((a, ai) => {
+            const rad = (a * Math.PI) / 180;
+            return (
+              <circle
+                key={ai}
+                cx={cx + Math.cos(rad) * 7.5}
+                cy={cy + Math.sin(rad) * 7.5}
+                r="1.6"
+                fill={c}
+                opacity={active ? 0.85 : 0.5}
+              />
+            );
+          })}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function ClassroomDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   return (
@@ -164,6 +201,67 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
         {totalSeats > MAX_VISIBLE && (
           <text x={svgW / 2} y={svgH - 1} textAnchor="middle" fontSize="7" fill="var(--muted)">
             +{totalSeats - MAX_VISIBLE} more…
+          </text>
+        )}
+      </svg>
+    );
+  }
+
+  if (config.style === "banquet-runway") {
+    const seatsPerTable = config.seatsPerTable ?? 10;
+    const tableCount = Math.ceil(totalSeats / seatsPerTable);
+    const visibleTables = Math.min(tableCount, 8);
+    // Tables stack vertically; alternate left/right around the central runway.
+    const TABLE_R = 9;
+    const SEAT_R = 2;
+    const ORBIT_R = TABLE_R + SEAT_R + 1.5;
+    const ROW_H = (ORBIT_R + SEAT_R + 1) * 2 + 2;
+    const AISLE_W = 10;
+    const sideW = ORBIT_R + SEAT_R + 4;
+    const svgW = sideW * 2 + AISLE_W + 8;
+    const rowsNeeded = Math.ceil(visibleTables / 2);
+    const svgH = rowsNeeded * ROW_H + 16;
+    const lastTableSeats = totalSeats - (tableCount - 1) * seatsPerTable;
+
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: "100%", overflow: "visible" }}>
+        {/* Stage */}
+        <rect x="3" y="2" width={svgW - 6} height="5" rx="1.5" fill="rgba(61,155,245,0.3)" />
+        {/* Red carpet aisle */}
+        <rect x={(svgW - 4) / 2} y="9" width="4" height={svgH - 11} rx="1.5" fill="rgba(220,38,38,0.3)" />
+        {/* Tables — alternating left/right pairs */}
+        {Array.from({ length: visibleTables }).map((_, ti) => {
+          const rowIdx = Math.floor(ti / 2);
+          const isLeft = ti % 2 === 0;
+          const cx = isLeft ? sideW / 2 + 2 : svgW - sideW / 2 - 2;
+          const cy = 12 + rowIdx * ROW_H + ROW_H / 2;
+          const seatCount = ti === tableCount - 1 ? Math.max(lastTableSeats, 1) : seatsPerTable;
+          return (
+            <g key={ti}>
+              <circle cx={cx} cy={cy} r={TABLE_R} fill="var(--surface-3)" stroke="rgba(61,155,245,0.3)" strokeWidth="0.8" />
+              <text x={cx} y={cy + 2.5} textAnchor="middle" fontSize="5.5" fill={accent} fontFamily="'Fira Code', monospace">
+                T{ti + 1}
+              </text>
+              {Array.from({ length: seatCount }).map((_, si) => {
+                const angle = (si / seatCount) * Math.PI * 2 - Math.PI / 2;
+                return (
+                  <circle
+                    key={si}
+                    cx={cx + Math.cos(angle) * ORBIT_R}
+                    cy={cy + Math.sin(angle) * ORBIT_R}
+                    r={SEAT_R}
+                    fill={accentFill}
+                    stroke={accent}
+                    strokeWidth="0.5"
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+        {tableCount > visibleTables && (
+          <text x={svgW / 2} y={svgH - 2} textAnchor="middle" fontSize="7" fill="var(--muted)">
+            +{tableCount - visibleTables} more…
           </text>
         )}
       </svg>
@@ -288,7 +386,7 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
     onChange(newConfig);
   };
 
-  const tableCount = config.style === "banquet"
+  const tableCount = (config.style === "banquet" || config.style === "banquet-runway")
     ? Math.ceil(totalSeats / (config.seatsPerTable ?? 10))
     : null;
 
@@ -305,10 +403,11 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
           {STYLES.map((s) => {
             const isSelected = selected === s.key;
             const Diagram =
-              s.key === "theater"    ? TheaterDiagram :
-              s.key === "auditorium" ? AuditoriumDiagram :
-              s.key === "banquet"    ? BanquetDiagram :
-              s.key === "runway"     ? RunwayDiagram :
+              s.key === "theater"         ? TheaterDiagram :
+              s.key === "auditorium"      ? AuditoriumDiagram :
+              s.key === "banquet"         ? BanquetDiagram :
+              s.key === "runway"          ? RunwayDiagram :
+              s.key === "banquet-runway"  ? BanquetRunwayDiagram :
               ClassroomDiagram;
 
             return (
@@ -380,7 +479,7 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
           className="rounded-xl p-4 space-y-3"
           style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}
         >
-          {config.style !== "banquet" ? (
+          {config.style !== "banquet" && config.style !== "banquet-runway" ? (
             <div className="space-y-1.5">
               <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>
                 {config.style === "runway" ? "Seats per side per row" : "Seats per row"}
