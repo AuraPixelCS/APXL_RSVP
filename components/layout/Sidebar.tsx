@@ -226,7 +226,7 @@ export default function Sidebar() {
         onMouseLeave={() => setLogoHovered(false)}
       >
         <Image
-          src="/ap-nav.png"
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-nav.png`}
           alt="AuraPixel"
           width={SIDEBAR_W}
           height={SIDEBAR_W * 2.2}

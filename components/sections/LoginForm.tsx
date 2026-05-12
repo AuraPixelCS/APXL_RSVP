@@ -61,7 +61,7 @@ export default function LoginForm() {
         {/* Logo */}
         <div className="flex justify-center">
           <Image
-            src="/ap-logo.png"
+            src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-logo.png`}
             alt="AuraPixel"
             width={96}
             height={54}

@@ -220,7 +220,7 @@ export default function PublicRSVPPage() {
             }}
           >
             <Image
-              src="/ap-logo.png"
+              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-logo.png`}
               alt="AuraPixel"
               width={80}
               height={45}
