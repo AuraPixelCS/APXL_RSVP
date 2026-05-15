@@ -495,12 +495,11 @@ function BanquetRunwaySeatMap({
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {/* Stage */}
+      {/* Stage — width: 100% expands to match the natural row width below */}
       <div
         className="rounded-lg flex items-center justify-center"
         style={{
           width: "100%",
-          maxWidth: SVG_SIZE * perRow + 60,
           height: 32,
           background: "rgba(61,155,245,0.08)",
           border: "1px solid rgba(61,155,245,0.25)",
@@ -961,7 +960,7 @@ export default function SeatMapModal({
           }}
         >
           <motion.div
-            className="w-full max-w-4xl rounded-xl sm:rounded-2xl flex flex-col mx-2 sm:mx-0"
+            className="w-full max-w-[1400px] rounded-xl sm:rounded-2xl flex flex-col mx-2 sm:mx-0"
             style={{
               background: "var(--surface-2)",
               border: "1px solid var(--border)",
@@ -1199,10 +1198,20 @@ export default function SeatMapModal({
               )}
             </AnimatePresence>
 
-            {/* Seat grid — scrollable */}
+            {/* Seat grid — scrollable (both axes). `safe center` centers
+                content that fits, but falls back to scroll-from-left when the
+                seat map is wider than the viewport so the leftmost tables
+                remain reachable. */}
             <div
-              className="overflow-y-auto p-3 sm:p-6 flex-1"
-              style={{ scrollbarWidth: "thin", scrollbarColor: "var(--border) transparent", display: editingLayout ? "none" : undefined }}
+              className="p-3 sm:p-6 flex-1"
+              style={{
+                scrollbarWidth: "thin",
+                scrollbarColor: "var(--border) transparent",
+                display: editingLayout ? "none" : "flex",
+                overflow: "auto",
+                justifyContent: "safe center",
+                alignItems: "flex-start",
+              }}
             >
               {config.style === "banquet" ? (
                 <BanquetSeatMap
