@@ -114,5 +114,6 @@ export type SeatingStyle = "theater" | "auditorium" | "banquet" | "classroom" | 
 export interface SeatingConfig {
   style: SeatingStyle;
   seatsPerRow?: number;   // theater, auditorium, classroom — default 10
-  seatsPerTable?: number; // banquet only — default 10
+  seatsPerTable?: number; // banquet, banquet-runway — default 10
+  tablesPerSide?: number; // banquet, banquet-runway — tables per side per row (total per row = 2 × tablesPerSide)
 }

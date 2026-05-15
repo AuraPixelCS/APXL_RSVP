@@ -342,12 +342,13 @@ function RunwaySeatMap({
 // ─── Banquet seat map ──────────────────────────────────────────────────────────
 
 function BanquetSeatMap({
-  seats, seatsPerTable, selectionMode, highlightedSeat,
+  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
   isTableMode,
   onSeatAssign, onSeatInspect,
 }: {
   seats: SeatInfo[];
   seatsPerTable: number;
+  tablesPerSide?: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
   isTableMode: boolean;
@@ -364,122 +365,97 @@ function BanquetSeatMap({
   const ORBIT_R = TABLE_R + SEAT_R + 5;
   const SVG_SIZE = (ORBIT_R + SEAT_R + 4) * 2;
 
+  // New mode: explicit tablesPerSide → fixed left/right structure per row.
+  if (tablesPerSide != null) {
+    const perRow = tablesPerSide * 2;
+    const rows: SeatInfo[][][] = [];
+    for (let i = 0; i < tables.length; i += perRow) {
+      rows.push(tables.slice(i, i + perRow));
+    }
+
+    return (
+      <div className="flex flex-col items-center gap-3">
+        {rows.map((rowTables, ri) => {
+          const leftTables  = rowTables.slice(0, tablesPerSide);
+          const rightTables = rowTables.slice(tablesPerSide);
+          const baseTi = ri * perRow;
+          return (
+            <div key={ri} className="flex items-stretch gap-2 w-full justify-center">
+              <div className="flex items-stretch gap-2">
+                {leftTables.map((tableSeats, li) => (
+                  <BanquetTableCell
+                    key={li}
+                    tableSeats={tableSeats}
+                    tableIndex={baseTi + li}
+                    seatsPerTable={seatsPerTable}
+                    selectionMode={selectionMode}
+                    highlightedSeat={highlightedSeat}
+                    isTableMode={isTableMode}
+                    onSeatAssign={onSeatAssign}
+                    onSeatInspect={onSeatInspect}
+                    tableR={TABLE_R}
+                    seatR={SEAT_R}
+                    orbitR={ORBIT_R}
+                    svgSize={SVG_SIZE}
+                  />
+                ))}
+                {Array.from({ length: tablesPerSide - leftTables.length }).map((_, i) => (
+                  <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
+              </div>
+
+              {/* Center gutter — banquet has no aisle, just visual space */}
+              <div style={{ width: 24, flexShrink: 0 }} />
+
+              <div className="flex items-stretch gap-2">
+                {rightTables.map((tableSeats, ri2) => (
+                  <BanquetTableCell
+                    key={ri2}
+                    tableSeats={tableSeats}
+                    tableIndex={baseTi + tablesPerSide + ri2}
+                    seatsPerTable={seatsPerTable}
+                    selectionMode={selectionMode}
+                    highlightedSeat={highlightedSeat}
+                    isTableMode={isTableMode}
+                    onSeatAssign={onSeatAssign}
+                    onSeatInspect={onSeatInspect}
+                    tableR={TABLE_R}
+                    seatR={SEAT_R}
+                    orbitR={ORBIT_R}
+                    svgSize={SVG_SIZE}
+                  />
+                ))}
+                {Array.from({ length: tablesPerSide - rightTables.length }).map((_, i) => (
+                  <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Legacy mode: no tablesPerSide → keep responsive grid.
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 justify-items-center">
-      {tables.map((tableSeats, ti) => {
-        const occupiedSeats = tableSeats.filter((s) => s.status !== "available");
-        return (
-          <div
-            key={ti}
-            style={{
-              border: "1px solid var(--border)",
-              borderRadius: 12,
-              padding: "12px 10px 10px",
-              background: "var(--surface-2)",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              width: "100%",
-            }}
-          >
-            {/* Orbital SVG */}
-            <svg width={SVG_SIZE} height={SVG_SIZE} viewBox={`0 0 ${SVG_SIZE} ${SVG_SIZE}`} overflow="visible">
-              <circle cx={SVG_SIZE / 2} cy={SVG_SIZE / 2} r={TABLE_R} fill="var(--surface-3)" stroke="var(--border)" strokeWidth="1.5" />
-              <text x={SVG_SIZE / 2} y={SVG_SIZE / 2 + 4} textAnchor="middle" fontSize="10" fill="var(--muted)" fontFamily="'Fira Code', monospace">
-                T{ti + 1}
-              </text>
-              {tableSeats.map((seat, si) => {
-                const angle = (si / tableSeats.length) * Math.PI * 2 - Math.PI / 2;
-                const sx = SVG_SIZE / 2 + Math.cos(angle) * ORBIT_R;
-                const sy = SVG_SIZE / 2 + Math.sin(angle) * ORBIT_R;
-                const isAvailable   = seat.status === "available";
-                const isSelectable  = selectionMode && isAvailable;
-                const isDisabled    = selectionMode && !isAvailable;
-                const isInspectable = !selectionMode && !!seat.guestName;
-                const isHighlighted = highlightedSeat === seat.seatNumber;
-                const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
-
-                const fill   = isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : c.fill;
-                const stroke = isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : c.stroke;
-
-                return (
-                  <circle
-                    key={si}
-                    cx={sx} cy={sy} r={SEAT_R}
-                    fill={fill} stroke={stroke} strokeWidth={isHighlighted ? 2 : 1.5}
-                    opacity={isDisabled ? 0.4 : 1}
-                    style={{
-                      cursor: (isSelectable || isInspectable) ? "pointer" : isDisabled ? "not-allowed" : "default",
-                      transition: "fill 120ms, stroke 120ms",
-                      filter: isHighlighted ? "drop-shadow(0 0 4px rgba(61,155,245,0.5))" : "none",
-                    }}
-                    onClick={() => {
-                      if (isSelectable) onSeatAssign?.(seat.seatNumber);
-                      else if (isInspectable) onSeatInspect?.(seat);
-                    }}
-                    onMouseEnter={(e) => {
-                      if (isHighlighted) return;
-                      const el = e.currentTarget as SVGCircleElement;
-                      if (isSelectable) {
-                        el.setAttribute("fill", "rgba(34,197,94,0.28)");
-                        el.setAttribute("stroke", SELECTABLE_HOVER);
-                      } else if (isInspectable) {
-                        el.setAttribute("fill", c.fill.replace("0.18", "0.32"));
-                        el.setAttribute("stroke-width", "2");
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (isHighlighted) return;
-                      const el = e.currentTarget as SVGCircleElement;
-                      el.setAttribute("fill", fill);
-                      el.setAttribute("stroke", stroke);
-                      el.setAttribute("stroke-width", isHighlighted ? "2" : "1.5");
-                    }}
-                  >
-                    <title>
-                      {seat.guestName
-                        ? `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`} · ${seat.guestName}${isInspectable ? " · Click for details" : ""}`
-                        : `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`}${isSelectable ? " · Click to assign" : ""}`}
-                    </title>
-                  </circle>
-                );
-              })}
-            </svg>
-
-            {/* Table label */}
-            <p className="text-[10px] font-mono uppercase tracking-wider mt-1 mb-1.5" style={{ color: "var(--muted)" }}>
-              Table {ti + 1}
-            </p>
-
-            {/* Divider */}
-            <div style={{ width: "100%", height: 1, background: "var(--border)", marginBottom: 6 }} />
-
-            {/* Guest name list */}
-            <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
-              {occupiedSeats.length > 0 ? (
-                occupiedSeats.map((s) => (
-                  <p
-                    key={s.seatNumber}
-                    style={{
-                      fontSize: 10,
-                      color: "var(--foreground)",
-                      opacity: 0.85,
-                      margin: 0,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {s.guestName}
-                  </p>
-                ))
-              ) : (
-                <p style={{ fontSize: 10, color: "var(--muted)", margin: 0, fontStyle: "italic" }}>Empty</p>
-              )}
-            </div>
-          </div>
-        );
-      })}
+      {tables.map((tableSeats, ti) => (
+        <BanquetTableCell
+          key={ti}
+          tableSeats={tableSeats}
+          tableIndex={ti}
+          seatsPerTable={seatsPerTable}
+          selectionMode={selectionMode}
+          highlightedSeat={highlightedSeat}
+          isTableMode={isTableMode}
+          onSeatAssign={onSeatAssign}
+          onSeatInspect={onSeatInspect}
+          tableR={TABLE_R}
+          seatR={SEAT_R}
+          orbitR={ORBIT_R}
+          svgSize={SVG_SIZE}
+        />
+      ))}
     </div>
   );
 }
@@ -487,12 +463,13 @@ function BanquetSeatMap({
 // ─── Banquet-Runway seat map (stage front, red carpet aisle, round tables on each side) ───
 
 function BanquetRunwaySeatMap({
-  seats, seatsPerTable, selectionMode, highlightedSeat,
+  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
   isTableMode,
   onSeatAssign, onSeatInspect,
 }: {
   seats: SeatInfo[];
   seatsPerTable: number;
+  tablesPerSide: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
   isTableMode: boolean;
@@ -509,10 +486,11 @@ function BanquetRunwaySeatMap({
   const ORBIT_R = TABLE_R + SEAT_R + 5;
   const SVG_SIZE = (ORBIT_R + SEAT_R + 4) * 2;
 
-  // Pair tables into rows: left, right. T1=left, T2=right, T3=left, T4=right, ...
-  const rows: { left: SeatInfo[][]; right: SeatInfo[][] }[] = [];
-  for (let i = 0; i < tables.length; i += 2) {
-    rows.push({ left: [tables[i]], right: tables[i + 1] ? [tables[i + 1]] : [] });
+  // Pack N tables on each side per row. T1..Tn = left of row 1, T(n+1)..T(2n) = right of row 1, etc.
+  const perRow = tablesPerSide * 2;
+  const rows: SeatInfo[][][] = [];
+  for (let i = 0; i < tables.length; i += perRow) {
+    rows.push(tables.slice(i, i + perRow));
   }
 
   return (
@@ -522,7 +500,7 @@ function BanquetRunwaySeatMap({
         className="rounded-lg flex items-center justify-center"
         style={{
           width: "100%",
-          maxWidth: SVG_SIZE * 2 + 60,
+          maxWidth: SVG_SIZE * perRow + 60,
           height: 32,
           background: "rgba(61,155,245,0.08)",
           border: "1px solid rgba(61,155,245,0.25)",
@@ -535,29 +513,38 @@ function BanquetRunwaySeatMap({
         STAGE
       </div>
 
-      {/* Rows of left-table | aisle | right-table */}
+      {/* Rows of (N tables) | aisle | (N tables) */}
       <div className="flex flex-col gap-2">
-        {rows.map((rowPair, ri) => {
-          const leftTable = rowPair.left[0];
-          const rightTable = rowPair.right[0];
-          const leftTi = ri * 2;
-          const rightTi = ri * 2 + 1;
+        {rows.map((rowTables, ri) => {
+          const leftTables  = rowTables.slice(0, tablesPerSide);
+          const rightTables = rowTables.slice(tablesPerSide);
+          const baseTi = ri * perRow;
           return (
             <div key={ri} className="flex items-stretch gap-2">
-              <BanquetRunwayTableCell
-                tableSeats={leftTable}
-                tableIndex={leftTi}
-                seatsPerTable={seatsPerTable}
-                selectionMode={selectionMode}
-                highlightedSeat={highlightedSeat}
-                isTableMode={isTableMode}
-                onSeatAssign={onSeatAssign}
-                onSeatInspect={onSeatInspect}
-                tableR={TABLE_R}
-                seatR={SEAT_R}
-                orbitR={ORBIT_R}
-                svgSize={SVG_SIZE}
-              />
+              {/* Left side */}
+              <div className="flex items-stretch gap-2">
+                {leftTables.map((tableSeats, li) => (
+                  <BanquetTableCell
+                    key={li}
+                    tableSeats={tableSeats}
+                    tableIndex={baseTi + li}
+                    seatsPerTable={seatsPerTable}
+                    selectionMode={selectionMode}
+                    highlightedSeat={highlightedSeat}
+                    isTableMode={isTableMode}
+                    onSeatAssign={onSeatAssign}
+                    onSeatInspect={onSeatInspect}
+                    tableR={TABLE_R}
+                    seatR={SEAT_R}
+                    orbitR={ORBIT_R}
+                    svgSize={SVG_SIZE}
+                  />
+                ))}
+                {/* Pad missing left tables to keep alignment when the row is incomplete */}
+                {Array.from({ length: tablesPerSide - leftTables.length }).map((_, i) => (
+                  <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
+              </div>
 
               {/* Red carpet aisle */}
               <div style={{ width: 28, display: "flex", justifyContent: "center", alignItems: "stretch" }}>
@@ -571,24 +558,29 @@ function BanquetRunwaySeatMap({
                 />
               </div>
 
-              {rightTable ? (
-                <BanquetRunwayTableCell
-                  tableSeats={rightTable}
-                  tableIndex={rightTi}
-                  seatsPerTable={seatsPerTable}
-                  selectionMode={selectionMode}
-                  highlightedSeat={highlightedSeat}
-                  isTableMode={isTableMode}
-                  onSeatAssign={onSeatAssign}
-                  onSeatInspect={onSeatInspect}
-                  tableR={TABLE_R}
-                  seatR={SEAT_R}
-                  orbitR={ORBIT_R}
-                  svgSize={SVG_SIZE}
-                />
-              ) : (
-                <div style={{ flex: 1 }} />
-              )}
+              {/* Right side */}
+              <div className="flex items-stretch gap-2">
+                {rightTables.map((tableSeats, ri2) => (
+                  <BanquetTableCell
+                    key={ri2}
+                    tableSeats={tableSeats}
+                    tableIndex={baseTi + tablesPerSide + ri2}
+                    seatsPerTable={seatsPerTable}
+                    selectionMode={selectionMode}
+                    highlightedSeat={highlightedSeat}
+                    isTableMode={isTableMode}
+                    onSeatAssign={onSeatAssign}
+                    onSeatInspect={onSeatInspect}
+                    tableR={TABLE_R}
+                    seatR={SEAT_R}
+                    orbitR={ORBIT_R}
+                    svgSize={SVG_SIZE}
+                  />
+                ))}
+                {Array.from({ length: tablesPerSide - rightTables.length }).map((_, i) => (
+                  <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
+              </div>
             </div>
           );
         })}
@@ -597,7 +589,7 @@ function BanquetRunwaySeatMap({
   );
 }
 
-function BanquetRunwayTableCell({
+function BanquetTableCell({
   tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, isTableMode,
   onSeatAssign, onSeatInspect,
   tableR, seatR, orbitR, svgSize,
@@ -1216,6 +1208,7 @@ export default function SeatMapModal({
                 <BanquetSeatMap
                   seats={seats}
                   seatsPerTable={seatsPerTable}
+                  tablesPerSide={config.tablesPerSide != null ? Math.max(1, Math.min(6, config.tablesPerSide)) : undefined}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   isTableMode={isTableMode}
@@ -1226,6 +1219,7 @@ export default function SeatMapModal({
                 <BanquetRunwaySeatMap
                   seats={seats}
                   seatsPerTable={seatsPerTable}
+                  tablesPerSide={Math.max(1, Math.min(6, config.tablesPerSide ?? 1))}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   isTableMode={isTableMode}

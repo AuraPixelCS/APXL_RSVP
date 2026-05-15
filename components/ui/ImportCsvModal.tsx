@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Papa from "papaparse";
+import { getAuthHeaders } from "@/lib/auth";
 
 interface Props {
   open: boolean;
@@ -162,9 +163,10 @@ export default function ImportCsvModal({ open, onClose, eventId, onImportComplet
             return;
           }
 
+          const authHeaders = await getAuthHeaders();
           const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/admin/events/import-csv`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders },
             body: JSON.stringify({ eventId, rsvps: validData }),
           });
 

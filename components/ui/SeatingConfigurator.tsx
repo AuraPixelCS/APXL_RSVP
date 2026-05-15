@@ -15,13 +15,14 @@ const STYLES: {
   desc: string;
   defaultSeatsPerRow?: number;
   defaultSeatsPerTable?: number;
+  defaultTablesPerSide?: number;
 }[] = [
   { key: "theater",    name: "Theater",    desc: "Rows of chairs, no tables",          defaultSeatsPerRow: 10 },
   { key: "auditorium", name: "Auditorium", desc: "Fixed tiered seating",               defaultSeatsPerRow: 12 },
-  { key: "banquet",    name: "Banquet",    desc: "Round tables with chairs",            defaultSeatsPerTable: 10 },
+  { key: "banquet",    name: "Banquet",    desc: "Round tables with chairs",            defaultSeatsPerTable: 10, defaultTablesPerSide: 2 },
   { key: "classroom",  name: "Classroom",  desc: "Rows of desks and chairs",           defaultSeatsPerRow: 6 },
   { key: "runway",     name: "Runway",     desc: "Stage, red carpet aisle, side seats", defaultSeatsPerRow: 5 },
-  { key: "banquet-runway", name: "Banquet Runway", desc: "Stage, red carpet aisle, round tables on each side", defaultSeatsPerTable: 10 },
+  { key: "banquet-runway", name: "Banquet Runway", desc: "Stage, red carpet aisle, round tables on each side", defaultSeatsPerTable: 10, defaultTablesPerSide: 1 },
 ];
 
 // ─── Style card diagrams ───────────────────────────────────────────────────────
@@ -209,17 +210,20 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
 
   if (config.style === "banquet-runway") {
     const seatsPerTable = config.seatsPerTable ?? 10;
+    const tablesPerSide = Math.max(1, Math.min(6, config.tablesPerSide ?? 1));
+    const perRow = tablesPerSide * 2;
     const tableCount = Math.ceil(totalSeats / seatsPerTable);
-    const visibleTables = Math.min(tableCount, 8);
-    // Tables stack vertically; alternate left/right around the central runway.
+    const visibleTables = Math.min(tableCount, Math.max(8, perRow * 4));
     const TABLE_R = 9;
     const SEAT_R = 2;
     const ORBIT_R = TABLE_R + SEAT_R + 1.5;
+    const CELL_W = (ORBIT_R + SEAT_R + 2) * 2;
+    const CELL_GAP = 4;
     const ROW_H = (ORBIT_R + SEAT_R + 1) * 2 + 2;
     const AISLE_W = 10;
-    const sideW = ORBIT_R + SEAT_R + 4;
+    const sideW = tablesPerSide * CELL_W + (tablesPerSide - 1) * CELL_GAP;
     const svgW = sideW * 2 + AISLE_W + 8;
-    const rowsNeeded = Math.ceil(visibleTables / 2);
+    const rowsNeeded = Math.ceil(visibleTables / perRow);
     const svgH = rowsNeeded * ROW_H + 16;
     const lastTableSeats = totalSeats - (tableCount - 1) * seatsPerTable;
 
@@ -229,11 +233,15 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
         <rect x="3" y="2" width={svgW - 6} height="5" rx="1.5" fill="rgba(61,155,245,0.3)" />
         {/* Red carpet aisle */}
         <rect x={(svgW - 4) / 2} y="9" width="4" height={svgH - 11} rx="1.5" fill="rgba(220,38,38,0.3)" />
-        {/* Tables — alternating left/right pairs */}
+        {/* Tables */}
         {Array.from({ length: visibleTables }).map((_, ti) => {
-          const rowIdx = Math.floor(ti / 2);
-          const isLeft = ti % 2 === 0;
-          const cx = isLeft ? sideW / 2 + 2 : svgW - sideW / 2 - 2;
+          const rowIdx = Math.floor(ti / perRow);
+          const posInRow = ti % perRow;
+          const isLeft = posInRow < tablesPerSide;
+          const colInSide = isLeft ? posInRow : posInRow - tablesPerSide;
+          const cx = isLeft
+            ? 4 + CELL_W / 2 + colInSide * (CELL_W + CELL_GAP)
+            : svgW - 4 - CELL_W / 2 - (tablesPerSide - 1 - colInSide) * (CELL_W + CELL_GAP);
           const cy = 12 + rowIdx * ROW_H + ROW_H / 2;
           const seatCount = ti === tableCount - 1 ? Math.max(lastTableSeats, 1) : seatsPerTable;
           return (
@@ -271,17 +279,74 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
   if (config.style === "banquet") {
     const seatsPerTable = config.seatsPerTable ?? 10;
     const tableCount = Math.ceil(totalSeats / seatsPerTable);
-    const visibleTables = Math.min(tableCount, 6);
+    const lastTableSeats = totalSeats - (tableCount - 1) * seatsPerTable;
     const TABLE_R = 16;
     const SEAT_R = 3.5;
     const ORBIT_R = TABLE_R + SEAT_R + 3;
     const CELL = (ORBIT_R + SEAT_R + 2) * 2 + 4;
+
+    // New mode: explicit tablesPerSide → fixed left/right structure with center gutter.
+    if (config.tablesPerSide != null) {
+      const tablesPerSide = Math.max(1, Math.min(6, config.tablesPerSide));
+      const perRow = tablesPerSide * 2;
+      const visibleTables = Math.min(tableCount, Math.max(6, perRow * 3));
+      const CELL_GAP = 8;
+      const CENTER_GAP = 18;
+      const sideW = tablesPerSide * CELL + (tablesPerSide - 1) * CELL_GAP;
+      const svgW = sideW * 2 + CENTER_GAP + 8;
+      const rowsNeeded = Math.ceil(visibleTables / perRow);
+      const svgH = rowsNeeded * (CELL + CELL_GAP) + 8;
+
+      return (
+        <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: "100%", overflow: "visible" }}>
+          {Array.from({ length: visibleTables }).map((_, ti) => {
+            const rowIdx = Math.floor(ti / perRow);
+            const posInRow = ti % perRow;
+            const isLeft = posInRow < tablesPerSide;
+            const colInSide = isLeft ? posInRow : posInRow - tablesPerSide;
+            const cx = isLeft
+              ? 4 + CELL / 2 + colInSide * (CELL + CELL_GAP)
+              : svgW - 4 - CELL / 2 - (tablesPerSide - 1 - colInSide) * (CELL + CELL_GAP);
+            const cy = 4 + CELL / 2 + rowIdx * (CELL + CELL_GAP);
+            const seatCount = ti === tableCount - 1 ? Math.max(lastTableSeats, 1) : seatsPerTable;
+            return (
+              <g key={ti}>
+                <circle cx={cx} cy={cy} r={TABLE_R} fill="var(--surface-3)" stroke="rgba(61,155,245,0.3)" strokeWidth="1" />
+                <text x={cx} y={cy + 3.5} textAnchor="middle" fontSize="7" fill={accent} fontFamily="'Fira Code', monospace">
+                  T{ti + 1}
+                </text>
+                {Array.from({ length: seatCount }).map((_, si) => {
+                  const angle = (si / seatCount) * Math.PI * 2 - Math.PI / 2;
+                  return (
+                    <circle
+                      key={si}
+                      cx={cx + Math.cos(angle) * ORBIT_R}
+                      cy={cy + Math.sin(angle) * ORBIT_R}
+                      r={SEAT_R}
+                      fill={accentFill}
+                      stroke={accent}
+                      strokeWidth="0.75"
+                    />
+                  );
+                })}
+              </g>
+            );
+          })}
+          {tableCount > visibleTables && (
+            <text x={svgW / 2} y={svgH - 2} textAnchor="middle" fontSize="8" fill="var(--muted)">
+              +{tableCount - visibleTables} more…
+            </text>
+          )}
+        </svg>
+      );
+    }
+
+    // Legacy mode: no tablesPerSide → keep the original 3-col grid renderer.
+    const visibleTables = Math.min(tableCount, 6);
     const cols = Math.min(visibleTables, 3);
     const rows = Math.ceil(visibleTables / cols);
     const svgW = cols * (CELL + 8) + 4;
     const svgH = rows * (CELL + 8) + 4;
-
-    const lastTableSeats = totalSeats - (tableCount - 1) * seatsPerTable;
 
     return (
       <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: "100%", overflow: "visible" }}>
@@ -381,8 +446,9 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
   const handleStyleChange = (style: SeatingStyle) => {
     const def = STYLES.find((s) => s.key === style)!;
     const newConfig: SeatingConfig = { style };
-    if (def.defaultSeatsPerRow  != null) newConfig.seatsPerRow   = def.defaultSeatsPerRow;
+    if (def.defaultSeatsPerRow   != null) newConfig.seatsPerRow   = def.defaultSeatsPerRow;
     if (def.defaultSeatsPerTable != null) newConfig.seatsPerTable = def.defaultSeatsPerTable;
+    if (def.defaultTablesPerSide != null) newConfig.tablesPerSide = def.defaultTablesPerSide;
     onChange(newConfig);
   };
 
@@ -503,26 +569,52 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
               </p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>
-                Seats per table
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={20}
-                value={config.seatsPerTable ?? ""}
-                onChange={(e) => onChange({ ...config, seatsPerTable: parseInt(e.target.value) || 1 })}
-                className="w-full px-3 py-2 rounded-lg text-sm text-white transition-all duration-150"
-                style={{ background: "var(--surface)", border: "1px solid var(--border)", outline: "none" }}
-                onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
-                onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
-              />
-              {tableCount !== null && (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>
+                  Seats per table
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={config.seatsPerTable ?? ""}
+                  onChange={(e) => onChange({ ...config, seatsPerTable: parseInt(e.target.value) || 1 })}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white transition-all duration-150"
+                  style={{ background: "var(--surface)", border: "1px solid var(--border)", outline: "none" }}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+                />
+                {tableCount !== null && (
+                  <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+                    ≈ <strong style={{ color: "var(--foreground)" }}>{tableCount}</strong> tables for {totalSeats} total seats
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block text-xs font-medium" style={{ color: "var(--muted)" }}>
+                  Tables per side
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={6}
+                  value={config.tablesPerSide ?? ""}
+                  onChange={(e) => {
+                    const n = parseInt(e.target.value);
+                    onChange({ ...config, tablesPerSide: Number.isFinite(n) && n > 0 ? Math.min(n, 6) : 1 });
+                  }}
+                  className="w-full px-3 py-2 rounded-lg text-sm text-white transition-all duration-150"
+                  style={{ background: "var(--surface)", border: "1px solid var(--border)", outline: "none" }}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+                />
                 <p className="text-[10px]" style={{ color: "var(--muted)" }}>
-                  ≈ <strong style={{ color: "var(--foreground)" }}>{tableCount}</strong> tables for {totalSeats} total seats
+                  Each row will have <strong style={{ color: "var(--foreground)" }}>{config.tablesPerSide ?? 1}</strong> {(config.tablesPerSide ?? 1) === 1 ? "table" : "tables"} on each side
+                  {" "}(<strong style={{ color: "var(--foreground)" }}>{(config.tablesPerSide ?? 1) * 2}</strong> tables per row total).
                 </p>
-              )}
+              </div>
             </div>
           )}
         </motion.div>
