@@ -51,7 +51,8 @@ export interface Event {
   coverImageUrl?: string | null;
   customEmailBody?: string;   // admin-saved body paragraph for seat confirmation emails
   customEmailTitle?: string;  // header title in email, defaults to "AuraPixel"
-  customEmailBanner?: string; // Firebase Storage URL for header banner image
+  customEmailBanner?: string; // Firebase Storage URL — entry pass email header banner
+  customRsvpConfirmBanner?: string; // Firebase Storage URL — RSVP confirmation email header banner
   createdAt?: string;
   updatedAt?: string;
 }

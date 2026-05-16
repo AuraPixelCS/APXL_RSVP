@@ -150,8 +150,16 @@ export default async function handler(
     try {
       const emailResult = await sendEmail({
         to: rsvpData.email,
-        subject: `RSVP Confirmation – PEOPLElogy 25th Anniversary Celebration`,
-        html: buildRsvpConfirmEmail({ name }),
+        subject: `RSVP Confirmation – ${event.title}`,
+        html: buildRsvpConfirmEmail({
+          name,
+          eventTitle: event.title,
+          eventDate: event.date,
+          eventTime: event.time,
+          venue: event.venue ?? "",
+          address: event.address,
+          bannerUrl: event.customRsvpConfirmBanner,
+        }),
       });
       console.log("[webhook] ✉️ EMAIL LOG:", emailResult);
     } catch (e) {

@@ -20,6 +20,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     if (!eventSnap.exists) {
       return res.status(404).json({ error: "Event not found" });
     }
+    const event = eventSnap.data()!;
     // Fetch existing RSVPs — build a map of email → doc id so we can update duplicates
     const existingSnap = await adminDb.collection("events").doc(eventId).collection("rsvps").get();
     const existingByEmail = new Map<string, string>(); // email → docId
@@ -91,8 +92,16 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       try {
         await sendEmail({
           to: rsvpData.email,
-          subject: `RSVP Confirmation – PEOPLElogy 25th Anniversary Celebration`,
-          html: buildRsvpConfirmEmail({ name: rsvpData.name }),
+          subject: `RSVP Confirmation – ${event.title}`,
+          html: buildRsvpConfirmEmail({
+            name: rsvpData.name,
+            eventTitle: event.title,
+            eventDate: event.date,
+            eventTime: event.time,
+            venue: event.venue ?? "",
+            address: event.address,
+            bannerUrl: event.customRsvpConfirmBanner,
+          }),
         });
       } catch (e) {
         console.error("Email throw for imported RSVP:", e);

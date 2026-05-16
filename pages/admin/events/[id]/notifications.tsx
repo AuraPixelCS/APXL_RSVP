@@ -88,17 +88,20 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [rsvps, setRsvps]           = useState<RSVP[]>([]);
   const [loading, setLoading]       = useState(true);
 
-  // Email editor
-  const [customBody, setCustomBody]   = useState("");
-  const [savedBody, setSavedBody]     = useState("");
-  const [customTitle, setCustomTitle] = useState("");
-  const [savedTitle, setSavedTitle]   = useState("");
-  const [bannerUrl, setBannerUrl]     = useState("");
-  const [savedBanner, setSavedBanner] = useState("");
-  const [bannerUploading, setBannerUploading] = useState(false);
-  const [savingSettings, setSavingSettings]   = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
+  // Tab
+  const [activeTab, setActiveTab] = useState<"template" | "guests">("template");
+
+  // Banners
+  const [bannerUrl, setBannerUrl]                       = useState("");
+  const [savedBanner, setSavedBanner]                   = useState("");
+  const [rsvpBannerUrl, setRsvpBannerUrl]               = useState("");
+  const [savedRsvpBanner, setSavedRsvpBanner]           = useState("");
+  const [entryBannerUploading, setEntryBannerUploading] = useState(false);
+  const [rsvpBannerUploading, setRsvpBannerUploading]   = useState(false);
+  const [savingSettings, setSavingSettings]             = useState(false);
+  const [showPreview, setShowPreview]                   = useState(false);
+  const entryBannerInputRef = useRef<HTMLInputElement>(null);
+  const rsvpBannerInputRef  = useRef<HTMLInputElement>(null);
 
   // Notify state
   const [notifyingId, setNotifyingId]     = useState<string | null>(null);
@@ -110,12 +113,10 @@ const NotificationsPage: NextPageWithLayout = () => {
     if (!id) return;
     getEvent(id).then((ev) => {
       setEvent(ev);
-      const body   = ev?.customEmailBody  ?? "";
-      const title  = ev?.customEmailTitle ?? "";
-      const banner = ev?.customEmailBanner ?? "";
-      setCustomBody(body);   setSavedBody(body);
-      setCustomTitle(title); setSavedTitle(title);
-      setBannerUrl(banner);  setSavedBanner(banner);
+      const banner     = ev?.customEmailBanner       ?? "";
+      const rsvpBanner = ev?.customRsvpConfirmBanner ?? "";
+      setBannerUrl(banner);         setSavedBanner(banner);
+      setRsvpBannerUrl(rsvpBanner); setSavedRsvpBanner(rsvpBanner);
       setLoading(false);
     });
   }, [id]);
@@ -132,43 +133,47 @@ const NotificationsPage: NextPageWithLayout = () => {
     (r) => r.status === "allocated" || r.status === "checked_in"
   );
   const unnotifiedCount = allocatedRsvps.filter((r) => !r.notifiedAt).length;
-  const settingsDirty = customBody !== savedBody || customTitle !== savedTitle || bannerUrl !== savedBanner;
+  const settingsDirty = bannerUrl !== savedBanner || rsvpBannerUrl !== savedRsvpBanner;
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const handleBannerUpload = useCallback(async (file: File) => {
-    if (!event?.id) return;
-    setBannerUploading(true);
-    try {
-      const ext = file.name.split(".").pop() ?? "png";
-      const fileRef = storageRef(storage, `events/${event.id}/email-banner.${ext}`);
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      setBannerUrl(url);
-    } catch (e) {
-      console.error("Banner upload failed:", e);
-      alert("Banner upload failed: " + (e instanceof Error ? e.message : String(e)));
-    } finally {
-      setBannerUploading(false);
-    }
-  }, [event]);
+  const uploadBanner = useCallback(
+    async (file: File, kind: "entry" | "rsvp") => {
+      if (!event?.id) return;
+      const setUploading = kind === "entry" ? setEntryBannerUploading : setRsvpBannerUploading;
+      const setUrl       = kind === "entry" ? setBannerUrl            : setRsvpBannerUrl;
+      const filename     = kind === "entry" ? "email-banner"          : "rsvp-confirm-banner";
+      setUploading(true);
+      try {
+        const ext = file.name.split(".").pop() ?? "png";
+        const fileRef = storageRef(storage, `events/${event.id}/${filename}.${ext}`);
+        await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(fileRef);
+        setUrl(url);
+      } catch (e) {
+        console.error("Banner upload failed:", e);
+        alert("Banner upload failed: " + (e instanceof Error ? e.message : String(e)));
+      } finally {
+        setUploading(false);
+      }
+    },
+    [event],
+  );
 
   const handleSaveSettings = useCallback(async () => {
     if (!event?.id || !settingsDirty || savingSettings) return;
     setSavingSettings(true);
     try {
       await updateEvent(event.id, {
-        customEmailBody:   customBody,
-        customEmailTitle:  customTitle,
-        customEmailBanner: bannerUrl,
+        customEmailBanner:       bannerUrl,
+        customRsvpConfirmBanner: rsvpBannerUrl,
       });
-      setSavedBody(customBody);
-      setSavedTitle(customTitle);
       setSavedBanner(bannerUrl);
+      setSavedRsvpBanner(rsvpBannerUrl);
     } finally {
       setSavingSettings(false);
     }
-  }, [event, customBody, customTitle, bannerUrl, settingsDirty, savingSettings]);
+  }, [event, bannerUrl, rsvpBannerUrl, settingsDirty, savingSettings]);
 
   const handleNotifyOne = useCallback(async (rsvpId: string) => {
     if (!event?.id) return;
@@ -178,16 +183,12 @@ const NotificationsPage: NextPageWithLayout = () => {
       await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({
-          eventId: event.id,
-          rsvpId,
-          htmlBody: customBody.trim() || undefined,
-        }),
+        body: JSON.stringify({ eventId: event.id, rsvpId }),
       });
     } finally {
       setNotifyingId(null);
     }
-  }, [event, customBody]);
+  }, [event]);
 
   const handleBulkNotify = useCallback(async () => {
     if (!event?.id || bulkNotifying) return;
@@ -197,16 +198,12 @@ const NotificationsPage: NextPageWithLayout = () => {
       await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({
-          eventId: event.id,
-          bulk: true,
-          htmlBody: customBody.trim() || undefined,
-        }),
+        body: JSON.stringify({ eventId: event.id, bulk: true }),
       });
     } finally {
       setBulkNotifying(false);
     }
-  }, [event, customBody, bulkNotifying]);
+  }, [event, bulkNotifying]);
 
   // ── Email preview HTML ───────────────────────────────────────────────────────
 
@@ -225,8 +222,6 @@ const NotificationsPage: NextPageWithLayout = () => {
         tableNumber: isTableMode ? 1 : undefined,
         qrDataUrl: PREVIEW_QR,
         bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
-        headerTitle: customTitle.trim() || undefined,
-        customBody: customBody.trim() || undefined,
       })
     : "";
 
@@ -297,7 +292,34 @@ const NotificationsPage: NextPageWithLayout = () => {
         </button>
       </div>
 
-      {/* ── Section B: Email Editor ───────────────────────────────────────── */}
+      {/* ── Tab pills ─────────────────────────────────────────────────────── */}
+      <div
+        className="inline-flex rounded-xl p-1 gap-1"
+        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      >
+        {([
+          { key: "template", label: "Template" },
+          { key: "guests",   label: `Allocated Guests${allocatedRsvps.length ? ` (${allocatedRsvps.length})` : ""}` },
+        ] as const).map((t) => {
+          const active = activeTab === t.key;
+          return (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className="px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
+              style={{
+                background: active ? "var(--accent)" : "transparent",
+                color: active ? "#000" : "var(--muted)",
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Section B: Template tab ───────────────────────────────────────── */}
+      {activeTab === "template" && (
       <div
         className="rounded-xl p-5 space-y-5"
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
@@ -306,10 +328,10 @@ const NotificationsPage: NextPageWithLayout = () => {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-              Email Template
+              Email Banners
             </h2>
             <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Customize the seat confirmation email sent to each guest.
+              Upload a header banner for each event email. The body and footer copy are shared across all events.
             </p>
           </div>
           <button
@@ -322,18 +344,18 @@ const NotificationsPage: NextPageWithLayout = () => {
             }}
           >
             <EyeIcon />
-            {showPreview ? "Hide Preview" : "Preview"}
+            {showPreview ? "Hide Preview" : "Preview Entry Pass"}
           </button>
         </div>
 
-        {/* ── Banner ── */}
+        {/* ── Entry Pass Banner ── */}
         <div className="space-y-2">
           <div>
             <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              Header Banner Image
+              Entry Pass Email Banner
             </label>
             <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Recommended: <strong>600 × 200 px</strong>, PNG or JPG. Replaces the dark header background.
+              Recommended: <strong>600 × 200 px</strong>, PNG or JPG. Replaces the dark header on the seat/table confirmation email.
             </p>
           </div>
 
@@ -341,18 +363,18 @@ const NotificationsPage: NextPageWithLayout = () => {
             <div className="flex items-start gap-3">
               <img
                 src={bannerUrl}
-                alt="Banner preview"
+                alt="Entry Pass banner preview"
                 className="rounded-lg object-cover"
                 style={{ width: 180, height: 60, border: "1px solid var(--border)" }}
               />
               <div className="flex flex-col gap-1.5">
                 <button
-                  onClick={() => bannerInputRef.current?.click()}
-                  disabled={bannerUploading}
+                  onClick={() => entryBannerInputRef.current?.click()}
+                  disabled={entryBannerUploading}
                   className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
                   style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
                 >
-                  {bannerUploading ? "Uploading…" : "Change"}
+                  {entryBannerUploading ? "Uploading…" : "Change"}
                 </button>
                 <button
                   onClick={() => setBannerUrl("")}
@@ -365,76 +387,86 @@ const NotificationsPage: NextPageWithLayout = () => {
             </div>
           ) : (
             <button
-              onClick={() => bannerInputRef.current?.click()}
-              disabled={bannerUploading}
+              onClick={() => entryBannerInputRef.current?.click()}
+              disabled={entryBannerUploading}
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
               style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px dashed var(--border)" }}
             >
-              {bannerUploading ? "Uploading…" : "↑  Upload Banner"}
+              {entryBannerUploading ? "Uploading…" : "↑  Upload Banner"}
             </button>
           )}
 
           <input
-            ref={bannerInputRef}
+            ref={entryBannerInputRef}
             type="file"
             accept="image/png,image/jpeg,image/webp"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) handleBannerUpload(file);
+              if (file) uploadBanner(file, "entry");
               e.target.value = "";
             }}
           />
         </div>
 
-        {/* ── Header Title ── */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-            Header Title
-          </label>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Shown in the dark header when no banner is uploaded. Defaults to &ldquo;AuraPixel&rdquo;.
-          </p>
-          <input
-            type="text"
-            value={customTitle}
-            onChange={(e) => setCustomTitle(e.target.value)}
-            placeholder="AuraPixel"
-            className="w-full rounded-lg px-4 py-2.5 text-sm outline-none transition-colors"
-            style={{
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              color: "var(--foreground)",
-            }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-          />
-        </div>
+        {/* ── RSVP Confirmation Banner ── */}
+        <div className="space-y-2">
+          <div>
+            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+              RSVP Confirmation Email Banner
+            </label>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              Recommended: <strong>600 × 200 px</strong>. Shown at the top of the email guests receive immediately after submitting their RSVP.
+            </p>
+          </div>
 
-        {/* ── Body ── */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-            Body Message
-          </label>
-          <p className="text-xs" style={{ color: "var(--muted)" }}>
-            Use <code style={{ background: "var(--surface-2)", padding: "1px 5px", borderRadius: 4 }}>{"{{name}}"}</code> for guest name and <code style={{ background: "var(--surface-2)", padding: "1px 5px", borderRadius: 4 }}>{"{{event}}"}</code> for event title.
-          </p>
-          <textarea
-            value={customBody}
-            onChange={(e) => setCustomBody(e.target.value)}
-            rows={5}
-            placeholder="Leave blank to use the default message."
-            className="w-full rounded-lg px-4 py-3 text-sm resize-y outline-none transition-colors"
-            style={{
-              background: "var(--surface-2)",
-              border: "1px solid var(--border)",
-              color: "var(--foreground)",
-              fontFamily: "var(--font-mono, monospace)",
-              fontSize: "13px",
-              lineHeight: 1.6,
+          {rsvpBannerUrl ? (
+            <div className="flex items-start gap-3">
+              <img
+                src={rsvpBannerUrl}
+                alt="RSVP Confirmation banner preview"
+                className="rounded-lg object-cover"
+                style={{ width: 180, height: 60, border: "1px solid var(--border)" }}
+              />
+              <div className="flex flex-col gap-1.5">
+                <button
+                  onClick={() => rsvpBannerInputRef.current?.click()}
+                  disabled={rsvpBannerUploading}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
+                  style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+                >
+                  {rsvpBannerUploading ? "Uploading…" : "Change"}
+                </button>
+                <button
+                  onClick={() => setRsvpBannerUrl("")}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
+                  style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => rsvpBannerInputRef.current?.click()}
+              disabled={rsvpBannerUploading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
+              style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px dashed var(--border)" }}
+            >
+              {rsvpBannerUploading ? "Uploading…" : "↑  Upload Banner"}
+            </button>
+          )}
+
+          <input
+            ref={rsvpBannerInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) uploadBanner(file, "rsvp");
+              e.target.value = "";
             }}
-            onFocus={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-            onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
           />
         </div>
 
@@ -493,7 +525,10 @@ const NotificationsPage: NextPageWithLayout = () => {
         </AnimatePresence>
       </div>
 
-      {/* ── Section C: Guest Table ────────────────────────────────────────── */}
+      )}
+
+      {/* ── Section C: Allocated Guests tab ──────────────────────────────── */}
+      {activeTab === "guests" && (
       <div
         className="rounded-xl overflow-hidden"
         style={{ border: "1px solid var(--border)" }}
@@ -653,6 +688,7 @@ const NotificationsPage: NextPageWithLayout = () => {
           </div>
         )}
       </div>
+      )}
     </div>
   );
 };

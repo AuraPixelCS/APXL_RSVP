@@ -2,26 +2,67 @@
 
 export interface RsvpConfirmEmailOpts {
   name: string;
+  eventTitle: string;
+  /** Pre-formatted display string, e.g. "19th June 2026" or raw "2026-06-19" */
+  eventDate: string;
+  /** "HH:MM" 24h, used to build the calendar link. Optional. */
+  eventTime?: string;
+  venue: string;
+  address?: string;
+  /** Firebase Storage URL — replaces the dark text header with an image */
+  bannerUrl?: string;
+}
+
+/** Build a Google Calendar TEMPLATE link from event date/time fields. */
+function buildCalendarUrl(opts: RsvpConfirmEmailOpts): string {
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: opts.eventTitle,
+    location: [opts.venue, opts.address].filter(Boolean).join(", "),
+    details: `RSVP confirmed for ${opts.eventTitle}.`,
+  });
+
+  // Convert YYYY-MM-DD + HH:MM into Google Calendar's expected basic ISO form.
+  // Falls back to a date-only event when only YYYY-MM-DD is available.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(opts.eventDate);
+  if (ymd) {
+    const dateOnly = `${ymd[1]}${ymd[2]}${ymd[3]}`;
+    if (opts.eventTime && /^\d{2}:\d{2}$/.test(opts.eventTime)) {
+      const start = dateOnly + "T" + opts.eventTime.replace(":", "") + "00";
+      const startDate = new Date(`${ymd[1]}-${ymd[2]}-${ymd[3]}T${opts.eventTime}:00`);
+      const endDate = new Date(startDate.getTime() + 4 * 60 * 60 * 1000);
+      const end =
+        endDate.getFullYear() +
+        String(endDate.getMonth() + 1).padStart(2, "0") +
+        String(endDate.getDate()).padStart(2, "0") +
+        "T" +
+        String(endDate.getHours()).padStart(2, "0") +
+        String(endDate.getMinutes()).padStart(2, "0") +
+        "00";
+      params.set("dates", `${start}/${end}`);
+    } else {
+      params.set("dates", `${dateOnly}/${dateOnly}`);
+    }
+  }
+
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 
 export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
-  const calendarParams = new URLSearchParams({
-    action: "TEMPLATE",
-    text: "PEOPLElogy 25th Anniversary Celebration – The Digital Transformation",
-    dates: "20260619T093000Z/20260619T143000Z",
-    details: "Celebrating 25 years of PEOPLElogy Berhad — The Digital Transformation.",
-    location: "Renaissance Hotel, Kuala Lumpur",
-  });
-  const calendarUrl = `https://calendar.google.com/calendar/render?${calendarParams.toString()}`;
+  const calendarUrl = buildCalendarUrl(opts);
+
+  const header = opts.bannerUrl
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:580px;display:block;border-radius:12px 12px 0 0;" /></div>`
+    : `<div style="background: #0a1628; padding: 36px 40px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${opts.eventTitle}</h1>
+      </div>`;
+
+  const venueLine = [opts.venue, opts.address].filter(Boolean).join(", ");
 
   return `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e5;">
 
-      <!-- Header -->
-      <div style="background: #0a1628; padding: 36px 40px; text-align: center;">
-        <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">PEOPLElogy Berhad</h1>
-        <p style="color: #8eafd4; font-size: 13px; margin: 8px 0 0; letter-spacing: 0.3px;">25th Anniversary Celebration</p>
-      </div>
+      ${header}
 
       <!-- Body -->
       <div style="padding: 40px 40px 32px;">
@@ -30,15 +71,7 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
         </p>
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
-          Warm greetings from <strong>PEOPLElogy Berhad</strong>.
-        </p>
-
-        <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
-          Thank you for your kind RSVP to the <strong><em>PEOPLElogy 25th Anniversary Celebration &ndash; &ldquo;The Digital Transformation.&rdquo;</em></strong>
-        </p>
-
-        <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
-          As we mark 25 years of innovation and growth, <em>&ldquo;The Digital Transformation&rdquo;</em> celebration will also unveil our next chapter as we embark on the journey ahead. It would be our privilege to have you join us.
+          Thank you for your kind RSVP to <strong>${opts.eventTitle}</strong>.
         </p>
 
         <!-- Confirmation Banner -->
@@ -57,11 +90,11 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
           <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #333333;">
             <tr>
               <td style="padding: 6px 0; color: #888888; width: 80px; vertical-align: top;">Date</td>
-              <td style="padding: 6px 0; font-weight: 600;">19th June 2026</td>
+              <td style="padding: 6px 0; font-weight: 600;">${opts.eventDate}</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; color: #888888; vertical-align: top;">Venue</td>
-              <td style="padding: 6px 0; font-weight: 600;">Renaissance Hotel, Kuala Lumpur</td>
+              <td style="padding: 6px 0; font-weight: 600;">${venueLine}</td>
             </tr>
           </table>
         </div>
@@ -78,12 +111,12 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
         </table>
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 28px; line-height: 1.7;">
-          We sincerely appreciate your interest and look forward to welcoming you this <strong>19th June 2026</strong> at the <strong>Renaissance Hotel, Kuala Lumpur</strong>.
+          We look forward to welcoming you on <strong>${opts.eventDate}</strong> at <strong>${venueLine}</strong>.
         </p>
 
         <p style="font-size: 15px; color: #333333; margin: 0; line-height: 1.7;">
           Warm regards,<br />
-          <strong>PEOPLElogy Berhad</strong>
+          The ${opts.eventTitle} Team
         </p>
       </div>
 
@@ -147,7 +180,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   const header = opts.bannerUrl
     ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:560px;display:block;border-radius:12px 12px 0 0;" /></div>`
     : `<div style="background: #111111; padding: 32px 40px; text-align: center; border-radius: 12px 12px 0 0;">
-        <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? "AuraPixel"}</h1>
+        <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? opts.eventTitle}</h1>
         <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${opts.tableNumber != null ? "Table" : "Seat"} Confirmed &#x2705;</p>
       </div>`;
 

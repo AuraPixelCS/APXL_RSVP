@@ -82,8 +82,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const emailResult = await sendEmail({
         to: rsvpData.email,
-        subject: `RSVP Confirmation – PEOPLElogy 25th Anniversary Celebration`,
-        html: buildRsvpConfirmEmail({ name: rsvpData.name }),
+        subject: `RSVP Confirmation – ${event.title}`,
+        html: buildRsvpConfirmEmail({
+          name: rsvpData.name,
+          eventTitle: event.title,
+          eventDate: event.date,
+          eventTime: event.time,
+          venue: event.venue ?? "",
+          address: event.address,
+          bannerUrl: event.customRsvpConfirmBanner,
+        }),
       });
       console.log("✉️ EMAIL LOG:", emailResult);
     } catch (e) {
