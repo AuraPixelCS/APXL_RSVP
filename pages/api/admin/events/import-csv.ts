@@ -2,6 +2,7 @@ import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { sendEmail } from "@/lib/email";
 import { buildRsvpConfirmEmail } from "@/lib/emailTemplates";
+import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 
 async function handler(req: AuthedRequest, res: NextApiResponse) {
@@ -90,6 +91,13 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
 
       // Send confirmation email
       try {
+        let bannerUrl: string | undefined = event.customRsvpConfirmBanner;
+        let attachments;
+        if (!bannerUrl) {
+          const fallback = loadPeoplelogyEmailBanner(event.title, "rsvp_banner");
+          bannerUrl = fallback.bannerUrl;
+          if (fallback.attachment) attachments = [fallback.attachment];
+        }
         await sendEmail({
           to: rsvpData.email,
           subject: `RSVP Confirmation – ${event.title}`,
@@ -100,9 +108,10 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
             eventTime: event.time,
             venue: event.venue ?? "",
             address: event.address,
-            bannerUrl: event.customRsvpConfirmBanner,
+            bannerUrl,
             showTitleOnBanner: !!event.showEventTitleOnBanner,
           }),
+          attachments,
         });
       } catch (e) {
         console.error("Email throw for imported RSVP:", e);

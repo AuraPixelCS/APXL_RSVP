@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebaseAdmin";
 import { sendEmail } from "@/lib/email";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildRsvpConfirmEmail } from "@/lib/emailTemplates";
+import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -80,6 +81,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Send confirmation email — must be awaited before response so Vercel doesn't freeze the function
     try {
+      let bannerUrl: string | undefined = event.customRsvpConfirmBanner;
+      let attachments;
+      if (!bannerUrl) {
+        const fallback = loadPeoplelogyEmailBanner(event.title, "rsvp_banner");
+        bannerUrl = fallback.bannerUrl;
+        if (fallback.attachment) attachments = [fallback.attachment];
+      }
       const emailResult = await sendEmail({
         to: rsvpData.email,
         subject: `RSVP Confirmation – ${event.title}`,
@@ -90,9 +98,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           eventTime: event.time,
           venue: event.venue ?? "",
           address: event.address,
-          bannerUrl: event.customRsvpConfirmBanner,
+          bannerUrl,
           showTitleOnBanner: !!event.showEventTitleOnBanner,
         }),
+        attachments,
       });
       console.log("✉️ EMAIL LOG:", emailResult);
     } catch (e) {
