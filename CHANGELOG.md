@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.2] — 2026-05-16
+
+- **Scanner check-in fix**: `/api/qr/verify` now accepts `allocated` status (a guest with a seat assigned but who hasn't shown up yet), not just `attending`. Previously the verify gate rejected anyone with `allocated`, which is the realistic state of most pre-event check-ins, so the rsvp-app scanner could never proceed past verify into the actual `/api/scanner/checkin` write.
+- **Friendlier scanner error copy** in `/api/qr/verify`:
+  - `Invalid or forged QR Code` → `Not valid`
+  - Already-checked-in guests now get a dedicated `Already checked in` (400) instead of the generic `RSVP is marked as checked_in` message.
+
 ## [1.4.1] — 2026-05-15
 
 - Seat map modal widened from `max-w-4xl` (896px) → `max-w-[1400px]` so wide banquet/banquet-runway layouts (e.g. PEOPLElogy 300-seat, 30-table) fit more tables on screen at once.

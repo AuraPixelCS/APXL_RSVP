@@ -25,7 +25,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 1. Decrypt and verify payload signature
     const payload = verifyQRToken(qrToken);
     if (!payload) {
-      return res.status(401).json({ error: "Invalid or forged QR Code" });
+      return res.status(401).json({ error: "Not valid" });
     }
 
     // 2. Initial time-based validity check
@@ -53,7 +53,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rsvp = rsvpSnap.data()!;
 
     // 4. Validate check-in constraints
-    if (rsvp.status !== "attending") {
+    if (rsvp.status === "checked_in") {
+      return res.status(400).json({ error: "Already checked in" });
+    }
+    if (rsvp.status !== "attending" && rsvp.status !== "allocated") {
       return res.status(400).json({ error: `RSVP is marked as ${rsvp.status || 'not attending'}` });
     }
 
