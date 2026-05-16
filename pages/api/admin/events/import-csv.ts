@@ -101,6 +101,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
             venue: event.venue ?? "",
             address: event.address,
             bannerUrl: event.customRsvpConfirmBanner,
+            showTitleOnBanner: !!event.showEventTitleOnBanner,
           }),
         });
       } catch (e) {

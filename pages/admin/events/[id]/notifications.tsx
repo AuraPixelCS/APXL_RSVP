@@ -89,13 +89,15 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [loading, setLoading]       = useState(true);
 
   // Tab
-  const [activeTab, setActiveTab] = useState<"template" | "guests">("template");
+  const [activeTab, setActiveTab] = useState<"template" | "guests">("guests");
 
   // Banners
   const [bannerUrl, setBannerUrl]                       = useState("");
   const [savedBanner, setSavedBanner]                   = useState("");
   const [rsvpBannerUrl, setRsvpBannerUrl]               = useState("");
   const [savedRsvpBanner, setSavedRsvpBanner]           = useState("");
+  const [showTitle, setShowTitle]                       = useState(false);
+  const [savedShowTitle, setSavedShowTitle]             = useState(false);
   const [entryBannerUploading, setEntryBannerUploading] = useState(false);
   const [rsvpBannerUploading, setRsvpBannerUploading]   = useState(false);
   const [savingSettings, setSavingSettings]             = useState(false);
@@ -115,8 +117,10 @@ const NotificationsPage: NextPageWithLayout = () => {
       setEvent(ev);
       const banner     = ev?.customEmailBanner       ?? "";
       const rsvpBanner = ev?.customRsvpConfirmBanner ?? "";
+      const showT      = !!ev?.showEventTitleOnBanner;
       setBannerUrl(banner);         setSavedBanner(banner);
       setRsvpBannerUrl(rsvpBanner); setSavedRsvpBanner(rsvpBanner);
+      setShowTitle(showT);          setSavedShowTitle(showT);
       setLoading(false);
     });
   }, [id]);
@@ -133,7 +137,10 @@ const NotificationsPage: NextPageWithLayout = () => {
     (r) => r.status === "allocated" || r.status === "checked_in"
   );
   const unnotifiedCount = allocatedRsvps.filter((r) => !r.notifiedAt).length;
-  const settingsDirty = bannerUrl !== savedBanner || rsvpBannerUrl !== savedRsvpBanner;
+  const settingsDirty =
+    bannerUrl !== savedBanner ||
+    rsvpBannerUrl !== savedRsvpBanner ||
+    showTitle !== savedShowTitle;
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -167,13 +174,15 @@ const NotificationsPage: NextPageWithLayout = () => {
       await updateEvent(event.id, {
         customEmailBanner:       bannerUrl,
         customRsvpConfirmBanner: rsvpBannerUrl,
+        showEventTitleOnBanner:  showTitle,
       });
       setSavedBanner(bannerUrl);
       setSavedRsvpBanner(rsvpBannerUrl);
+      setSavedShowTitle(showTitle);
     } finally {
       setSavingSettings(false);
     }
-  }, [event, bannerUrl, rsvpBannerUrl, settingsDirty, savingSettings]);
+  }, [event, bannerUrl, rsvpBannerUrl, showTitle, settingsDirty, savingSettings]);
 
   const handleNotifyOne = useCallback(async (rsvpId: string) => {
     if (!event?.id) return;
@@ -222,6 +231,7 @@ const NotificationsPage: NextPageWithLayout = () => {
         tableNumber: isTableMode ? 1 : undefined,
         qrDataUrl: PREVIEW_QR,
         bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
+        showTitleOnBanner: showTitle,
       })
     : "";
 
@@ -298,8 +308,8 @@ const NotificationsPage: NextPageWithLayout = () => {
         style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
       >
         {([
-          { key: "template", label: "Template" },
           { key: "guests",   label: `Allocated Guests${allocatedRsvps.length ? ` (${allocatedRsvps.length})` : ""}` },
+          { key: "template", label: "Template" },
         ] as const).map((t) => {
           const active = activeTab === t.key;
           return (
@@ -468,6 +478,34 @@ const NotificationsPage: NextPageWithLayout = () => {
               e.target.value = "";
             }}
           />
+        </div>
+
+        {/* ── Show Title On Banner Toggle ── */}
+        <div
+          className="flex items-center justify-between rounded-lg p-3"
+          style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+        >
+          <div className="pr-4">
+            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+              Show event title under banner
+            </label>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              When on, the event title appears in a thin dark strip beneath the banner image. Turn off for a clean banner-only look. Applies to both emails.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showTitle}
+            onClick={() => setShowTitle((v) => !v)}
+            className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer"
+            style={{ background: showTitle ? "var(--accent)" : "var(--border)" }}
+          >
+            <span
+              className="inline-block h-5 w-5 rounded-full bg-white transition-transform"
+              style={{ transform: showTitle ? "translateX(22px)" : "translateX(2px)" }}
+            />
+          </button>
         </div>
 
         {/* Save row */}

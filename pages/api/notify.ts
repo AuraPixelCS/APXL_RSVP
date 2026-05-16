@@ -95,6 +95,7 @@ async function sendOneNotification(
         rowLabel,
         bannerUrl,
         headerTitle: event.customEmailTitle,
+        showTitleOnBanner: !!event.showEventTitleOnBanner,
         customBody,
         // No qrDataUrl — cid:qr_code is used for actual email send
       });

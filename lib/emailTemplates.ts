@@ -11,6 +11,8 @@ export interface RsvpConfirmEmailOpts {
   address?: string;
   /** Firebase Storage URL — replaces the dark text header with an image */
   bannerUrl?: string;
+  /** When true and a banner is set, render the event title in a strip below the banner */
+  showTitleOnBanner?: boolean;
 }
 
 /** Build a Google Calendar TEMPLATE link from event date/time fields. */
@@ -51,8 +53,14 @@ function buildCalendarUrl(opts: RsvpConfirmEmailOpts): string {
 export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
   const calendarUrl = buildCalendarUrl(opts);
 
+  const titleStrip = opts.showTitleOnBanner
+    ? `<div style="background: #0a1628; padding: 14px 20px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 0.3px;">${opts.eventTitle}</h1>
+      </div>`
+    : "";
+
   const header = opts.bannerUrl
-    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:580px;display:block;border-radius:12px 12px 0 0;" /></div>`
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:580px;display:block;" /></div>${titleStrip}`
     : `<div style="background: #0a1628; padding: 36px 40px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${opts.eventTitle}</h1>
       </div>`;
@@ -156,8 +164,10 @@ export interface SeatEmailOpts {
   customBody?: string;
   /** Firebase Storage URL — replaces black header with an image */
   bannerUrl?: string;
-  /** Header title text. Defaults to "AuraPixel" when no bannerUrl is set. */
+  /** Header title text. Defaults to the event title when no bannerUrl is set. */
   headerTitle?: string;
+  /** When true and a banner is set, render the event title in a strip below the banner */
+  showTitleOnBanner?: boolean;
 }
 
 export function buildSeatEmail(opts: SeatEmailOpts): string {
@@ -176,10 +186,17 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         Please find your entry QR pass below &mdash; show this at the entrance on the day of the event.
       </p>`;
 
+  const seatTitleStrip = opts.showTitleOnBanner
+    ? `<div style="background: #111111; padding: 14px 20px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px;">${opts.headerTitle ?? opts.eventTitle}</h1>
+        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${opts.tableNumber != null ? "Table" : "Seat"} Confirmed &#x2705;</p>
+      </div>`
+    : "";
+
   // Header: custom banner image OR dark header with editable title
   const header = opts.bannerUrl
-    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:560px;display:block;border-radius:12px 12px 0 0;" /></div>`
-    : `<div style="background: #111111; padding: 32px 40px; text-align: center; border-radius: 12px 12px 0 0;">
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:560px;display:block;" /></div>${seatTitleStrip}`
+    : `<div style="background: #111111; padding: 32px 40px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? opts.eventTitle}</h1>
         <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${opts.tableNumber != null ? "Table" : "Seat"} Confirmed &#x2705;</p>
       </div>`;

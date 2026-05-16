@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] — 2026-05-16
+
+- **New toggle: "Show event title under banner"** on the Notifications page Template tab. When off (default), uploaded banners render with no accompanying text — banner only. When on, a thin dark strip with the event title appears beneath the banner on both the RSVP Confirmation and Entry Pass emails. Persisted on the event doc as `showEventTitleOnBanner`.
+- Notifications page tab order flipped: **Allocated Guests** is now first and the default selected tab; Template is second.
+
 ## [1.5.0] — 2026-05-16
 
 - **RSVP Confirmation email is now per-event.** `buildRsvpConfirmEmail` is genericized — body, subject, calendar link, and venue/date copy are derived from the event document instead of hardcoded PEOPLElogy text. The same template now works for any future event without code changes.

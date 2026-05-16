@@ -159,6 +159,7 @@ export default async function handler(
           venue: event.venue ?? "",
           address: event.address,
           bannerUrl: event.customRsvpConfirmBanner,
+          showTitleOnBanner: !!event.showEventTitleOnBanner,
         }),
       });
       console.log("[webhook] ✉️ EMAIL LOG:", emailResult);

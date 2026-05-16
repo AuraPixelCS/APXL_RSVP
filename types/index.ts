@@ -53,6 +53,7 @@ export interface Event {
   customEmailTitle?: string;  // header title in email, defaults to "AuraPixel"
   customEmailBanner?: string; // Firebase Storage URL — entry pass email header banner
   customRsvpConfirmBanner?: string; // Firebase Storage URL — RSVP confirmation email header banner
+  showEventTitleOnBanner?: boolean; // when true, render event title in a strip beneath both banners
   createdAt?: string;
   updatedAt?: string;
 }

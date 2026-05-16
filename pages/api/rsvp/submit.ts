@@ -91,6 +91,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           venue: event.venue ?? "",
           address: event.address,
           bannerUrl: event.customRsvpConfirmBanner,
+          showTitleOnBanner: !!event.showEventTitleOnBanner,
         }),
       });
       console.log("✉️ EMAIL LOG:", emailResult);
