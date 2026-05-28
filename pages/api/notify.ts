@@ -5,6 +5,7 @@ import { sendEmail } from "@/lib/email";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildSeatEmail } from "@/lib/emailTemplates";
 import { getSeatLabel } from "@/lib/seatLabel";
+import { getVipSeatInfo } from "@/lib/seating";
 import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
@@ -23,9 +24,13 @@ async function sendOneNotification(
     .replace(/\{\{name\}\}/g, rsvp.name)
     .replace(/\{\{event\}\}/g, event.title) || undefined;
 
-  // Derive table number when event uses table-based assignment
+  // Detect VIP seats first — they bypass the standard row/table math because
+  // their seat numbers sit above event.totalSeats in a per-VIP-table range.
+  const vipInfo = getVipSeatInfo(rsvp.seatNumber, event.seatingConfig, event.totalSeats);
+
+  // Derive table number when event uses table-based assignment (standard tables only).
   const seatsPerTable = event.seatingConfig?.seatsPerTable ?? 10;
-  const tableNumber: number | undefined = event.assignmentMode === "table"
+  const tableNumber: number | undefined = !vipInfo && event.assignmentMode === "table"
     ? Math.ceil(rsvp.seatNumber / seatsPerTable)
     : undefined;
 
@@ -38,7 +43,7 @@ async function sendOneNotification(
     event.seatingConfig &&
     event.seatingConfig.style !== "banquet" &&
     event.seatingConfig.style !== "banquet-runway";
-  if (event.assignmentMode !== "table" && rowableStyle) {
+  if (!vipInfo && event.assignmentMode !== "table" && rowableStyle) {
     const { row, pos } = getSeatLabel(rsvp.seatNumber, event.seatingConfig);
     rowLabel = row;
     seatPos = pos;
@@ -93,17 +98,21 @@ async function sendOneNotification(
         seatNumber: seatPos ?? rsvp.seatNumber,
         tableNumber,
         rowLabel,
+        vipTableLabel: vipInfo?.table.label,
+        vipSeatInTable: vipInfo?.seatInTable,
         bannerUrl,
         headerTitle: event.customEmailTitle,
         showTitleOnBanner: !!event.showEventTitleOnBanner,
         customBody,
         // No qrDataUrl — cid:qr_code is used for actual email send
       });
-      const subjectLabel = tableNumber != null
-        ? `Table #${tableNumber}`
-        : rowLabel && seatPos
-          ? `Seat ${rowLabel}${seatPos}`
-          : `Seat #${rsvp.seatNumber}`;
+      const subjectLabel = vipInfo
+        ? `VIP ${vipInfo.table.label} · Seat ${vipInfo.seatInTable}`
+        : tableNumber != null
+          ? `Table #${tableNumber}`
+          : rowLabel && seatPos
+            ? `Seat ${rowLabel}${seatPos}`
+            : `Seat #${rsvp.seatNumber}`;
       await sendEmail({
         to: rsvp.email,
         subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
@@ -123,11 +132,13 @@ async function sendOneNotification(
       const internationalPhone = cleanPhone.startsWith("0") ? "6" + cleanPhone : cleanPhone;
       const templateName = process.env.WATI_SEAT_TEMPLATE_NAME ?? "seat_confirmed";
 
-      const seatParam = tableNumber != null
-        ? `Table ${tableNumber}`
-        : rowLabel && seatPos
-          ? `${rowLabel}${seatPos}`
-          : String(rsvp.seatNumber);
+      const seatParam = vipInfo
+        ? `VIP ${vipInfo.table.label} #${vipInfo.seatInTable}`
+        : tableNumber != null
+          ? `Table ${tableNumber}`
+          : rowLabel && seatPos
+            ? `${rowLabel}${seatPos}`
+            : String(rsvp.seatNumber);
       const result = await sendWhatsAppTemplate(internationalPhone, templateName, [
         { name: "name",  value: rsvp.name },
         { name: "event", value: event.title },

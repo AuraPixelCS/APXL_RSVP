@@ -1,10 +1,18 @@
 import { motion, AnimatePresence } from "framer-motion";
-import type { SeatingConfig, SeatingStyle } from "@/types";
+import type { SeatingConfig, SeatingStyle, VipTable } from "@/types";
 
 interface Props {
   totalSeats: number;
   config: SeatingConfig;
   onChange: (c: SeatingConfig) => void;
+}
+
+const VIP_GOLD = "#d4af37";
+const VIP_GOLD_RING = "rgba(212,175,55,0.55)";
+const VIP_GOLD_FILL = "rgba(212,175,55,0.18)";
+
+function newVipId(): string {
+  return `vip_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 // ─── Style definitions ─────────────────────────────────────────────────────────
@@ -438,6 +446,104 @@ function CheckIcon() {
   );
 }
 
+// ─── VIP tables editor ────────────────────────────────────────────────────────
+
+function VipTablesEditor({
+  vipTables,
+  onChange,
+}: {
+  vipTables: VipTable[];
+  onChange: (next: VipTable[]) => void;
+}) {
+  const update = (idx: number, patch: Partial<VipTable>) => {
+    const next = vipTables.map((t, i) => (i === idx ? { ...t, ...patch } : t));
+    onChange(next);
+  };
+  const remove = (idx: number) => onChange(vipTables.filter((_, i) => i !== idx));
+  const add = () => onChange([
+    ...vipTables,
+    { id: newVipId(), label: `VIP ${vipTables.length + 1}`, seats: 12 },
+  ]);
+
+  return (
+    <div className="space-y-2 pt-2" style={{ borderTop: "1px dashed var(--border)" }}>
+      <div className="flex items-center justify-between mt-2">
+        <div>
+          <p className="text-xs font-semibold" style={{ color: VIP_GOLD, letterSpacing: "0.05em" }}>
+            VIP Tables
+          </p>
+          <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+            Rendered near the stage, separate from the standard grid. Seat numbers continue above the normal range.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={add}
+          className="text-[11px] font-semibold rounded-md px-2.5 py-1 cursor-pointer transition-colors shrink-0"
+          style={{
+            background: VIP_GOLD_FILL,
+            color: VIP_GOLD,
+            border: `1px solid ${VIP_GOLD_RING}`,
+          }}
+        >
+          + Add
+        </button>
+      </div>
+
+      {vipTables.length === 0 ? (
+        <p className="text-[10px] italic" style={{ color: "var(--muted)" }}>
+          No VIP tables. Add one to reserve seats near the stage.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {vipTables.map((t, idx) => (
+            <div
+              key={t.id}
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5"
+              style={{ background: "var(--surface)", border: `1px solid ${VIP_GOLD_RING}` }}
+            >
+              <input
+                type="text"
+                value={t.label}
+                onChange={(e) => update(idx, { label: e.target.value })}
+                placeholder="Label, e.g. Stage Front"
+                className="flex-1 min-w-0 px-2 py-1 rounded text-xs text-white"
+                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
+              />
+              <input
+                type="number"
+                min={4}
+                max={20}
+                value={t.seats}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value);
+                  update(idx, { seats: Number.isFinite(n) ? Math.max(1, Math.min(20, n)) : 1 });
+                }}
+                className="w-14 px-2 py-1 rounded text-xs text-white text-center"
+                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
+                title="Seats around the table"
+              />
+              <button
+                type="button"
+                onClick={() => remove(idx)}
+                aria-label={`Remove ${t.label}`}
+                className="w-6 h-6 rounded flex items-center justify-center cursor-pointer transition-colors shrink-0"
+                style={{ color: "var(--muted)" }}
+                onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.08)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "transparent"; }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export default function SeatingConfigurator({ totalSeats, config, onChange }: Props) {
@@ -615,6 +721,11 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
                   {" "}(<strong style={{ color: "var(--foreground)" }}>{(config.tablesPerSide ?? 1) * 2}</strong> tables per row total).
                 </p>
               </div>
+
+              <VipTablesEditor
+                vipTables={config.vipTables ?? []}
+                onChange={(vipTables) => onChange({ ...config, vipTables: vipTables.length > 0 ? vipTables : undefined })}
+              />
             </div>
           )}
         </motion.div>
@@ -631,6 +742,11 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
         <div className="flex justify-center overflow-x-auto">
           <LivePreview totalSeats={totalSeats} config={config} />
         </div>
+        {(config.vipTables?.length ?? 0) > 0 && (
+          <p className="text-[10px] mt-3 text-center" style={{ color: VIP_GOLD }}>
+            + {config.vipTables!.length} VIP table{config.vipTables!.length === 1 ? "" : "s"} ({config.vipTables!.reduce((n, t) => n + t.seats, 0)} seats) near the stage
+          </p>
+        )}
       </div>
     </div>
   );

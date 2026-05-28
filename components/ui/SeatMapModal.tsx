@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Event, RSVP, SeatingConfig } from "@/types";
+import type { Event, RSVP, SeatingConfig, VipTable } from "@/types";
 import SeatingConfigurator from "@/components/ui/SeatingConfigurator";
 import { getSeatLabel } from "@/lib/seatLabel";
+import { getTotalSeatCount, getVipSeatRanges } from "@/lib/seating";
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,52 @@ function buildSeatMap(totalSeats: number, rsvps: RSVP[]): SeatInfo[] {
     const n = i + 1;
     return map.get(n) ?? { seatNumber: n, status: "available" };
   });
+}
+
+// ─── Stage bar (banquet layouts) ───────────────────────────────────────────────
+
+const VIP_GOLD       = "#d4af37";
+const VIP_GOLD_SOFT  = "rgba(212,175,55,0.10)";
+const VIP_GOLD_RING  = "rgba(212,175,55,0.55)";
+const VIP_GOLD_FILL  = "rgba(212,175,55,0.18)";
+
+function StageBar({ width }: { width?: number | string }) {
+  return (
+    <div
+      className="rounded-lg flex items-center justify-center"
+      style={{
+        width: width ?? "100%",
+        height: 32,
+        background: "rgba(61,155,245,0.08)",
+        border: "1px solid rgba(61,155,245,0.25)",
+        fontSize: 11,
+        fontWeight: 700,
+        color: "rgba(61,155,245,0.7)",
+        letterSpacing: "0.2em",
+      }}
+    >
+      STAGE
+    </div>
+  );
+}
+
+interface VipTableGroup {
+  table: VipTable;
+  tableIndex: number;
+  seats: SeatInfo[];
+}
+
+function buildVipTableGroups(
+  allSeats: SeatInfo[],
+  config: SeatingConfig | undefined,
+  totalStandardSeats: number
+): VipTableGroup[] {
+  const ranges = getVipSeatRanges(config, totalStandardSeats);
+  return ranges.map((r) => ({
+    table: r.table,
+    tableIndex: r.tableIndex,
+    seats: allSeats.slice(r.start - 1, r.end),
+  }));
 }
 
 // ─── Individual seat (grid layouts) ───────────────────────────────────────────
@@ -344,14 +391,16 @@ function RunwaySeatMap({
 function BanquetSeatMap({
   seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
   isTableMode,
+  vipTableGroups = [],
   onSeatAssign, onSeatInspect,
 }: {
-  seats: SeatInfo[];
+  seats: SeatInfo[]; // standard seats only (excludes VIP seats — those come via vipTableGroups)
   seatsPerTable: number;
   tablesPerSide?: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
   isTableMode: boolean;
+  vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
 }) {
@@ -365,6 +414,35 @@ function BanquetSeatMap({
   const ORBIT_R = TABLE_R + SEAT_R + 5;
   const SVG_SIZE = (ORBIT_R + SEAT_R + 4) * 2;
 
+  const stageAndVip = (
+    <div className="flex flex-col items-stretch gap-3 w-full" style={{ marginBottom: vipTableGroups.length > 0 ? 4 : 0 }}>
+      <StageBar />
+      {vipTableGroups.length > 0 && (
+        <div className="flex items-stretch gap-2 justify-center flex-wrap">
+          {vipTableGroups.map((g) => (
+            <BanquetTableCell
+              key={g.table.id}
+              tableSeats={g.seats}
+              tableIndex={g.tableIndex}
+              seatsPerTable={g.table.seats}
+              selectionMode={selectionMode}
+              highlightedSeat={highlightedSeat}
+              isTableMode={isTableMode}
+              onSeatAssign={onSeatAssign}
+              onSeatInspect={onSeatInspect}
+              tableR={TABLE_R}
+              seatR={SEAT_R}
+              orbitR={ORBIT_R}
+              svgSize={SVG_SIZE}
+              variant="vip"
+              tableLabel={g.table.label}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // New mode: explicit tablesPerSide → fixed left/right structure per row.
   if (tablesPerSide != null) {
     const perRow = tablesPerSide * 2;
@@ -375,6 +453,7 @@ function BanquetSeatMap({
 
     return (
       <div className="flex flex-col items-center gap-3">
+        {stageAndVip}
         {rows.map((rowTables, ri) => {
           const leftTables  = rowTables.slice(0, tablesPerSide);
           const rightTables = rowTables.slice(tablesPerSide);
@@ -438,7 +517,9 @@ function BanquetSeatMap({
 
   // Legacy mode: no tablesPerSide → keep responsive grid.
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 justify-items-center">
+    <div className="flex flex-col items-center gap-3 w-full">
+      {stageAndVip}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 justify-items-center w-full">
       {tables.map((tableSeats, ti) => (
         <BanquetTableCell
           key={ti}
@@ -456,6 +537,7 @@ function BanquetSeatMap({
           svgSize={SVG_SIZE}
         />
       ))}
+      </div>
     </div>
   );
 }
@@ -465,6 +547,7 @@ function BanquetSeatMap({
 function BanquetRunwaySeatMap({
   seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
   isTableMode,
+  vipTableGroups = [],
   onSeatAssign, onSeatInspect,
 }: {
   seats: SeatInfo[];
@@ -473,6 +556,7 @@ function BanquetRunwaySeatMap({
   selectionMode: boolean;
   highlightedSeat: number | null;
   isTableMode: boolean;
+  vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
 }) {
@@ -495,22 +579,31 @@ function BanquetRunwaySeatMap({
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {/* Stage — width: 100% expands to match the natural row width below */}
-      <div
-        className="rounded-lg flex items-center justify-center"
-        style={{
-          width: "100%",
-          height: 32,
-          background: "rgba(61,155,245,0.08)",
-          border: "1px solid rgba(61,155,245,0.25)",
-          fontSize: 11,
-          fontWeight: 700,
-          color: "rgba(61,155,245,0.7)",
-          letterSpacing: "0.2em",
-        }}
-      >
-        STAGE
-      </div>
+      <StageBar />
+
+      {vipTableGroups.length > 0 && (
+        <div className="flex items-stretch gap-2 justify-center flex-wrap">
+          {vipTableGroups.map((g) => (
+            <BanquetTableCell
+              key={g.table.id}
+              tableSeats={g.seats}
+              tableIndex={g.tableIndex}
+              seatsPerTable={g.table.seats}
+              selectionMode={selectionMode}
+              highlightedSeat={highlightedSeat}
+              isTableMode={isTableMode}
+              onSeatAssign={onSeatAssign}
+              onSeatInspect={onSeatInspect}
+              tableR={TABLE_R}
+              seatR={SEAT_R}
+              orbitR={ORBIT_R}
+              svgSize={SVG_SIZE}
+              variant="vip"
+              tableLabel={g.table.label}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Rows of (N tables) | aisle | (N tables) */}
       <div className="flex flex-col gap-2">
@@ -592,6 +685,7 @@ function BanquetTableCell({
   tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, isTableMode,
   onSeatAssign, onSeatInspect,
   tableR, seatR, orbitR, svgSize,
+  variant = "standard", tableLabel,
 }: {
   tableSeats: SeatInfo[];
   tableIndex: number;
@@ -605,25 +699,62 @@ function BanquetTableCell({
   seatR: number;
   orbitR: number;
   svgSize: number;
+  variant?: "standard" | "vip";
+  /** Override the "T{n+1}" label inside the table circle (used for VIP tables). */
+  tableLabel?: string;
 }) {
   const occupiedSeats = tableSeats.filter((s) => s.status !== "available");
+  const isVip = variant === "vip";
+  const innerLabel = isVip ? `T${tableIndex + 1}` : (tableLabel ?? `T${tableIndex + 1}`);
   return (
     <div
       style={{
         flex: 1,
-        border: "1px solid var(--border)",
+        border: `1px solid ${isVip ? VIP_GOLD_RING : "var(--border)"}`,
         borderRadius: 12,
-        padding: "12px 10px 10px",
-        background: "var(--surface-2)",
+        padding: isVip ? "14px 28px 12px" : "12px 10px 10px",
+        background: isVip ? VIP_GOLD_SOFT : "var(--surface-2)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        minWidth: isVip ? svgSize * 2.4 : undefined,
       }}
     >
+      {isVip && (
+        <div
+          className="rounded-full"
+          style={{
+            background: "rgba(212,175,55,0.18)",
+            color: VIP_GOLD,
+            border: `1px solid ${VIP_GOLD_RING}`,
+            fontSize: 9,
+            fontWeight: 700,
+            letterSpacing: "0.15em",
+            padding: "1px 8px",
+            marginBottom: 6,
+          }}
+        >
+          VIP
+        </div>
+      )}
       <svg width={svgSize} height={svgSize} viewBox={`0 0 ${svgSize} ${svgSize}`} overflow="visible">
-        <circle cx={svgSize / 2} cy={svgSize / 2} r={tableR} fill="var(--surface-3)" stroke="var(--border)" strokeWidth="1.5" />
-        <text x={svgSize / 2} y={svgSize / 2 + 4} textAnchor="middle" fontSize="10" fill="var(--muted)" fontFamily="'Fira Code', monospace">
-          T{tableIndex + 1}
+        <circle
+          cx={svgSize / 2}
+          cy={svgSize / 2}
+          r={tableR}
+          fill={isVip ? "rgba(212,175,55,0.10)" : "var(--surface-3)"}
+          stroke={isVip ? VIP_GOLD_RING : "var(--border)"}
+          strokeWidth="1.5"
+        />
+        <text
+          x={svgSize / 2}
+          y={svgSize / 2 + 4}
+          textAnchor="middle"
+          fontSize="10"
+          fill={isVip ? VIP_GOLD : "var(--muted)"}
+          fontFamily="'Fira Code', monospace"
+        >
+          {innerLabel}
         </text>
         {tableSeats.map((seat, si) => {
           const angle = (si / tableSeats.length) * Math.PI * 2 - Math.PI / 2;
@@ -636,8 +767,9 @@ function BanquetTableCell({
           const isHighlighted = highlightedSeat === seat.seatNumber;
           const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
 
-          const fill   = isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : c.fill;
-          const stroke = isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : c.stroke;
+          const vipAvailable = isVip && isAvailable && !isSelectable;
+          const fill   = isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : vipAvailable ? VIP_GOLD_FILL : c.fill;
+          const stroke = isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : vipAvailable ? VIP_GOLD_RING : c.stroke;
 
           return (
             <circle
@@ -674,20 +806,33 @@ function BanquetTableCell({
               }}
             >
               <title>
-                {seat.guestName
-                  ? `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`} · ${seat.guestName}${isInspectable ? " · Click for details" : ""}`
-                  : `${isTableMode ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}` : `Seat ${seat.seatNumber}`}${isSelectable ? " · Click to assign" : ""}`}
+                {(() => {
+                  const seatLabel = isVip
+                    ? `VIP · ${innerLabel} · Seat ${si + 1}`
+                    : isTableMode
+                      ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}`
+                      : `Seat ${seat.seatNumber}`;
+                  if (seat.guestName) {
+                    return `${seatLabel} · ${seat.guestName}${isInspectable ? " · Click for details" : ""}`;
+                  }
+                  return `${seatLabel}${isSelectable ? " · Click to assign" : ""}`;
+                })()}
               </title>
             </circle>
           );
         })}
       </svg>
 
-      <p className="text-[10px] font-mono uppercase tracking-wider mt-1 mb-1.5" style={{ color: "var(--muted)" }}>
-        Table {tableIndex + 1}
-      </p>
+      {!isVip && (
+        <p
+          className="text-[10px] font-mono uppercase tracking-wider mt-1 mb-1.5"
+          style={{ color: "var(--muted)" }}
+        >
+          Table {tableIndex + 1}
+        </p>
+      )}
 
-      <div style={{ width: "100%", height: 1, background: "var(--border)", marginBottom: 6 }} />
+      <div style={{ width: "100%", height: 1, background: "var(--border)", marginTop: isVip ? 8 : 0, marginBottom: 6 }} />
 
       <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 2 }}>
         {occupiedSeats.length > 0 ? (
@@ -718,23 +863,29 @@ function BanquetTableCell({
 // ─── Seat detail panel ─────────────────────────────────────────────────────────
 
 function SeatDetailPanel({
-  seat, onDismiss, isTableMode, perGroup, seatingConfig, onReassign,
+  seat, onDismiss, isTableMode, perGroup, seatingConfig, totalStandardSeats, onReassign,
 }: {
   seat: SeatInfo;
   onDismiss: () => void;
   isTableMode: boolean;
   perGroup: number;
   seatingConfig: SeatingConfig;
+  totalStandardSeats: number;
   onReassign?: (rsvpId: string, guestName: string) => void;
 }) {
   const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
-  const label = isTableMode ? "Table" : "Seat";
-  const seatLabel = !isTableMode ? getSeatLabel(seat.seatNumber, seatingConfig) : null;
-  const displayNumber = isTableMode
-    ? Math.ceil(seat.seatNumber / perGroup)
-    : seatLabel
-      ? `${seatLabel.row}${seatLabel.pos}`
-      : seat.seatNumber;
+  const vipInfo = getVipSeatRanges(seatingConfig, totalStandardSeats)
+    .find((r) => seat.seatNumber >= r.start && seat.seatNumber <= r.end);
+  const isVip = !!vipInfo;
+  const label = isVip ? "VIP" : isTableMode ? "Table" : "Seat";
+  const seatLabel = !isVip && !isTableMode ? getSeatLabel(seat.seatNumber, seatingConfig) : null;
+  const displayNumber = isVip
+    ? vipInfo!.tableIndex + 1
+    : isTableMode
+      ? Math.ceil(seat.seatNumber / perGroup)
+      : seatLabel
+        ? `${seatLabel.row}${seatLabel.pos}`
+        : seat.seatNumber;
 
   return (
     <motion.div
@@ -916,13 +1067,29 @@ export default function SeatMapModal({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose, assigning, selectedSeat]);
 
-  const seats = useMemo(() => buildSeatMap(event.totalSeats, rsvps), [event.totalSeats, rsvps]);
+  const totalSeatsAll = useMemo(
+    () => getTotalSeatCount(event.seatingConfig, event.totalSeats),
+    [event.seatingConfig, event.totalSeats]
+  );
+  const allSeats = useMemo(
+    () => buildSeatMap(totalSeatsAll, rsvps),
+    [totalSeatsAll, rsvps]
+  );
   const config      = event.seatingConfig ?? { style: "theater" as const, seatsPerRow: 10 };
   const seatsPerRow   = config.seatsPerRow ?? 10;
   const seatsPerTable = config.seatsPerTable ?? 10;
   const selectionMode = !!selectingFor;
   const isTableMode   = event.assignmentMode === "table";
   const perGroup      = (config.style === "banquet" || config.style === "banquet-runway") ? seatsPerTable : seatsPerRow;
+
+  // Split into standard seats (used by all renderers) and VIP table groups (only banquet variants render them).
+  const standardSeats   = useMemo(() => allSeats.slice(0, event.totalSeats), [allSeats, event.totalSeats]);
+  const vipTableGroups  = useMemo(
+    () => buildVipTableGroups(allSeats, event.seatingConfig, event.totalSeats),
+    [allSeats, event.seatingConfig, event.totalSeats]
+  );
+  // For stats and grid renderers we count every seat (standard + VIP).
+  const seats = allSeats;
 
   const stats = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -984,9 +1151,9 @@ export default function SeatMapModal({
                 <div className="min-w-0">
                   <h2 className="text-sm font-bold text-white leading-tight truncate">{event.title}</h2>
                   <p className="text-xs hidden sm:block" style={{ color: "var(--muted)" }}>
-                    Seat Map · {event.totalSeats} seats · <span style={{ textTransform: "capitalize" }}>{config.style} layout</span>
+                    Seat Map · {totalSeatsAll} seats{vipTableGroups.length > 0 ? ` (incl. ${vipTableGroups.reduce((n, g) => n + g.table.seats, 0)} VIP)` : ""} · <span style={{ textTransform: "capitalize" }}>{config.style} layout</span>
                   </p>
-                  <p className="text-xs sm:hidden" style={{ color: "var(--muted)", textTransform: "capitalize" }}>{config.style} · {event.totalSeats} seats</p>
+                  <p className="text-xs sm:hidden" style={{ color: "var(--muted)", textTransform: "capitalize" }}>{config.style} · {totalSeatsAll} seats</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -1215,23 +1382,25 @@ export default function SeatMapModal({
             >
               {config.style === "banquet" ? (
                 <BanquetSeatMap
-                  seats={seats}
+                  seats={standardSeats}
                   seatsPerTable={seatsPerTable}
                   tablesPerSide={config.tablesPerSide != null ? Math.max(1, Math.min(6, config.tablesPerSide)) : undefined}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   isTableMode={isTableMode}
+                  vipTableGroups={vipTableGroups}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
                   onSeatInspect={!selectionMode ? handleSeatInspect : undefined}
                 />
               ) : config.style === "banquet-runway" ? (
                 <BanquetRunwaySeatMap
-                  seats={seats}
+                  seats={standardSeats}
                   seatsPerTable={seatsPerTable}
                   tablesPerSide={Math.max(1, Math.min(6, config.tablesPerSide ?? 1))}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   isTableMode={isTableMode}
+                  vipTableGroups={vipTableGroups}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
                   onSeatInspect={!selectionMode ? handleSeatInspect : undefined}
                 />
@@ -1268,6 +1437,7 @@ export default function SeatMapModal({
                   isTableMode={isTableMode}
                   perGroup={perGroup}
                   seatingConfig={config}
+                  totalStandardSeats={event.totalSeats}
                   onReassign={onReassign}
                 />
               )}

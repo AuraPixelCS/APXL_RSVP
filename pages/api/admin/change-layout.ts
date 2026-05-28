@@ -2,14 +2,21 @@ import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import type { SeatingConfig } from "@/types";
+import { vipTablesAreAdditionOnly } from "@/lib/seating";
 
+/**
+ * Returns true when the layout change is safe — every previously-allocated
+ * seat still maps to the same physical seat. Changes to seatsPerRow /
+ * seatsPerTable / style invalidate allocations. VIP table edits are safe as
+ * long as they only append new tables at the end.
+ */
 function configsEqual(a: SeatingConfig | undefined, b: SeatingConfig | undefined): boolean {
   if (!a || !b) return false;
-  return (
-    a.style === b.style &&
-    (a.seatsPerRow ?? null) === (b.seatsPerRow ?? null) &&
-    (a.seatsPerTable ?? null) === (b.seatsPerTable ?? null)
-  );
+  if (a.style !== b.style) return false;
+  if ((a.seatsPerRow ?? null) !== (b.seatsPerRow ?? null)) return false;
+  if ((a.seatsPerTable ?? null) !== (b.seatsPerTable ?? null)) return false;
+  if (!vipTablesAreAdditionOnly(a.vipTables, b.vipTables)) return false;
+  return true;
 }
 
 async function handler(req: AuthedRequest, res: NextApiResponse) {

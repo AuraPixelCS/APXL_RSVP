@@ -156,6 +156,10 @@ export interface SeatEmailOpts {
   seatNumber: number;
   /** When provided, the info row shows "Table No. #X" instead of "Seat No. #X" */
   tableNumber?: number;
+  /** When set, the email shows a "VIP Table" row with this label (e.g. "Stage Front") */
+  vipTableLabel?: string;
+  /** When set, the seat row shows the position-in-VIP-table instead of the global number */
+  vipSeatInTable?: number;
   /** Row letter (e.g. "A"). When provided in seat mode, email shows a separate "Row" row above "Seat No." */
   rowLabel?: string;
   /** base64 data URL (data:image/png;base64,...) used for live preview only */
@@ -171,8 +175,13 @@ export interface SeatEmailOpts {
 }
 
 export function buildSeatEmail(opts: SeatEmailOpts): string {
-  const assignLabel = opts.tableNumber != null ? "Table No." : "Seat No.";
-  const assignValue = opts.tableNumber != null ? opts.tableNumber : opts.seatNumber;
+  const isVip = !!opts.vipTableLabel;
+  const assignLabel = isVip
+    ? "VIP Seat"
+    : opts.tableNumber != null ? "Table No." : "Seat No.";
+  const assignValue = isVip
+    ? (opts.vipSeatInTable ?? opts.seatNumber)
+    : opts.tableNumber != null ? opts.tableNumber : opts.seatNumber;
 
   // Substitute {{name}} and {{event}} variables in custom body
   const resolvedBody = (opts.customBody ?? "").trim()
@@ -242,10 +251,16 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
               <td style="padding: 5px 0; font-weight: 600;">${opts.venue}</td>
             </tr>
             ${addressRow}
-            ${opts.tableNumber == null && opts.rowLabel
+            ${opts.tableNumber == null && opts.rowLabel && !isVip
               ? `<tr>
               <td style="padding: 5px 0; color: #888888;">Row</td>
               <td style="padding: 5px 0; font-size: 18px; font-weight: 700; color: #111111;">${opts.rowLabel}</td>
+            </tr>`
+              : ""}
+            ${isVip
+              ? `<tr>
+              <td style="padding: 5px 0; color: #888888;">VIP Table</td>
+              <td style="padding: 5px 0; font-size: 16px; font-weight: 700; color: #b7791f;">${opts.vipTableLabel}</td>
             </tr>`
               : ""}
             <tr>

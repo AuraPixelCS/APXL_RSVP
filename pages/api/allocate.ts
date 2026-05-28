@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebaseAdmin";
 import { generateQRPayload, signQRPayload } from "@/lib/qr";
 import QRCode from "qrcode";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
+import { getTotalSeatCount } from "@/lib/seating";
 
 // ─── Helper: generate QR data URL and signed token ──────────────────────────
 
@@ -138,8 +139,9 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       if (alreadyTaken) {
         return res.status(409).json({ error: `Seat #${seatNumber} is already taken` });
       }
-      if (seatNumber > event.totalSeats) {
-        return res.status(400).json({ error: `Seat #${seatNumber} exceeds total seats (${event.totalSeats})` });
+      const cap = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+      if (seatNumber > cap) {
+        return res.status(400).json({ error: `Seat #${seatNumber} exceeds total seats (${cap})` });
       }
       targetSeat = seatNumber;
     } else {

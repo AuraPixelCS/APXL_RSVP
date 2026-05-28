@@ -118,4 +118,16 @@ export interface SeatingConfig {
   seatsPerRow?: number;   // theater, auditorium, classroom — default 10
   seatsPerTable?: number; // banquet, banquet-runway — default 10
   tablesPerSide?: number; // banquet, banquet-runway — tables per side per row (total per row = 2 × tablesPerSide)
+  vipTables?: VipTable[]; // optional VIP tables rendered near the stage; seats are numbered above the standard range
+}
+
+/**
+ * VIP table — sits near the stage, separate from the standard seating grid.
+ * Seat numbers are appended above totalSeats in the order vipTables appear.
+ * Example: totalSeats=200, vipTables=[{seats:12}, {seats:10}] → VIP seats 201–212, 213–222.
+ */
+export interface VipTable {
+  id: string;        // stable id (preserve to keep allocations valid across edits)
+  label: string;     // shown to admins + appended to guest confirmations, e.g. "Stage Front"
+  seats: number;     // number of seats around the round table
 }
