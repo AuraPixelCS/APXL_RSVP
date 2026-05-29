@@ -220,12 +220,12 @@ export default function PublicRSVPPage() {
             }}
           >
             <Image
-              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-logo.png`}
+              src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/aurapixel-tight.png`}
               alt="AuraPixel"
-              width={80}
-              height={45}
+              width={120}
+              height={77}
               className="object-contain mx-auto"
-              style={{ filter: "brightness(0) invert(1)" }}
+              style={{ width: 110, height: "auto" }}
               priority
             />
             <h1 className="text-xl font-bold text-white">{event.title}</h1>

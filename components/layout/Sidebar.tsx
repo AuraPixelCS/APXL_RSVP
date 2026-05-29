@@ -219,24 +219,32 @@ export default function Sidebar() {
         overflow: "visible",
       }}
     >
-      {/* Logo — edge-to-edge, no padding */}
+      {/* Logo — centered square brand mark with subtle separator */}
       <div
-        style={{ position: "relative", width: "100%", flexShrink: 0 }}
+        style={{
+          position: "relative",
+          width: "100%",
+          height: 72,
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          borderBottom: "1px solid var(--border)",
+        }}
         onMouseEnter={() => setLogoHovered(true)}
         onMouseLeave={() => setLogoHovered(false)}
       >
         <Image
-          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-nav.png`}
+          src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-logo-small.png`}
           alt="AuraPixel"
-          width={SIDEBAR_W}
-          height={SIDEBAR_W * 2.2}
+          width={40}
+          height={40}
           style={{
-            width: "100%",
-            height: "auto",
+            width: 40,
+            height: 40,
             display: "block",
-            objectFit: "cover",
+            objectFit: "contain",
           }}
-          unoptimized
           priority
         />
         {logoHovered && (

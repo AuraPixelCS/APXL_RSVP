@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import type { ReactElement } from "react";
 import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
@@ -13,8 +14,10 @@ import ImportCsvModal from "@/components/ui/ImportCsvModal";
 import SeatMapModal from "@/components/ui/SeatMapModal";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { getAuthHeaders } from "@/lib/auth";
+import { getTotalSeatCount } from "@/lib/seating";
 import type { Event, RSVP, EventStats, FieldMapping, SeatingConfig } from "@/types";
-import { format } from "date-fns";
+import { motion, AnimatePresence } from "framer-motion";
+import { format, parseISO, differenceInCalendarDays, isToday, formatDistanceToNow } from "date-fns";
 
 function computeStats(rsvps: RSVP[]): EventStats {
   return {
@@ -99,6 +102,462 @@ function MapPinIcon() {
       <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
       <circle cx="12" cy="10" r="3" />
     </svg>
+  );
+}
+
+function ClockIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function ArrowRightIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
+function MoreIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="5" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LiveDot({ color = "#22c55e" }: { color?: string }) {
+  return (
+    <span className="relative flex w-2 h-2 shrink-0">
+      <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: color }} />
+      <span className="relative inline-flex rounded-full w-2 h-2" style={{ background: color }} />
+    </span>
+  );
+}
+
+function CountdownChip({ date }: { date: string }) {
+  let label = "";
+  let bg = "rgba(107,114,128,0.12)";
+  let color = "var(--muted)";
+  let border = "rgba(107,114,128,0.3)";
+  try {
+    const days = differenceInCalendarDays(parseISO(date), new Date());
+    if (days > 1)        { label = `In ${days} days`; bg = "rgba(61,155,245,0.10)";  color = "var(--accent)"; border = "rgba(61,155,245,0.3)"; }
+    else if (days === 1) { label = "Tomorrow";         bg = "rgba(245,158,11,0.10)";  color = "#f59e0b";       border = "rgba(245,158,11,0.35)"; }
+    else if (days === 0) { label = "Today";            bg = "rgba(245,158,11,0.12)";  color = "#f59e0b";       border = "rgba(245,158,11,0.4)"; }
+    else                 { label = `${Math.abs(days)}d ago`; bg = "rgba(107,114,128,0.12)"; color = "var(--muted)"; border = "rgba(107,114,128,0.3)"; }
+  } catch { return null; }
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
+      style={{ background: bg, color, border: `1px solid ${border}`, letterSpacing: "0.06em" }}
+    >
+      <ClockIcon size={10} />
+      {label}
+    </span>
+  );
+}
+
+// ─── More menu (dropdown) ─────────────────────────────────────────────────────
+
+interface MoreMenuItem {
+  label: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  hidden?: boolean;
+}
+
+function MoreMenu({ items }: { items: MoreMenuItem[] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClick = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("mousedown", handleClick);
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  const visibleItems = items.filter((i) => !i.hidden);
+
+  return (
+    <div ref={rootRef} style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="flex items-center justify-center w-9 h-9 rounded-lg cursor-pointer transition-colors"
+        style={{
+          background: open ? "var(--surface-3)" : "var(--surface-2)",
+          color: "var(--muted)",
+          border: "1px solid var(--border)",
+        }}
+        onMouseEnter={(e) => { if (!open) e.currentTarget.style.color = "#fff"; }}
+        onMouseLeave={(e) => { if (!open) e.currentTarget.style.color = "var(--muted)"; }}
+      >
+        <MoreIcon />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            role="menu"
+            className="absolute z-30 mt-1.5 rounded-lg overflow-hidden"
+            style={{
+              right: 0,
+              minWidth: 200,
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div className="py-1">
+              {visibleItems.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  disabled={item.disabled}
+                  onClick={() => { item.onClick(); setOpen(false); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-xs cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  style={{ background: "transparent", color: "#fff" }}
+                  onMouseEnter={(e) => { if (!item.disabled) e.currentTarget.style.background = "var(--surface-3)"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                >
+                  <span style={{ color: "var(--muted)", display: "inline-flex" }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ─── Standard event hero ──────────────────────────────────────────────────────
+
+interface HeroActions {
+  onOpenSeatMap: () => void;
+  onOpenNotifications: () => void;
+  onAllocatePending: () => void;
+  bulkAllocating: boolean;
+  unnotifiedCount: number;
+  pendingCount: number;
+  moreItems: MoreMenuItem[];
+}
+
+function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; actions: HeroActions }) {
+  const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+  const vipSeats = totalSeats - event.totalSeats;
+  const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
+  const fillPct = totalSeats > 0 ? Math.round((allocated / totalSeats) * 100) : 0;
+  const dateLabel = (() => { try { return format(parseISO(event.date), "EEE, dd MMM yyyy"); } catch { return event.date; } })();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-2xl overflow-hidden"
+      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-0">
+        {/* Left: title, meta, fill */}
+        <div className="p-6 flex flex-col gap-3.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CountdownChip date={event.date} />
+            <span
+              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
+              style={{
+                background: event.isActive ? "rgba(34,197,94,0.12)" : "rgba(107,114,128,0.14)",
+                color: event.isActive ? "#22c55e" : "#6b7280",
+                letterSpacing: "0.06em",
+              }}
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: event.isActive ? "#22c55e" : "#6b7280" }}
+              />
+              {event.isActive ? "Active" : "Inactive"}
+            </span>
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">{event.title}</h1>
+            {event.description && (
+              <p className="text-xs mt-2 line-clamp-2" style={{ color: "var(--muted)" }}>{event.description}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs" style={{ color: "var(--muted)" }}>
+            <span className="flex items-center gap-1.5">
+              <CalendarIcon />
+              {dateLabel}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <ClockIcon />
+              {event.time || "—"}
+            </span>
+            {event.venue && (
+              <span className="flex items-center gap-1.5">
+                <MapPinIcon />
+                {event.venue}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-1">
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>
+                Seats Allocated
+              </span>
+              <span className="text-sm font-mono font-semibold" style={{ color: "var(--foreground)" }}>
+                {allocated} <span style={{ color: "var(--muted)" }}>/ {totalSeats}</span>
+                {vipSeats > 0 && (
+                  <span className="text-[10px] ml-1" style={{ color: "#d4af37" }}>
+                    (incl. {vipSeats} VIP)
+                  </span>
+                )}
+                <span className="ml-2" style={{ color: "var(--muted)" }}>· {fillPct}%</span>
+              </span>
+            </div>
+            <div className="w-full rounded-full overflow-hidden" style={{ height: 8, background: "var(--surface-3)" }}>
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${fillPct}%` }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+                style={{ height: "100%", background: "var(--accent)" }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Right: actions */}
+        <div
+          className="p-6 flex flex-col gap-2 justify-center"
+          style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)" }}
+        >
+          <div className="flex items-center gap-2">
+            <button
+              onClick={actions.onOpenSeatMap}
+              className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
+              style={{ background: "var(--accent)", color: "#000" }}
+            >
+              <GridIcon />
+              Open Seat Map
+            </button>
+            <MoreMenu items={actions.moreItems} />
+          </div>
+
+          <button
+            onClick={actions.onOpenNotifications}
+            className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors relative"
+            style={{ background: "var(--surface-3)", color: "#fff", border: "1px solid var(--border)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+          >
+            <BellIcon />
+            Notifications
+            {actions.unnotifiedCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center rounded-full text-[10px] font-bold ml-0.5"
+                style={{ background: "var(--accent)", color: "#000", minWidth: 18, height: 18, padding: "0 5px" }}
+              >
+                {actions.unnotifiedCount}
+              </span>
+            )}
+          </button>
+
+          {actions.pendingCount > 0 && (
+            <button
+              onClick={actions.onAllocatePending}
+              disabled={actions.bulkAllocating}
+              className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ background: "rgba(245,158,11,0.10)", color: "#f59e0b", border: "1px solid rgba(245,158,11,0.35)" }}
+              onMouseEnter={(e) => { if (!actions.bulkAllocating) e.currentTarget.style.background = "rgba(245,158,11,0.18)"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(245,158,11,0.10)"; }}
+            >
+              {actions.bulkAllocating ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "#f59e0b", borderTopColor: "transparent" }} />
+                  Allocating…
+                </>
+              ) : (
+                <>
+                  <BulkIcon />
+                  Allocate {actions.pendingCount} Pending
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Event Day hero ───────────────────────────────────────────────────────────
+
+function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; actions: HeroActions }) {
+  const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+  const checkedIn = rsvps.filter((r) => r.status === "checked_in").length;
+  const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
+  const checkInPct = allocated > 0 ? Math.round((checkedIn / allocated) * 100) : 0;
+
+  const lastCheckIn = useMemo(() => {
+    const stamps = rsvps
+      .map((r) => r.checkedInAt)
+      .filter((s): s is string => !!s)
+      .sort((a, b) => b.localeCompare(a));
+    return stamps[0] ?? null;
+  }, [rsvps]);
+
+  const RING_SIZE = 160;
+  const STROKE = 12;
+  const radius = (RING_SIZE - STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (checkInPct / 100) * circumference;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(20,20,20,0.95) 60%)",
+        border: "1px solid rgba(34,197,94,0.3)",
+      }}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-0">
+        <div className="p-6 flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase"
+              style={{ background: "rgba(34,197,94,0.12)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.35)", letterSpacing: "0.08em" }}
+            >
+              <LiveDot />
+              Event Day · Live
+            </span>
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">{event.title}</h1>
+            <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>
+              {event.time}{event.venue ? ` · ${event.venue}` : ""}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mt-1">
+            <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Checked In</p>
+              <p className="text-xl font-bold mt-1" style={{ color: "#22c55e", fontFamily: "'Fira Code', monospace" }}>{checkedIn}</p>
+            </div>
+            <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Allocated</p>
+              <p className="text-xl font-bold mt-1" style={{ color: "var(--accent)", fontFamily: "'Fira Code', monospace" }}>{allocated}</p>
+            </div>
+            <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+              <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Capacity</p>
+              <p className="text-xl font-bold mt-1 text-white" style={{ fontFamily: "'Fira Code', monospace" }}>{totalSeats}</p>
+            </div>
+          </div>
+
+          <p className="text-[11px] flex items-center gap-1.5" style={{ color: "var(--muted)" }}>
+            <ClockIcon size={11} />
+            {lastCheckIn
+              ? <>Last check-in <strong style={{ color: "#fff" }}>{(() => { try { return formatDistanceToNow(parseISO(lastCheckIn), { addSuffix: true }); } catch { return ""; } })()}</strong></>
+              : <>No check-ins yet</>}
+          </p>
+
+          <div className="flex flex-wrap gap-2 mt-1">
+            <button
+              onClick={actions.onOpenSeatMap}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
+              style={{ background: "#22c55e", color: "#000" }}
+            >
+              <GridIcon />
+              Open Seat Map
+              <ArrowRightIcon />
+            </button>
+            <button
+              onClick={actions.onOpenNotifications}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 relative"
+              style={{ background: "var(--surface-3)", color: "#fff", border: "1px solid var(--border)" }}
+            >
+              <BellIcon />
+              Notifications
+              {actions.unnotifiedCount > 0 && (
+                <span
+                  className="inline-flex items-center justify-center rounded-full text-[10px] font-bold ml-0.5"
+                  style={{ background: "var(--accent)", color: "#000", minWidth: 18, height: 18, padding: "0 5px" }}
+                >
+                  {actions.unnotifiedCount}
+                </span>
+              )}
+            </button>
+            <MoreMenu items={actions.moreItems} />
+          </div>
+        </div>
+
+        {/* Right: check-in dial */}
+        <div className="p-6 flex flex-col items-center justify-center gap-2" style={{ borderLeft: "1px solid var(--border)", minWidth: 220 }}>
+          <div style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}>
+            <svg width={RING_SIZE} height={RING_SIZE} style={{ transform: "rotate(-90deg)" }}>
+              <circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={radius}
+                fill="none"
+                stroke="var(--surface-3)"
+                strokeWidth={STROKE}
+              />
+              <motion.circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={radius}
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth={STROKE}
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                initial={{ strokeDashoffset: circumference }}
+                animate={{ strokeDashoffset: dashOffset }}
+                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: "none" }}>
+              <p className="text-3xl font-bold text-white" style={{ fontFamily: "'Fira Code', monospace" }}>{checkInPct}%</p>
+              <p className="text-[10px] mt-0.5 uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Checked In</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-center" style={{ color: "var(--muted)" }}>
+            {checkedIn} of {allocated} allocated
+          </p>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -337,133 +796,60 @@ const EventDetailPage: NextPageWithLayout = () => {
     );
   }
 
+  const unnotifiedCount = rsvps.filter(
+    (r) => (r.status === "allocated" || r.status === "checked_in") && !r.notifiedAt
+  ).length;
+  const isEventDay = (() => { try { return isToday(parseISO(event.date)); } catch { return false; } })();
+
+  const moreItems: MoreMenuItem[] = [
+    {
+      label: "Import CSV",
+      icon: <UploadIcon />,
+      onClick: () => setShowImportCsvModal(true),
+      hidden: !isAdmin,
+    },
+    {
+      label: "Export CSV",
+      icon: <DownloadIcon />,
+      onClick: handleExport,
+    },
+    {
+      label: "Google Forms",
+      icon: <FormsIcon />,
+      onClick: () => setShowGFormsModal(true),
+    },
+  ];
+
+  const heroActions: HeroActions = {
+    onOpenSeatMap: () => setShowSeatMap(true),
+    onOpenNotifications: () => router.push(`/admin/events/${event.id}/notifications`),
+    onAllocatePending: handleBulkAllocate,
+    bulkAllocating,
+    unnotifiedCount,
+    pendingCount: stats.pending,
+    moreItems,
+  };
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3 mb-2">
-            <h1 className="text-xl font-bold text-white truncate">{event.title}</h1>
-            <span
-              className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide shrink-0"
-              style={{
-                background: event.isActive ? "rgba(34,197,94,0.12)" : "rgba(107,114,128,0.14)",
-                color: event.isActive ? "#22c55e" : "#6b7280",
-              }}
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full mr-1"
-                style={{ background: event.isActive ? "#22c55e" : "#6b7280" }}
-              />
-              {event.isActive ? "Active" : "Inactive"}
-            </span>
-          </div>
+    <div className="space-y-5">
+      {/* Back link */}
+      <Link
+        href="/admin"
+        className="inline-flex items-center gap-1.5 text-[11px] font-medium cursor-pointer transition-colors"
+        style={{ color: "var(--muted)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+        </svg>
+        All Events
+      </Link>
 
-          <div className="flex items-center flex-wrap gap-x-4 gap-y-1">
-            <span className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
-              <CalendarIcon />
-              {event.date ? format(new Date(event.date), "dd MMM yyyy") : "—"} · {event.time || "—"}
-            </span>
-            <span className="flex items-center gap-1.5 text-xs" style={{ color: "var(--muted)" }}>
-              <MapPinIcon />
-              {event.venue}
-            </span>
-          </div>
-
-          {event.description && (
-            <p className="text-sm mt-2 max-w-xl" style={{ color: "var(--muted)" }}>
-              {event.description}
-            </p>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleBulkAllocate}
-            disabled={bulkAllocating}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-50"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--accent)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <BulkIcon />
-            {bulkAllocating ? "Allocating…" : "Bulk Allocate"}
-          </button>
-          {isAdmin && (
-            <button
-              onClick={() => setShowImportCsvModal(true)}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--accent)",
-                border: "1px solid var(--border)",
-              }}
-            >
-              <UploadIcon />
-              Import CSV
-            </button>
-          )}
-          <button
-            onClick={handleExport}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--muted)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <DownloadIcon />
-            Export CSV
-          </button>
-          <button
-            onClick={() => setShowGFormsModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--accent)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <FormsIcon />
-            Google Forms
-          </button>
-          <button
-            onClick={() => setShowSeatMap(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--muted)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <GridIcon />
-            Seat Map
-          </button>
-          <button
-            onClick={() => router.push(`/admin/events/${event.id}/notifications`)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 relative"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--accent)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            <BellIcon />
-            Notifications
-            {rsvps.filter((r) => (r.status === "allocated" || r.status === "checked_in") && !r.notifiedAt).length > 0 && (
-              <span
-                className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center rounded-full text-[10px] font-bold px-1"
-                style={{ background: "var(--accent)", color: "#000" }}
-              >
-                {rsvps.filter((r) => (r.status === "allocated" || r.status === "checked_in") && !r.notifiedAt).length}
-              </span>
-            )}
-          </button>
-        </div>
-      </div>
+      {/* Hero — Event Day variant on event day, standard otherwise */}
+      {isEventDay
+        ? <EventDayHero event={event} rsvps={rsvps} actions={heroActions} />
+        : <EventHero event={event} rsvps={rsvps} actions={heroActions} />}
 
       {/* Stats */}
       <EventStatsBar stats={stats} />

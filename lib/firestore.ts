@@ -36,6 +36,15 @@ export async function getEvents(): Promise<Event[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Event));
 }
 
+export function subscribeToEvents(
+  callback: (events: Event[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(collection(db, "events"), orderBy("date", "desc")),
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Event)))
+  );
+}
+
 export async function getEvent(eventId: string): Promise<Event | null> {
   const snap = await getDoc(doc(db, "events", eventId));
   if (!snap.exists()) return null;

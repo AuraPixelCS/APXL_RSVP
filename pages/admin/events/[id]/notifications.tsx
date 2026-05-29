@@ -56,23 +56,143 @@ function BellIcon() {
 const PREVIEW_QR =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAEALAAAAAABAAEAAAICTAEAOw==";
 
-// ─── Status chip ─────────────────────────────────────────────────────────────
+// ─── Notification Hero ───────────────────────────────────────────────────────
 
-function StatusChip({ status }: { status: string }) {
-  const map: Record<string, { bg: string; color: string; label: string }> = {
-    allocated:    { bg: "rgba(61,155,245,0.12)",  color: "#3d9bf5", label: "Allocated" },
-    checked_in:   { bg: "rgba(34,197,94,0.12)",   color: "#22c55e", label: "Checked In" },
-    pending:      { bg: "rgba(251,191,36,0.12)",   color: "#fbbf24", label: "Pending" },
-    not_attending:{ bg: "rgba(239,68,68,0.12)",    color: "#ef4444", label: "Not Attending" },
-  };
-  const s = map[status] ?? { bg: "var(--surface-2)", color: "var(--muted)", label: status };
+function NotificationHero({
+  eventTitle, notifiedCount, unnotifiedCount, totalAllocated, notifiedPct,
+  bulkNotifying, canBulk, onBulkNotify,
+}: {
+  eventTitle: string;
+  notifiedCount: number;
+  unnotifiedCount: number;
+  totalAllocated: number;
+  notifiedPct: number;
+  bulkNotifying: boolean;
+  canBulk: boolean;
+  onBulkNotify: () => void;
+}) {
+  const RING_SIZE = 140;
+  const STROKE = 12;
+  const radius = (RING_SIZE - STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference - (notifiedPct / 100) * circumference;
+
+  const allDone = totalAllocated > 0 && unnotifiedCount === 0;
+  const accentColor = allDone ? "#22c55e" : "var(--accent)";
+  const noGuests = totalAllocated === 0;
+
   return (
-    <span
-      className="px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
-      style={{ background: s.bg, color: s.color }}
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-2xl overflow-hidden"
+      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
     >
-      {s.label}
-    </span>
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-0">
+        {/* Left: title + stats + CTA */}
+        <div className="p-6 flex flex-col gap-4">
+          <div>
+            <span
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase mb-3"
+              style={{
+                background: "rgba(61,155,245,0.08)",
+                color: "var(--accent)",
+                border: "1px solid rgba(61,155,245,0.25)",
+                letterSpacing: "0.08em",
+              }}
+            >
+              <BellIcon />
+              Notifications
+            </span>
+            <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">{eventTitle}</h1>
+            <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
+              {noGuests
+                ? "Allocate seats before sending notifications."
+                : allDone
+                  ? `All ${totalAllocated} allocated guests have been notified.`
+                  : `${unnotifiedCount} of ${totalAllocated} allocated guests still need to be notified.`}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <HeroStat label="Notified" value={notifiedCount} color="#22c55e" />
+            <HeroStat label="Unnotified" value={unnotifiedCount} color={unnotifiedCount > 0 ? "#f59e0b" : "var(--muted)"} />
+            <HeroStat label="Allocated" value={totalAllocated} color="var(--accent)" />
+          </div>
+
+          <div className="flex flex-wrap gap-2 mt-1">
+            <button
+              onClick={onBulkNotify}
+              disabled={!canBulk || bulkNotifying}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--accent)", color: "#000" }}
+            >
+              {bulkNotifying ? (
+                <>
+                  <span className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
+                  Sending…
+                </>
+              ) : (
+                <>
+                  <BellIcon />
+                  {unnotifiedCount > 0 ? `Notify ${unnotifiedCount} Unnotified` : "All Notified"}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Right: progress ring */}
+        <div
+          className="p-6 flex flex-col items-center justify-center gap-2"
+          style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)", minWidth: 200 }}
+        >
+          <div style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}>
+            <svg width={RING_SIZE} height={RING_SIZE} style={{ transform: "rotate(-90deg)" }}>
+              <circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={radius}
+                fill="none"
+                stroke="var(--surface-3)"
+                strokeWidth={STROKE}
+              />
+              <motion.circle
+                cx={RING_SIZE / 2}
+                cy={RING_SIZE / 2}
+                r={radius}
+                fill="none"
+                stroke={accentColor}
+                strokeWidth={STROKE}
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                initial={{ strokeDashoffset: circumference }}
+                animate={{ strokeDashoffset: dashOffset }}
+                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: "none" }}>
+              <p className="text-3xl font-bold text-white" style={{ fontFamily: "'Fira Code', monospace" }}>{notifiedPct}%</p>
+              <p className="text-[10px] mt-0.5 uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Notified</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function HeroStat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>
+        {label}
+      </p>
+      <p className="text-xl font-bold mt-1" style={{ color, fontFamily: "'Fira Code', monospace" }}>
+        {value}
+      </p>
+    </div>
   );
 }
 
@@ -109,6 +229,10 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [notifyingId, setNotifyingId]     = useState<string | null>(null);
   const [bulkNotifying, setBulkNotifying] = useState(false);
 
+  // Guest table filter + search
+  const [guestFilter, setGuestFilter] = useState<"all" | "unnotified" | "notified">("unnotified");
+  const [guestSearch, setGuestSearch] = useState("");
+
   // ── Data loading ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -137,6 +261,26 @@ const NotificationsPage: NextPageWithLayout = () => {
     (r) => r.status === "allocated" || r.status === "checked_in"
   );
   const unnotifiedCount = allocatedRsvps.filter((r) => !r.notifiedAt).length;
+  const notifiedCount = allocatedRsvps.length - unnotifiedCount;
+  const notifiedPct = allocatedRsvps.length > 0
+    ? Math.round((notifiedCount / allocatedRsvps.length) * 100)
+    : 0;
+
+  // Filtered + searched guests for the table view
+  const filteredGuests = (() => {
+    const filtered = guestFilter === "all"
+      ? allocatedRsvps
+      : guestFilter === "notified"
+        ? allocatedRsvps.filter((r) => !!r.notifiedAt)
+        : allocatedRsvps.filter((r) => !r.notifiedAt);
+    const q = guestSearch.trim().toLowerCase();
+    if (!q) return filtered;
+    return filtered.filter((r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q) ||
+      r.phone.toLowerCase().includes(q)
+    );
+  })();
   const settingsDirty =
     bannerUrl !== savedBanner ||
     rsvpBannerUrl !== savedRsvpBanner ||
@@ -261,46 +405,29 @@ const NotificationsPage: NextPageWithLayout = () => {
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
 
-      {/* ── Section A: Header ─────────────────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <button
-            onClick={() => router.back()}
-            className="flex items-center gap-1.5 text-xs mb-3 cursor-pointer transition-colors"
-            style={{ color: "var(--muted)" }}
-          >
-            <ArrowLeftIcon />
-            Back to event
-          </button>
-          <h1 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>
-            Notifications
-          </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
-            {event.title}
-            {allocatedRsvps.length > 0 && (
-              <span className="ml-2">
-                &mdash; {unnotifiedCount > 0
-                  ? `${unnotifiedCount} of ${allocatedRsvps.length} not yet notified`
-                  : `all ${allocatedRsvps.length} notified`}
-              </span>
-            )}
-          </p>
-        </div>
+      {/* ── Back link ──────────────────────────────────────────────────────── */}
+      <button
+        onClick={() => router.back()}
+        className="flex items-center gap-1.5 text-xs cursor-pointer transition-colors"
+        style={{ color: "var(--muted)" }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+      >
+        <ArrowLeftIcon />
+        Back to event
+      </button>
 
-        <button
-          onClick={handleBulkNotify}
-          disabled={!isAdmin || bulkNotifying || unnotifiedCount === 0}
-          title={!isAdmin ? "Admin only" : undefined}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{
-            background: "var(--accent)",
-            color: "#000",
-          }}
-        >
-          <BellIcon />
-          {bulkNotifying ? "Sending…" : `Bulk Notify${unnotifiedCount > 0 ? ` (${unnotifiedCount})` : ""}`}
-        </button>
-      </div>
+      {/* ── NotificationHero ───────────────────────────────────────────────── */}
+      <NotificationHero
+        eventTitle={event.title}
+        notifiedCount={notifiedCount}
+        unnotifiedCount={unnotifiedCount}
+        totalAllocated={allocatedRsvps.length}
+        notifiedPct={notifiedPct}
+        bulkNotifying={bulkNotifying}
+        canBulk={isAdmin && unnotifiedCount > 0}
+        onBulkNotify={handleBulkNotify}
+      />
 
       {/* ── Tab pills ─────────────────────────────────────────────────────── */}
       <div
@@ -571,17 +698,72 @@ const NotificationsPage: NextPageWithLayout = () => {
         className="rounded-xl overflow-hidden"
         style={{ border: "1px solid var(--border)" }}
       >
-        {/* Table header */}
+        {/* Filter + search toolbar */}
         <div
-          className="flex items-center justify-between px-5 py-4"
+          className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
           style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
         >
-          <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-            Allocated Guests
-            <span className="ml-2 text-xs font-normal" style={{ color: "var(--muted)" }}>
-              {allocatedRsvps.length} guests
+          <div
+            className="inline-flex items-center rounded-lg p-1 gap-1"
+            style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+            role="tablist"
+          >
+            {([
+              { key: "unnotified" as const, label: "Unnotified", count: unnotifiedCount, color: "#f59e0b" },
+              { key: "all"        as const, label: "All",        count: allocatedRsvps.length, color: "var(--accent)" },
+              { key: "notified"   as const, label: "Notified",   count: notifiedCount,    color: "#22c55e" },
+            ]).map((f) => {
+              const active = guestFilter === f.key;
+              return (
+                <button
+                  key={f.key}
+                  onClick={() => setGuestFilter(f.key)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-all duration-150"
+                  style={{
+                    background: active ? f.color : "transparent",
+                    color: active ? "#000" : "var(--muted)",
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "var(--muted)"; }}
+                >
+                  {f.label}
+                  <span
+                    className="inline-flex items-center justify-center rounded-full text-[10px] font-bold"
+                    style={{
+                      background: active ? "rgba(0,0,0,0.15)" : "var(--surface-3)",
+                      color: active ? "#000" : "var(--muted)",
+                      minWidth: 18,
+                      height: 16,
+                      padding: "0 5px",
+                    }}
+                  >
+                    {f.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative" style={{ minWidth: 220 }}>
+            <span
+              className="absolute left-2.5 top-1/2 -translate-y-1/2"
+              style={{ color: "var(--muted)" }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
             </span>
-          </h2>
+            <input
+              type="text"
+              value={guestSearch}
+              onChange={(e) => setGuestSearch(e.target.value)}
+              placeholder="Search name, email, phone…"
+              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs text-white"
+              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
+              onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+            />
+          </div>
         </div>
 
         {allocatedRsvps.length === 0 ? (
@@ -590,12 +772,31 @@ const NotificationsPage: NextPageWithLayout = () => {
               No allocated guests yet. Allocate seats first before sending notifications.
             </p>
           </div>
+        ) : filteredGuests.length === 0 ? (
+          <div className="px-6 py-12 text-center" style={{ background: "var(--surface)" }}>
+            <p className="text-sm text-white font-medium">
+              {guestSearch
+                ? `No guests match "${guestSearch}"`
+                : guestFilter === "unnotified"
+                  ? "Nothing to notify — all allocated guests have been reached."
+                  : "No guests in this view."}
+            </p>
+            {guestSearch && (
+              <button
+                onClick={() => setGuestSearch("")}
+                className="text-xs mt-2 cursor-pointer"
+                style={{ color: "var(--accent)" }}
+              >
+                Clear search
+              </button>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["#", "Name", "Email", "Phone", isTableMode ? "Table" : "Seat", "Status", "Last Notified", "Action"].map((h) => (
+                  {["#", "Name", "Email", "Phone", isTableMode ? "Table" : "Seat", "Last Notified", "Action"].map((h) => (
                     <th
                       key={h}
                       className="px-4 py-3 text-left text-xs font-medium whitespace-nowrap"
@@ -608,7 +809,7 @@ const NotificationsPage: NextPageWithLayout = () => {
               </thead>
               <tbody>
                 <AnimatePresence initial={false}>
-                  {allocatedRsvps.map((rsvp, i) => (
+                  {filteredGuests.map((rsvp, i) => (
                     <motion.tr
                       key={rsvp.id}
                       layout
@@ -643,10 +844,6 @@ const NotificationsPage: NextPageWithLayout = () => {
                             ? `T${Math.ceil(rsvp.seatNumber / seatsPerTable)}`
                             : `#${rsvp.seatNumber}`
                           : "—"}
-                      </td>
-                      {/* Status */}
-                      <td className="px-4 py-3">
-                        <StatusChip status={rsvp.status} />
                       </td>
                       {/* Last Notified */}
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
@@ -727,6 +924,43 @@ const NotificationsPage: NextPageWithLayout = () => {
         )}
       </div>
       )}
+
+      {/* ── Floating sticky Bulk Notify ─────────────────────────────────────
+           Appears on the Guests tab when there is still work to do and the
+           current filter view actually exposes the workflow (i.e. not the
+           Notified-only view). Reaches the same handler as the hero CTA. */}
+      <AnimatePresence>
+        {activeTab === "guests" && isAdmin && unnotifiedCount > 0 && guestFilter !== "notified" && (
+          <motion.button
+            key="sticky-bulk"
+            initial={{ opacity: 0, y: 12, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.95 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            onClick={handleBulkNotify}
+            disabled={bulkNotifying}
+            className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              background: "var(--accent)",
+              color: "#000",
+              boxShadow: "0 12px 32px rgba(61,155,245,0.35), 0 2px 6px rgba(0,0,0,0.4)",
+            }}
+            whileHover={{ y: -2 }}
+          >
+            {bulkNotifying ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
+                Sending…
+              </>
+            ) : (
+              <>
+                <BellIcon />
+                Notify {unnotifiedCount} Unnotified
+              </>
+            )}
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

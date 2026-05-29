@@ -35,14 +35,41 @@ const STYLES: {
 
 // ─── Style card diagrams ───────────────────────────────────────────────────────
 
+// ─── Diagram primitives ──────────────────────────────────────────────────────
+// All diagrams use a consistent 80×60 viewBox with a stage bar at the top so
+// each card reads at a glance. Active = brand-blue ink; inactive = muted gray.
+
+const D_WIDTH = 80;
+const D_HEIGHT = 60;
+
+function StageStrip({ active, height = 5 }: { active: boolean; height?: number }) {
+  return (
+    <rect
+      x="4"
+      y="3"
+      width={D_WIDTH - 8}
+      height={height}
+      rx="1.5"
+      fill={active ? "rgba(61,155,245,0.55)" : "rgba(107,114,128,0.4)"}
+    />
+  );
+}
+
 function TheaterDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      <rect x="4" y="36" width="52" height="5" rx="2" fill={c} opacity="0.4" />
-      {[0, 1, 2].map((row) =>
-        [0, 1, 2, 3, 4].map((col) => (
-          <circle key={`${row}-${col}`} cx={8 + col * 11} cy={8 + row * 9} r="3.5" fill={c} opacity={active ? 0.85 - row * 0.15 : 0.5 - row * 0.1} />
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      <StageStrip active={active} />
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2, 3, 4, 5].map((col) => (
+          <circle
+            key={`${row}-${col}`}
+            cx={9 + col * 12.5}
+            cy={20 + row * 9}
+            r="2.6"
+            fill={c}
+            opacity={active ? 0.95 - row * 0.12 : 0.55 - row * 0.08}
+          />
         ))
       )}
     </svg>
@@ -52,17 +79,17 @@ function TheaterDiagram({ active }: { active: boolean }) {
 function AuditoriumDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      <rect x="8" y="37" width="44" height="4" rx="2" fill={c} opacity="0.4" />
-      {[0, 1, 2].map((row) =>
-        [0, 1, 2, 3, 4].map((col) => (
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      <StageStrip active={active} />
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2, 3, 4, 5].map((col) => (
           <circle
             key={`${row}-${col}`}
-            cx={7 + col * 11 - row * 1.8}
-            cy={8 + row * 9}
-            r="3.5"
+            cx={9 + col * 12.5 - row * 2}
+            cy={20 + row * 9}
+            r="2.6"
             fill={c}
-            opacity={active ? 0.85 - row * 0.15 : 0.5 - row * 0.1}
+            opacity={active ? 0.95 - row * 0.12 : 0.55 - row * 0.08}
           />
         ))
       )}
@@ -72,16 +99,34 @@ function AuditoriumDiagram({ active }: { active: boolean }) {
 
 function BanquetDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
-  const tables = [{ cx: 18, cy: 22 }, { cx: 42, cy: 22 }];
+  const tables: [number, number][] = [[22, 22], [58, 22], [22, 44], [58, 44]];
   const angles = [0, 60, 120, 180, 240, 300];
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      {tables.map((t, ti) => (
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      {tables.map(([cx, cy], ti) => (
         <g key={ti}>
-          <circle cx={t.cx} cy={t.cy} r="9" fill={c} opacity={active ? 0.12 : 0.07} stroke={c} strokeWidth="1" strokeOpacity={active ? 0.5 : 0.3} />
+          <circle
+            cx={cx}
+            cy={cy}
+            r="6"
+            fill={c}
+            opacity={active ? 0.16 : 0.09}
+            stroke={c}
+            strokeWidth="0.8"
+            strokeOpacity={active ? 0.6 : 0.35}
+          />
           {angles.map((a, ai) => {
             const rad = (a * Math.PI) / 180;
-            return <circle key={ai} cx={t.cx + Math.cos(rad) * 13} cy={t.cy + Math.sin(rad) * 13} r="3" fill={c} opacity={active ? 0.8 : 0.45} />;
+            return (
+              <circle
+                key={ai}
+                cx={cx + Math.cos(rad) * 9.5}
+                cy={cy + Math.sin(rad) * 9.5}
+                r="2"
+                fill={c}
+                opacity={active ? 0.9 : 0.55}
+              />
+            );
           })}
         </g>
       ))}
@@ -92,21 +137,34 @@ function BanquetDiagram({ active }: { active: boolean }) {
 function RunwayDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      {/* Stage */}
-      <rect x="4" y="2" width="52" height="8" rx="2" fill={c} opacity={active ? 0.35 : 0.2} />
-      {/* Red carpet center aisle */}
-      <rect x="26" y="12" width="8" height="30" rx="2" fill="rgba(220,38,38,0.5)" />
-      {/* Left seats — 2 cols × 3 rows */}
-      {[0, 1, 2].map((row) =>
-        [0, 1].map((col) => (
-          <circle key={`l${row}${col}`} cx={7 + col * 9} cy={17 + row * 9} r="3" fill={c} opacity={active ? 0.8 : 0.45} />
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      <StageStrip active={active} height={6} />
+      {/* Red carpet aisle */}
+      <rect x="36" y="14" width="8" height={D_HEIGHT - 18} rx="2" fill="rgba(220,38,38,0.55)" />
+      {/* Left side seats */}
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2].map((col) => (
+          <circle
+            key={`l${row}${col}`}
+            cx={8 + col * 8}
+            cy={20 + row * 9}
+            r="2.4"
+            fill={c}
+            opacity={active ? 0.9 : 0.55}
+          />
         ))
       )}
-      {/* Right seats — 2 cols × 3 rows */}
-      {[0, 1, 2].map((row) =>
-        [0, 1].map((col) => (
-          <circle key={`r${row}${col}`} cx={37 + col * 9} cy={17 + row * 9} r="3" fill={c} opacity={active ? 0.8 : 0.45} />
+      {/* Right side seats */}
+      {[0, 1, 2, 3].map((row) =>
+        [0, 1, 2].map((col) => (
+          <circle
+            key={`r${row}${col}`}
+            cx={52 + col * 8}
+            cy={20 + row * 9}
+            r="2.4"
+            fill={c}
+            opacity={active ? 0.9 : 0.55}
+          />
         ))
       )}
     </svg>
@@ -116,20 +174,26 @@ function RunwayDiagram({ active }: { active: boolean }) {
 function BanquetRunwayDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   const sides: [number, number][] = [
-    [13, 16], [13, 32],   // left tables (x, y)
-    [47, 16], [47, 32],   // right tables
+    [18, 22], [18, 46],
+    [62, 22], [62, 46],
   ];
   const angles = [0, 72, 144, 216, 288];
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      {/* Stage */}
-      <rect x="4" y="2" width="52" height="6" rx="2" fill={c} opacity={active ? 0.35 : 0.2} />
-      {/* Red carpet center aisle */}
-      <rect x="28" y="10" width="4" height="32" rx="1.5" fill="rgba(220,38,38,0.5)" />
-      {/* Tables on each side with orbital seats */}
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      <StageStrip active={active} />
+      <rect x="38" y="13" width="4" height={D_HEIGHT - 17} rx="1.5" fill="rgba(220,38,38,0.55)" />
       {sides.map(([cx, cy], ti) => (
         <g key={ti}>
-          <circle cx={cx} cy={cy} r="5" fill={c} opacity={active ? 0.18 : 0.08} stroke={c} strokeWidth="0.75" strokeOpacity={active ? 0.55 : 0.3} />
+          <circle
+            cx={cx}
+            cy={cy}
+            r="5"
+            fill={c}
+            opacity={active ? 0.18 : 0.1}
+            stroke={c}
+            strokeWidth="0.7"
+            strokeOpacity={active ? 0.55 : 0.3}
+          />
           {angles.map((a, ai) => {
             const rad = (a * Math.PI) / 180;
             return (
@@ -137,9 +201,9 @@ function BanquetRunwayDiagram({ active }: { active: boolean }) {
                 key={ai}
                 cx={cx + Math.cos(rad) * 7.5}
                 cy={cy + Math.sin(rad) * 7.5}
-                r="1.6"
+                r="1.5"
                 fill={c}
-                opacity={active ? 0.85 : 0.5}
+                opacity={active ? 0.9 : 0.55}
               />
             );
           })}
@@ -152,14 +216,29 @@ function BanquetRunwayDiagram({ active }: { active: boolean }) {
 function ClassroomDiagram({ active }: { active: boolean }) {
   const c = active ? "#3d9bf5" : "#6b7280";
   return (
-    <svg width="60" height="44" viewBox="0 0 60 44" fill="none">
-      <rect x="4" y="2" width="52" height="5" rx="1" fill={c} opacity={active ? 0.4 : 0.25} />
-      {[0, 1, 2].map((row) =>
+    <svg width={D_WIDTH} height={D_HEIGHT} viewBox={`0 0 ${D_WIDTH} ${D_HEIGHT}`} fill="none">
+      <StageStrip active={active} />
+      {[0, 1, 2, 3].map((row) =>
         [0, 1].map((col) => (
           <g key={`${row}-${col}`}>
-            <rect x={5 + col * 28} y={13 + row * 10} width="20" height="7" rx="1.5" fill={c} opacity={active ? 0.3 : 0.18} />
-            {[0, 1].map((seat) => (
-              <circle key={seat} cx={10 + col * 28 + seat * 9} cy={13 + row * 10 + 3.5} r="2.5" fill={c} opacity={active ? 0.8 : 0.45} />
+            <rect
+              x={9 + col * 33}
+              y={15 + row * 11}
+              width="29"
+              height="8"
+              rx="1.5"
+              fill={c}
+              opacity={active ? 0.28 : 0.16}
+            />
+            {[0, 1, 2].map((seat) => (
+              <circle
+                key={seat}
+                cx={14 + col * 33 + seat * 9.5}
+                cy={15 + row * 11 + 4}
+                r="2.2"
+                fill={c}
+                opacity={active ? 0.9 : 0.55}
+              />
             ))}
           </g>
         ))
@@ -564,14 +643,18 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
 
   return (
     <div className="space-y-5">
-      {/* Style selector label */}
+      {/* Style selector */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>
-          Choose seating layout
-        </p>
+        <div className="flex items-baseline justify-between mb-3">
+          <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--muted)", letterSpacing: "0.12em" }}>
+            Seating Layout
+          </p>
+          <p className="text-[10px]" style={{ color: "var(--muted)" }}>
+            {totalSeats} total seats
+          </p>
+        </div>
 
-        {/* 2×2 style card grid */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           {STYLES.map((s) => {
             const isSelected = selected === s.key;
             const Diagram =
@@ -587,52 +670,65 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
                 key={s.key}
                 type="button"
                 onClick={() => handleStyleChange(s.key)}
-                className="relative flex flex-col items-center gap-2 p-3.5 rounded-xl text-center transition-all duration-150 cursor-pointer"
+                aria-pressed={isSelected}
+                className="group relative flex flex-col text-left rounded-xl overflow-hidden transition-all duration-150 cursor-pointer"
                 style={{
-                  background: isSelected ? "rgba(61,155,245,0.07)" : "var(--surface-3)",
+                  background: isSelected ? "rgba(61,155,245,0.06)" : "var(--surface-3)",
                   border: `1.5px solid ${isSelected ? "var(--accent)" : "var(--border)"}`,
-                  boxShadow: isSelected ? "0 0 0 1px rgba(61,155,245,0.15), 0 4px 20px rgba(61,155,245,0.08)" : "none",
                 }}
                 onMouseEnter={(e) => {
                   if (!isSelected) {
                     e.currentTarget.style.borderColor = "rgba(61,155,245,0.4)";
-                    e.currentTarget.style.background = "rgba(61,155,245,0.03)";
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!isSelected) {
                     e.currentTarget.style.borderColor = "var(--border)";
-                    e.currentTarget.style.background = "var(--surface-3)";
                   }
                 }}
               >
-                {/* Checkmark badge */}
-                <AnimatePresence>
-                  {isSelected && (
-                    <motion.div
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0, opacity: 0 }}
-                      transition={{ duration: 0.15, ease: "backOut" }}
-                      className="absolute top-2 right-2 w-4 h-4 rounded-full flex items-center justify-center"
-                      style={{ background: "var(--accent)" }}
-                    >
-                      <CheckIcon />
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                {/* Diagram canvas — framed area */}
+                <div
+                  className="w-full flex items-center justify-center transition-colors duration-150"
+                  style={{
+                    height: 92,
+                    background: isSelected
+                      ? "linear-gradient(180deg, rgba(61,155,245,0.10) 0%, rgba(61,155,245,0.02) 100%)"
+                      : "var(--surface-2)",
+                    borderBottom: `1px solid ${isSelected ? "rgba(61,155,245,0.20)" : "var(--border)"}`,
+                  }}
+                >
+                  <Diagram active={isSelected} />
+                </div>
 
-                <Diagram active={isSelected} />
-                <div>
-                  <p
-                    className="text-xs font-semibold transition-colors duration-150"
-                    style={{ color: isSelected ? "white" : "var(--foreground)" }}
-                  >
-                    {s.name}
-                  </p>
-                  <p className="text-[10px] mt-0.5" style={{ color: "var(--muted)" }}>
-                    {s.desc}
-                  </p>
+                {/* Label area */}
+                <div className="p-3 flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p
+                      className="text-[13px] font-semibold leading-tight transition-colors duration-150"
+                      style={{ color: isSelected ? "#fff" : "var(--foreground)" }}
+                    >
+                      {s.name}
+                    </p>
+                    <p className="text-[10px] mt-1 leading-snug" style={{ color: "var(--muted)" }}>
+                      {s.desc}
+                    </p>
+                  </div>
+
+                  <AnimatePresence>
+                    {isSelected && (
+                      <motion.div
+                        initial={{ scale: 0, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0, opacity: 0 }}
+                        transition={{ duration: 0.15, ease: "backOut" }}
+                        className="w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ background: "var(--accent)" }}
+                      >
+                        <CheckIcon />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </button>
             );
@@ -731,21 +827,56 @@ export default function SeatingConfigurator({ totalSeats, config, onChange }: Pr
         </motion.div>
       </AnimatePresence>
 
-      {/* Live preview */}
+      {/* Live preview — large framed canvas */}
       <div
-        className="rounded-xl p-4"
+        className="rounded-xl overflow-hidden"
         style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}
       >
-        <p className="text-[10px] font-semibold uppercase tracking-widest mb-4" style={{ color: "var(--muted)", letterSpacing: "0.15em" }}>
-          Layout Preview
-        </p>
-        <div className="flex justify-center overflow-x-auto">
+        <div
+          className="flex items-center justify-between px-4 py-2.5"
+          style={{ borderBottom: "1px solid var(--border)", background: "var(--surface-2)" }}
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ background: "var(--accent)", boxShadow: "0 0 6px rgba(61,155,245,0.6)" }}
+            />
+            <p
+              className="text-[10px] font-semibold uppercase"
+              style={{ color: "var(--foreground)", letterSpacing: "0.15em" }}
+            >
+              Layout Preview
+            </p>
+          </div>
+          <p className="text-[10px] font-mono" style={{ color: "var(--muted)" }}>
+            {totalSeats} seats
+            {(config.vipTables?.length ?? 0) > 0 && (
+              <span style={{ color: VIP_GOLD }}>
+                {" "}· +{config.vipTables!.reduce((n, t) => n + t.seats, 0)} VIP
+              </span>
+            )}
+          </p>
+        </div>
+        <div
+          className="flex justify-center items-center overflow-x-auto"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(61,155,245,0.04) 0%, transparent 70%)",
+            padding: "24px 16px",
+            minHeight: 180,
+          }}
+        >
           <LivePreview totalSeats={totalSeats} config={config} />
         </div>
         {(config.vipTables?.length ?? 0) > 0 && (
-          <p className="text-[10px] mt-3 text-center" style={{ color: VIP_GOLD }}>
-            + {config.vipTables!.length} VIP table{config.vipTables!.length === 1 ? "" : "s"} ({config.vipTables!.reduce((n, t) => n + t.seats, 0)} seats) near the stage
-          </p>
+          <div
+            className="px-4 py-2 text-center"
+            style={{ borderTop: "1px solid var(--border)", background: "rgba(212,175,55,0.04)" }}
+          >
+            <p className="text-[10px]" style={{ color: VIP_GOLD }}>
+              {config.vipTables!.length} VIP table{config.vipTables!.length === 1 ? "" : "s"} near the stage
+            </p>
+          </div>
         )}
       </div>
     </div>

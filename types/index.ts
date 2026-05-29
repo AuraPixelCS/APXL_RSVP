@@ -48,6 +48,7 @@ export interface Event {
   assignmentMode?: "seat" | "table"; // how seatNumber is labeled to guests; default "seat"
   rsvpDeadline?: string; // "YYYY-MM-DD"
   isActive: boolean;
+  pinned?: boolean; // admin-pinned events float to the top of the upcoming list
   coverImageUrl?: string | null;
   customEmailBody?: string;   // admin-saved body paragraph for seat confirmation emails
   customEmailTitle?: string;  // header title in email, defaults to "AuraPixel"
