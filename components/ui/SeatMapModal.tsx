@@ -21,6 +21,7 @@ interface Props {
   onSeatSelect?: (seatNumber: number) => void;
   assigning?: boolean;
   onReassign?: (rsvpId: string, guestName: string) => void;
+  onCancel?: (rsvpId: string) => Promise<void>;
   onLayoutChange?: (config: SeatingConfig, assignmentMode: "seat" | "table") => Promise<void>;
 }
 
@@ -120,13 +121,14 @@ interface SeatProps {
   shape: "circle" | "rect";
   selectionMode: boolean;
   isHighlighted?: boolean;
+  isCancelled?: boolean;                      // post-cancel red highlight (takes precedence over isHighlighted)
   isTableMode?: boolean;
   displayNumber?: number;                     // position-within-row, shown inside the seat in seat mode
   onAssign?: (seatNumber: number) => void;   // selection mode: assign seat
   onInspect?: (seat: SeatInfo) => void;       // view mode: show detail panel
 }
 
-function SeatEl({ seat, shape, selectionMode, isHighlighted, isTableMode, displayNumber, onAssign, onInspect }: SeatProps) {
+function SeatEl({ seat, shape, selectionMode, isHighlighted, isCancelled, isTableMode, displayNumber, onAssign, onInspect }: SeatProps) {
   const isAvailable  = seat.status === "available";
   const isSelectable = selectionMode && isAvailable;
   const isDisabled   = selectionMode && !isAvailable;
@@ -157,13 +159,13 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isTableMode, displa
       style={{
         width:          SEAT_SIZE,
         height:         SEAT_SIZE,
-        background:     isHighlighted ? "rgba(61,155,245,0.35)" : baseFill,
-        border:         `1.5px solid ${isHighlighted ? "var(--accent)" : baseStroke}`,
+        background:     isCancelled ? "rgba(239,68,68,0.35)" : isHighlighted ? "rgba(61,155,245,0.35)" : baseFill,
+        border:         `1.5px solid ${isCancelled ? "#ef4444" : isHighlighted ? "var(--accent)" : baseStroke}`,
         borderRadius:   shape === "circle" ? "50%" : 3,
         flexShrink:     0,
         cursor:         isClickable ? "pointer" : isDisabled ? "not-allowed" : "default",
         opacity:        isDisabled ? 0.4 : 1,
-        boxShadow:      isHighlighted ? "0 0 0 2px rgba(61,155,245,0.4)" : "none",
+        boxShadow:      isCancelled ? "0 0 0 2px rgba(239,68,68,0.45)" : isHighlighted ? "0 0 0 2px rgba(61,155,245,0.4)" : "none",
         transition:     "border-color 120ms, background 120ms, box-shadow 120ms",
         display:        "flex",
         alignItems:     "center",
@@ -171,12 +173,12 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isTableMode, displa
         fontFamily:     "'Fira Code', monospace",
         fontSize:       9,
         fontWeight:     600,
-        color:          isHighlighted ? "var(--accent)" : c.dot,
+        color:          isCancelled ? "#ef4444" : isHighlighted ? "var(--accent)" : c.dot,
         userSelect:     "none",
         lineHeight:     1,
       }}
       onMouseEnter={(e) => {
-        if (isHighlighted) return;
+        if (isHighlighted || isCancelled) return;
         const el = e.currentTarget as HTMLElement;
         if (isSelectable) {
           el.style.boxShadow = `0 0 0 2px ${SELECTABLE_HOVER}`;
@@ -187,7 +189,7 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isTableMode, displa
         }
       }}
       onMouseLeave={(e) => {
-        if (isHighlighted) return;
+        if (isHighlighted || isCancelled) return;
         const el = e.currentTarget as HTMLElement;
         el.style.boxShadow = "none";
         el.style.background = baseFill;
@@ -201,7 +203,7 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isTableMode, displa
 // ─── Grid seat map (theater / auditorium / classroom) ─────────────────────────
 
 function GridSeatMap({
-  seats, seatsPerRow, style, selectionMode, highlightedSeat,
+  seats, seatsPerRow, style, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   onSeatAssign, onSeatInspect,
 }: {
@@ -210,6 +212,7 @@ function GridSeatMap({
   style: "theater" | "auditorium" | "classroom";
   selectionMode: boolean;
   highlightedSeat: number | null;
+  cancelledSeat: number | null;
   isTableMode: boolean;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
@@ -257,6 +260,7 @@ function GridSeatMap({
                   shape={style === "classroom" ? "rect" : "circle"}
                   selectionMode={selectionMode}
                   isHighlighted={highlightedSeat === seat.seatNumber}
+                  isCancelled={cancelledSeat === seat.seatNumber}
                   isTableMode={isTableMode}
                   displayNumber={idx + 1}
                   onAssign={onSeatAssign}
@@ -281,7 +285,7 @@ function GridSeatMap({
 // ─── Runway seat map (stage front, red carpet center aisle, seats on sides) ────
 
 function RunwaySeatMap({
-  seats, seatsPerRow, selectionMode, highlightedSeat,
+  seats, seatsPerRow, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   onSeatAssign, onSeatInspect,
 }: {
@@ -289,6 +293,7 @@ function RunwaySeatMap({
   seatsPerRow: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
+  cancelledSeat: number | null;
   isTableMode: boolean;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
@@ -344,6 +349,7 @@ function RunwaySeatMap({
                   shape="circle"
                   selectionMode={selectionMode}
                   isHighlighted={highlightedSeat === seat.seatNumber}
+                  isCancelled={cancelledSeat === seat.seatNumber}
                   isTableMode={isTableMode}
                   displayNumber={idx + 1}
                   onAssign={onSeatAssign}
@@ -372,6 +378,7 @@ function RunwaySeatMap({
                   shape="circle"
                   selectionMode={selectionMode}
                   isHighlighted={highlightedSeat === seat.seatNumber}
+                  isCancelled={cancelledSeat === seat.seatNumber}
                   isTableMode={isTableMode}
                   displayNumber={perSide + idx + 1}
                   onAssign={onSeatAssign}
@@ -389,7 +396,7 @@ function RunwaySeatMap({
 // ─── Banquet seat map ──────────────────────────────────────────────────────────
 
 function BanquetSeatMap({
-  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
+  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
   onSeatAssign, onSeatInspect,
@@ -399,6 +406,7 @@ function BanquetSeatMap({
   tablesPerSide?: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
+  cancelledSeat: number | null;
   isTableMode: boolean;
   vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
@@ -427,6 +435,7 @@ function BanquetSeatMap({
               seatsPerTable={g.table.seats}
               selectionMode={selectionMode}
               highlightedSeat={highlightedSeat}
+              cancelledSeat={cancelledSeat}
               isTableMode={isTableMode}
               onSeatAssign={onSeatAssign}
               onSeatInspect={onSeatInspect}
@@ -469,6 +478,7 @@ function BanquetSeatMap({
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
+                    cancelledSeat={cancelledSeat}
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
@@ -495,6 +505,7 @@ function BanquetSeatMap({
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
+                    cancelledSeat={cancelledSeat}
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
@@ -528,6 +539,7 @@ function BanquetSeatMap({
           seatsPerTable={seatsPerTable}
           selectionMode={selectionMode}
           highlightedSeat={highlightedSeat}
+          cancelledSeat={cancelledSeat}
           isTableMode={isTableMode}
           onSeatAssign={onSeatAssign}
           onSeatInspect={onSeatInspect}
@@ -545,7 +557,7 @@ function BanquetSeatMap({
 // ─── Banquet-Runway seat map (stage front, red carpet aisle, round tables on each side) ───
 
 function BanquetRunwaySeatMap({
-  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat,
+  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
   onSeatAssign, onSeatInspect,
@@ -555,6 +567,7 @@ function BanquetRunwaySeatMap({
   tablesPerSide: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
+  cancelledSeat: number | null;
   isTableMode: boolean;
   vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
@@ -591,6 +604,7 @@ function BanquetRunwaySeatMap({
               seatsPerTable={g.table.seats}
               selectionMode={selectionMode}
               highlightedSeat={highlightedSeat}
+              cancelledSeat={cancelledSeat}
               isTableMode={isTableMode}
               onSeatAssign={onSeatAssign}
               onSeatInspect={onSeatInspect}
@@ -623,6 +637,7 @@ function BanquetRunwaySeatMap({
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
+                    cancelledSeat={cancelledSeat}
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
@@ -660,6 +675,7 @@ function BanquetRunwaySeatMap({
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
+                    cancelledSeat={cancelledSeat}
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
@@ -682,7 +698,7 @@ function BanquetRunwaySeatMap({
 }
 
 function BanquetTableCell({
-  tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, isTableMode,
+  tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, cancelledSeat, isTableMode,
   onSeatAssign, onSeatInspect,
   tableR, seatR, orbitR, svgSize,
   variant = "standard", tableLabel,
@@ -692,6 +708,7 @@ function BanquetTableCell({
   seatsPerTable: number;
   selectionMode: boolean;
   highlightedSeat: number | null;
+  cancelledSeat: number | null;
   isTableMode: boolean;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
@@ -765,29 +782,31 @@ function BanquetTableCell({
           const isDisabled    = selectionMode && !isAvailable;
           const isInspectable = !selectionMode && !!seat.guestName;
           const isHighlighted = highlightedSeat === seat.seatNumber;
+          const isCancelled   = cancelledSeat === seat.seatNumber;
           const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
 
           const vipAvailable = isVip && isAvailable && !isSelectable;
-          const fill   = isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : vipAvailable ? VIP_GOLD_FILL : c.fill;
-          const stroke = isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : vipAvailable ? VIP_GOLD_RING : c.stroke;
+          const fill   = isCancelled ? "rgba(239,68,68,0.35)" : isHighlighted ? "rgba(61,155,245,0.35)" : isSelectable ? SELECTABLE_FILL   : vipAvailable ? VIP_GOLD_FILL : c.fill;
+          const stroke = isCancelled ? "#ef4444"              : isHighlighted ? "var(--accent)"          : isSelectable ? SELECTABLE_STROKE : vipAvailable ? VIP_GOLD_RING : c.stroke;
+          const emphasized = isHighlighted || isCancelled;
 
           return (
             <circle
               key={si}
               cx={sx} cy={sy} r={seatR}
-              fill={fill} stroke={stroke} strokeWidth={isHighlighted ? 2 : 1.5}
+              fill={fill} stroke={stroke} strokeWidth={emphasized ? 2 : 1.5}
               opacity={isDisabled ? 0.4 : 1}
               style={{
                 cursor: (isSelectable || isInspectable) ? "pointer" : isDisabled ? "not-allowed" : "default",
                 transition: "fill 120ms, stroke 120ms",
-                filter: isHighlighted ? "drop-shadow(0 0 4px rgba(61,155,245,0.5))" : "none",
+                filter: isCancelled ? "drop-shadow(0 0 4px rgba(239,68,68,0.55))" : isHighlighted ? "drop-shadow(0 0 4px rgba(61,155,245,0.5))" : "none",
               }}
               onClick={() => {
                 if (isSelectable) onSeatAssign?.(seat.seatNumber);
                 else if (isInspectable) onSeatInspect?.(seat);
               }}
               onMouseEnter={(e) => {
-                if (isHighlighted) return;
+                if (isHighlighted || isCancelled) return;
                 const el = e.currentTarget as SVGCircleElement;
                 if (isSelectable) {
                   el.setAttribute("fill", "rgba(34,197,94,0.28)");
@@ -798,11 +817,11 @@ function BanquetTableCell({
                 }
               }}
               onMouseLeave={(e) => {
-                if (isHighlighted) return;
+                if (isHighlighted || isCancelled) return;
                 const el = e.currentTarget as SVGCircleElement;
                 el.setAttribute("fill", fill);
                 el.setAttribute("stroke", stroke);
-                el.setAttribute("stroke-width", isHighlighted ? "2" : "1.5");
+                el.setAttribute("stroke-width", emphasized ? "2" : "1.5");
               }}
             >
               <title>
@@ -863,7 +882,7 @@ function BanquetTableCell({
 // ─── Seat detail panel ─────────────────────────────────────────────────────────
 
 function SeatDetailPanel({
-  seat, onDismiss, isTableMode, perGroup, seatingConfig, totalStandardSeats, onReassign,
+  seat, onDismiss, isTableMode, perGroup, seatingConfig, totalStandardSeats, onReassign, onCancel,
 }: {
   seat: SeatInfo;
   onDismiss: () => void;
@@ -872,8 +891,36 @@ function SeatDetailPanel({
   seatingConfig: SeatingConfig;
   totalStandardSeats: number;
   onReassign?: (rsvpId: string, guestName: string) => void;
+  onCancel?: (rsvpId: string) => Promise<void>;
 }) {
   const c = STATUS_COLORS[seat.status] ?? STATUS_COLORS.available;
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  // Reset confirm state when admin switches to a different seat
+  useEffect(() => {
+    setConfirmingCancel(false);
+    setCancelling(false);
+  }, [seat.seatNumber]);
+
+  const handleCancelClick = async () => {
+    if (!onCancel || !seat.rsvpId) return;
+    if (!confirmingCancel) {
+      setConfirmingCancel(true);
+      return;
+    }
+    setCancelling(true);
+    try {
+      await onCancel(seat.rsvpId);
+      // Modal stays open; parent's Firestore subscription will re-render this
+      // panel as an empty-seat view, naturally hiding Change/Cancel buttons.
+    } catch {
+      // Parent surfaces the error; just reset local state so admin can retry
+    } finally {
+      setCancelling(false);
+      setConfirmingCancel(false);
+    }
+  };
   const vipInfo = getVipSeatRanges(seatingConfig, totalStandardSeats)
     .find((r) => seat.seatNumber >= r.start && seat.seatNumber <= r.end);
   const isVip = !!vipInfo;
@@ -935,14 +982,16 @@ function SeatDetailPanel({
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Change seat button — only for allocated guests */}
-          {onReassign && seat.rsvpId && seat.guestName && seat.status === "allocated" && (
+          {onReassign && seat.rsvpId && seat.guestName && seat.status === "allocated" && !confirmingCancel && (
             <button
               onClick={() => onReassign(seat.rsvpId!, seat.guestName!)}
+              disabled={cancelling}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
               style={{
                 background: "rgba(61,155,245,0.1)",
                 color: "var(--accent)",
                 border: "1px solid rgba(61,155,245,0.25)",
+                opacity: cancelling ? 0.5 : 1,
               }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(61,155,245,0.2)"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(61,155,245,0.1)"; }}
@@ -953,6 +1002,54 @@ function SeatDetailPanel({
               </svg>
               Change {label}
             </button>
+          )}
+
+          {/* Cancel seat button — only for allocated guests; two-step inline confirm */}
+          {onCancel && seat.rsvpId && seat.status === "allocated" && (
+            <>
+              {confirmingCancel && (
+                <button
+                  onClick={() => setConfirmingCancel(false)}
+                  disabled={cancelling}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                  style={{
+                    background: "var(--surface-3)",
+                    color: "white",
+                    border: "1px solid var(--border)",
+                    opacity: cancelling ? 0.5 : 1,
+                  }}
+                >
+                  Keep
+                </button>
+              )}
+              <button
+                onClick={handleCancelClick}
+                disabled={cancelling}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all"
+                style={{
+                  background: confirmingCancel ? "#dc2626" : "rgba(220,38,38,0.1)",
+                  color: confirmingCancel ? "white" : "#f87171",
+                  border: `1px solid ${confirmingCancel ? "#dc2626" : "rgba(220,38,38,0.25)"}`,
+                  opacity: cancelling ? 0.6 : 1,
+                }}
+                onMouseEnter={(e) => {
+                  if (cancelling) return;
+                  e.currentTarget.style.background = confirmingCancel ? "#b91c1c" : "rgba(220,38,38,0.2)";
+                }}
+                onMouseLeave={(e) => {
+                  if (cancelling) return;
+                  e.currentTarget.style.background = confirmingCancel ? "#dc2626" : "rgba(220,38,38,0.1)";
+                }}
+              >
+                {!confirmingCancel && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                )}
+                {cancelling ? "Cancelling…" : confirmingCancel ? `Confirm Cancel` : `Cancel ${label}`}
+              </button>
+            </>
           )}
 
           {/* Dismiss */}
@@ -993,6 +1090,7 @@ export default function SeatMapModal({
   onSeatSelect,
   assigning = false,
   onReassign,
+  onCancel,
   onLayoutChange,
 }: Props) {
   const [selectedSeat, setSelectedSeat] = useState<SeatInfo | null>(null);
@@ -1001,6 +1099,10 @@ export default function SeatMapModal({
   const [pendingAssignmentMode, setPendingAssignmentMode] = useState<"seat" | "table">("seat");
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [savingLayout, setSavingLayout] = useState(false);
+  // Seat number that was just cancelled inline — rendered with a red highlight
+  // ring so the admin sees confirmation of the deallocation, since Firestore
+  // can take a moment to propagate the empty-seat state across the grid.
+  const [recentlyCancelledSeat, setRecentlyCancelledSeat] = useState<number | null>(null);
 
   // Clear selection when modal closes or when entering selection mode (reassign)
   useEffect(() => {
@@ -1009,12 +1111,36 @@ export default function SeatMapModal({
       setEditingLayout(false);
       setPendingConfig(null);
       setConfirmingClear(false);
+      setRecentlyCancelledSeat(null);
     }
   }, [open]);
 
   useEffect(() => {
     if (selectingFor) setSelectedSeat(null);
   }, [selectingFor]);
+
+  // Clear the red-cancelled mark when admin moves to a different seat
+  useEffect(() => {
+    if (recentlyCancelledSeat === null) return;
+    if (selectedSeat && selectedSeat.seatNumber !== recentlyCancelledSeat) {
+      setRecentlyCancelledSeat(null);
+    }
+  }, [selectedSeat, recentlyCancelledSeat]);
+
+  // Wrap the user-supplied onCancel so we can mark the seat as recently
+  // cancelled on success. The panel awaits this — order matters: parent's
+  // updateRSVP first, then flip the red flag, so the grid re-renders with
+  // both fresh data and the red highlight in the same React commit.
+  const handlePanelCancel = useMemo(
+    () => onCancel
+      ? async (rsvpId: string) => {
+          const seatNum = selectedSeat?.seatNumber ?? null;
+          await onCancel(rsvpId);
+          if (seatNum != null) setRecentlyCancelledSeat(seatNum);
+        }
+      : undefined,
+    [onCancel, selectedSeat]
+  );
 
   const enterEditLayout = () => {
     setPendingConfig(event.seatingConfig ?? { style: "theater", seatsPerRow: 10 });
@@ -1075,6 +1201,23 @@ export default function SeatMapModal({
     () => buildSeatMap(totalSeatsAll, rsvps),
     [totalSeatsAll, rsvps]
   );
+
+  // Keep the selected-seat snapshot in sync with live seat data. Without this,
+  // cancelling or reassigning from the panel leaves it pointing at a stale
+  // SeatInfo captured at click time — the panel would keep showing the old
+  // guest until the modal is reopened.
+  useEffect(() => {
+    if (!selectedSeat) return;
+    const fresh = allSeats[selectedSeat.seatNumber - 1];
+    if (!fresh) return;
+    if (
+      fresh.status !== selectedSeat.status ||
+      fresh.rsvpId !== selectedSeat.rsvpId ||
+      fresh.guestName !== selectedSeat.guestName
+    ) {
+      setSelectedSeat(fresh);
+    }
+  }, [allSeats, selectedSeat]);
   const config      = event.seatingConfig ?? { style: "theater" as const, seatsPerRow: 10 };
   const seatsPerRow   = config.seatsPerRow ?? 10;
   const seatsPerTable = config.seatsPerTable ?? 10;
@@ -1387,6 +1530,7 @@ export default function SeatMapModal({
                   tablesPerSide={config.tablesPerSide != null ? Math.max(1, Math.min(6, config.tablesPerSide)) : undefined}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
+                  cancelledSeat={recentlyCancelledSeat}
                   isTableMode={isTableMode}
                   vipTableGroups={vipTableGroups}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
@@ -1399,6 +1543,7 @@ export default function SeatMapModal({
                   tablesPerSide={Math.max(1, Math.min(6, config.tablesPerSide ?? 1))}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
+                  cancelledSeat={recentlyCancelledSeat}
                   isTableMode={isTableMode}
                   vipTableGroups={vipTableGroups}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
@@ -1410,6 +1555,7 @@ export default function SeatMapModal({
                   seatsPerRow={seatsPerRow}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
+                  cancelledSeat={recentlyCancelledSeat}
                   isTableMode={isTableMode}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
                   onSeatInspect={!selectionMode ? handleSeatInspect : undefined}
@@ -1421,6 +1567,7 @@ export default function SeatMapModal({
                   style={config.style as "theater" | "auditorium" | "classroom"}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
+                  cancelledSeat={recentlyCancelledSeat}
                   isTableMode={isTableMode}
                   onSeatAssign={selectionMode && !assigning ? onSeatSelect : undefined}
                   onSeatInspect={!selectionMode ? handleSeatInspect : undefined}
@@ -1439,6 +1586,7 @@ export default function SeatMapModal({
                   seatingConfig={config}
                   totalStandardSeats={event.totalSeats}
                   onReassign={onReassign}
+                  onCancel={handlePanelCancel}
                 />
               )}
             </AnimatePresence>

@@ -1,5 +1,33 @@
 # Changelog
 
+## [2.0.2] — 2026-05-30
+
+- **Settings → Account panel alignment**: container widened from `max-w-lg` → `max-w-2xl` to match Workspace. Password and Session cards now share one identical horizontal layout (title + sub-text on left, action button on right) — eliminates the row-stacking inconsistency where Password's button sat on a separate line. Profile card gets a divider above the Save row. Button touch targets bumped to `px-4 py-2` ([pages/admin/settings.tsx](pages/admin/settings.tsx)).
+- **Settings → Workspace panel grid**: 5 cards in a 3-column grid was leaving an orphan empty cell on row 2. Split into a 3-column System Info row (App Version, Firebase Project, Signed In) and a 2-column Counts row (Total Events, Total Users) that collapses to full-width for non-admin users. No orphan cells.
+- **InfoCard** standardized: dropped the `small` flag that mixed 12px and 16px values in the same row. New `emphasis` flag renders counts at 22px bold for primary-metric weight; system info uniformly at 14px.
+
+## [2.0.1] — 2026-05-30
+
+- **Inline Cancel Seat on the seat map**: clicking an allocated seat now shows a **Cancel [Seat/Table/VIP]** button next to the existing **Change** button in the `SeatDetailPanel`. Two-step inline confirm (first click reveals "Confirm Cancel" + "Keep" escape, second click executes) so admins can deallocate without leaving the modal ([components/ui/SeatMapModal.tsx](components/ui/SeatMapModal.tsx)).
+- **Red post-cancel highlight**: cancelled seat shows a red ring/glow in the grid (was blue selection ring), giving the admin instant visual confirmation. Mark clears when admin clicks another seat or closes the modal. Threaded as a new `cancelledSeat` prop alongside `highlightedSeat` through GridSeatMap, RunwaySeatMap, BanquetSeatMap, BanquetRunwaySeatMap, BanquetTableCell, and SeatEl.
+- **Seat map stays open after Change Seat / Change VIP** in [pages/admin/events/[id].tsx](pages/admin/events/[id].tsx#L630): first-time allocation still auto-closes the modal; reassignments keep it open so the admin can visually verify the move and continue managing seats.
+- **`selectedSeat` snapshot syncs with live data**: a `useEffect` in `SeatMapModal` now refreshes the selected seat from the live `allSeats` array (derived from the Firestore subscription) whenever the underlying seat's status/rsvpId/guestName changes. Fixes stale Ak-Kumar-still-showing-after-cancel bug.
+
+## [2.0.0] — 2026-05-29
+
+### Major UI/UX overhaul of the entire admin experience.
+
+- **Admin Events page redesign**: `EventCard` rebuilt with cover-image hero, live stats grid (Allocated / RSVPs / Pending / Unnotified), countdown chip ("TODAY" / "TOMORROW" / "ACTIVE" / "PAST"), and inline footer actions. Admin index ([pages/admin/index.tsx](pages/admin/index.tsx)) now uses real-time Firestore subscriptions with Upcoming / Past tabs and a search input.
+- **Pin to top**: Admins can pin upcoming events to the top of the grid. New `pinned` field on the `Event` type ([types/index.ts](types/index.ts)); pin toggle is admin-only and only visible on the Upcoming tab. Pinned cards sort first; the rest sort by date.
+- **Event Details revamp**: New context-aware hero components on `/admin/events/[id]` ([pages/admin/events/[id].tsx](pages/admin/events/[id].tsx)) with a `MoreMenu` dropdown for secondary actions and a clear back-navigation pattern.
+- **Notifications page revamp** ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)): `NotificationHero` summary with animated SVG progress ring, color-coded status filter pills, search input, empty-state handling, and a floating sticky **Bulk Notify** FAB.
+- **Dashboard becomes pure analytics**: `/admin/dashboard` ([pages/admin/dashboard.tsx](pages/admin/dashboard.tsx)) rebuilt as a standalone analytics surface with KPIs, charts, a heatmap, and scope filtering — separate concern from `/admin` (events management). Powered by `recharts`.
+- **Settings revamp**: `/admin/settings` ([pages/admin/settings.tsx](pages/admin/settings.tsx)) redesigned with **Account** and **Workspace** panels.
+- **EventCard footer recolored**: solid brand-blue action bar; **Open** button inverted (white bg, blue text); **Notifications** button uses translucent dark fill with soft white border; unnotified badge inverted to match ([components/ui/EventCard.tsx](components/ui/EventCard.tsx)).
+- **EventCard cover banner removed** in favor of a tighter layout focused on stats and quick actions.
+- **Brand asset refresh**: New `ap-logo-small.png` and `aurapixel-tight.png`; updated favicons / apple-touch / Android Chrome icons across `public/`. Sidebar ([components/layout/Sidebar.tsx](components/layout/Sidebar.tsx)) and LoginForm ([components/sections/LoginForm.tsx](components/sections/LoginForm.tsx)) updated to use the new assets.
+- All revamps were generated via the `/ui-ux-pro-max` skill and validated with `tsc --noEmit` + `next build` between each page. No schema migrations and no breaking API changes.
+
 ## [1.6.0] — 2026-05-28
 
 - **VIP tables on banquet layouts.** New per-event `seatingConfig.vipTables` array lets admins add round tables that render near the stage, separate from the standard seating grid. Each VIP table has a custom label (e.g. "Stage Front") and configurable seat count (4–20). PEOPLElogy uses one 12-seat VIP table at the front.

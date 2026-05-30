@@ -642,10 +642,15 @@ const EventDetailPage: NextPageWithLayout = () => {
         if (!res.ok) {
           alert(data.error || "Allocation failed");
         } else {
-          // Success — close modal, clear selection
+          // Success. First-time allocation → close so admin returns to the list.
+          // Reassignment → keep open so admin can visually verify the move,
+          // continue managing seats, and close when ready.
+          const wasReassigning = isReassigning;
           setIsReassigning(false);
-          setShowSeatMap(false);
           setSeatSelectingRsvp(null);
+          if (!wasReassigning) {
+            setShowSeatMap(false);
+          }
         }
       } catch {
         alert("Network error");
@@ -653,7 +658,7 @@ const EventDetailPage: NextPageWithLayout = () => {
         setSeatAssigning(false);
       }
     },
-    [event, seatSelectingRsvp]
+    [event, seatSelectingRsvp, isReassigning]
   );
 
   // Bulk allocate
@@ -685,7 +690,8 @@ const EventDetailPage: NextPageWithLayout = () => {
     }
   }, [event, rsvps]);
 
-  // Deallocate (cancel seat reservation)
+  // Deallocate (cancel seat reservation) — row-level Cancel button keeps its
+  // native confirm dialog so the list-view UX is unchanged.
   const handleDeallocate = useCallback(
     async (rsvpId: string) => {
       if (!event?.id) return;
@@ -700,6 +706,25 @@ const EventDetailPage: NextPageWithLayout = () => {
         alert("Failed to cancel reservation");
       } finally {
         setDeallocatingId(null);
+      }
+    },
+    [event]
+  );
+
+  // Inline cancel used by the seat map's SeatDetailPanel — no native confirm
+  // (panel does its own two-step inline confirm) and throws so the panel can
+  // reset its local state on failure.
+  const handleInlineCancel = useCallback(
+    async (rsvpId: string) => {
+      if (!event?.id) return;
+      try {
+        await updateRSVP(event.id, rsvpId, {
+          status: "pending",
+          seatNumber: null,
+        });
+      } catch (err) {
+        alert("Failed to cancel reservation");
+        throw err;
       }
     },
     [event]
@@ -902,6 +927,7 @@ const EventDetailPage: NextPageWithLayout = () => {
           onSeatSelect={handleSeatSelect}
           assigning={seatAssigning}
           onReassign={handleReassign}
+          onCancel={handleInlineCancel}
           onLayoutChange={isAdmin ? handleLayoutChange : undefined}
         />
       )}

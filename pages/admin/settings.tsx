@@ -562,7 +562,7 @@ function AccountPanel() {
   };
 
   return (
-    <div className="flex flex-col gap-5 max-w-lg">
+    <div className="flex flex-col gap-5">
       <div>
         <h2 className="text-sm font-semibold text-white">Account</h2>
         <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
@@ -572,7 +572,7 @@ function AccountPanel() {
 
       {/* Profile card */}
       <div
-        className="rounded-xl p-5 flex flex-col gap-4"
+        className="rounded-xl p-5 flex flex-col gap-5"
         style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
       >
         <div className="flex items-center gap-3">
@@ -584,11 +584,12 @@ function AccountPanel() {
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 18, fontWeight: 600,
               color: role === "admin" ? "var(--accent)" : "#a855f7",
+              flexShrink: 0,
             }}
           >
             {(savedName || user?.email || "?").charAt(0).toUpperCase()}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-white truncate">{savedName || user?.email}</p>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
               Signed in as <span style={{ textTransform: "capitalize", color: role === "admin" ? "var(--accent)" : "#a855f7", fontWeight: 600 }}>{role ?? "…"}</span>
@@ -596,17 +597,22 @@ function AccountPanel() {
           </div>
         </div>
 
-        <Field label="Display Name" value={displayName} onChange={setDisplayName} placeholder="Your name" />
-        <Field label="Email" type="email" value={user?.email ?? ""} readOnly />
+        <div className="flex flex-col gap-4">
+          <Field label="Display Name" value={displayName} onChange={setDisplayName} placeholder="Your name" />
+          <Field label="Email" type="email" value={user?.email ?? ""} readOnly />
+        </div>
 
-        <div className="flex items-center justify-between gap-2">
+        <div
+          className="flex items-center justify-between gap-3 pt-4"
+          style={{ borderTop: "1px solid var(--border)" }}
+        >
           <span className="text-[11px]" style={{ color: dirty ? "#f59e0b" : "var(--muted)" }}>
             {dirty ? "Unsaved changes" : "All changes saved"}
           </span>
           <button
             onClick={handleSave}
             disabled={!dirty || saving}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             style={{
               background: dirty ? "var(--accent)" : "var(--surface-3)",
               color: dirty ? "#000" : "var(--muted)",
@@ -618,30 +624,22 @@ function AccountPanel() {
         </div>
       </div>
 
-      {/* Security card */}
+      {/* Password card — single-row layout matches Session below */}
       <div
-        className="rounded-xl p-5 flex flex-col gap-3"
+        className="rounded-xl p-5 flex items-center justify-between gap-4"
         style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white">Password</p>
           <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
             Sends a reset link to your email. Click the link to set a new password.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePasswordReset}
-            disabled={resetSending || !user?.email}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50"
-            style={{ background: "var(--surface-3)", color: "#fff", border: "1px solid var(--border)" }}
-          >
-            {resetSending ? "Sending…" : "Send Password Reset Email"}
-          </button>
+        <div className="flex items-center gap-2 shrink-0">
           <AnimatePresence>
             {resetSent && (
               <motion.span
-                initial={{ opacity: 0, x: -4 }}
+                initial={{ opacity: 0, x: 4 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0 }}
                 className="text-xs flex items-center gap-1"
@@ -651,15 +649,25 @@ function AccountPanel() {
               </motion.span>
             )}
           </AnimatePresence>
+          <button
+            onClick={handlePasswordReset}
+            disabled={resetSending || !user?.email}
+            className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer disabled:opacity-50 transition-colors whitespace-nowrap"
+            style={{ background: "var(--surface-3)", color: "#fff", border: "1px solid var(--border)" }}
+            onMouseEnter={(e) => { if (!resetSending && user?.email) e.currentTarget.style.background = "var(--surface)"; }}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+          >
+            {resetSending ? "Sending…" : "Send Reset Email"}
+          </button>
         </div>
       </div>
 
-      {/* Session card */}
+      {/* Session card — same layout as Password card */}
       <div
-        className="rounded-xl p-5 flex items-center justify-between gap-3"
+        className="rounded-xl p-5 flex items-center justify-between gap-4"
         style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
       >
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-white">Session</p>
           <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
             Sessions auto-expire after 12 hours.
@@ -667,7 +675,7 @@ function AccountPanel() {
         </div>
         <button
           onClick={signOut}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+          className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors whitespace-nowrap shrink-0"
           style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.25)" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.16)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(239,68,68,0.08)")}
@@ -727,7 +735,7 @@ function WorkspacePanel() {
   })();
 
   return (
-    <div className="flex flex-col gap-5 max-w-2xl">
+    <div className="flex flex-col gap-5">
       <div>
         <h2 className="text-sm font-semibold text-white">Workspace</h2>
         <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
@@ -735,24 +743,32 @@ function WorkspacePanel() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* System info — uniform 3-column row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <InfoCard label="App Version" value={`v${version}`} mono />
-        <InfoCard label="Firebase Project" value={projectId} mono small />
+        <InfoCard label="Firebase Project" value={projectId} mono />
         <InfoCard
           label="Signed In"
           value={loginTime ? format(loginTime, "dd MMM, HH:mm") : "—"}
-          mono small
+          mono
         />
+      </div>
+
+      {/* Counts — clean 2-col row (admin) or full-width (non-admin), so no
+          orphan cell either way. Larger numbers signal these as primary metrics. */}
+      <div className={`grid gap-3 ${isAdmin ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1"}`}>
         <InfoCard
           label="Total Events"
           value={stats.loading ? "…" : stats.events != null ? String(stats.events) : "—"}
           mono
+          emphasis
         />
         {isAdmin && (
           <InfoCard
             label="Total Users"
             value={stats.loading ? "…" : stats.users != null ? String(stats.users) : "—"}
             mono
+            emphasis
           />
         )}
       </div>
@@ -761,10 +777,10 @@ function WorkspacePanel() {
         className="rounded-xl p-4 flex items-start gap-3"
         style={{ background: "var(--surface-2)", border: "1px dashed var(--border)" }}
       >
-        <span style={{ color: "var(--muted)", marginTop: 1 }}>
+        <span style={{ color: "var(--muted)", marginTop: 2, flexShrink: 0 }}>
           <CogIcon size={14} />
         </span>
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-white">Workspace defaults are configured per-event</p>
           <p className="text-[11px] mt-1" style={{ color: "var(--muted)" }}>
             Email banners, body copy, and seating layouts live on each event under{" "}
@@ -777,7 +793,7 @@ function WorkspacePanel() {
   );
 }
 
-function InfoCard({ label, value, mono, small }: { label: string; value: string; mono?: boolean; small?: boolean }) {
+function InfoCard({ label, value, mono, emphasis }: { label: string; value: string; mono?: boolean; emphasis?: boolean }) {
   return (
     <div
       className="rounded-xl p-4"
@@ -794,8 +810,9 @@ function InfoCard({ label, value, mono, small }: { label: string; value: string;
         style={{
           color: "#fff",
           fontFamily: mono ? "'Fira Code', monospace" : undefined,
-          fontSize: small ? 12 : 16,
-          fontWeight: 600,
+          fontSize: emphasis ? 22 : 14,
+          fontWeight: emphasis ? 700 : 600,
+          lineHeight: 1.2,
         }}
         title={value}
       >
