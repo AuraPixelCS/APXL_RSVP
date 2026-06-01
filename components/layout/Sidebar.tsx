@@ -219,12 +219,13 @@ export default function Sidebar() {
         overflow: "visible",
       }}
     >
-      {/* Logo — centered square brand mark with subtle separator */}
+      {/* Logo — height matches --header-height so the sidebar's bottom border
+          lines up perfectly with the Header's bottom border across the page. */}
       <div
         style={{
           position: "relative",
           width: "100%",
-          height: 72,
+          height: "var(--header-height)",
           flexShrink: 0,
           display: "flex",
           alignItems: "center",
@@ -237,11 +238,11 @@ export default function Sidebar() {
         <Image
           src={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/ap-logo-small.png`}
           alt="AuraPixel"
-          width={40}
-          height={40}
+          width={32}
+          height={32}
           style={{
-            width: 40,
-            height: 40,
+            width: 32,
+            height: 32,
             display: "block",
             objectFit: "contain",
           }}
@@ -295,19 +296,19 @@ export default function Sidebar() {
       {/* Divider */}
       <div style={{ height: 1, background: "var(--border)", flexShrink: 0 }} />
 
-      {/* Bottom: user avatar + logout */}
+      {/* Bottom: user avatar + logout. The avatar and the sign-out button share
+          the same 40×40 visual footprint as the nav items above, so the column
+          reads as a single consistent rail. */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: 4,
-          padding: "12px 0",
+          gap: 8,
+          padding: "16px 0",
           alignItems: "center",
         }}
       >
-        {/* User avatar */}
         {user && <UserAvatar email={user.email ?? ""} />}
-
         <ActionBtn onClick={signOut} icon={<LogOutIcon />} label="Sign Out" danger />
       </div>
     </motion.aside>
@@ -322,23 +323,35 @@ function UserAvatar({ email }: { email: string }) {
       onMouseEnter={() => setAvatarHovered(true)}
       onMouseLeave={() => setAvatarHovered(false)}
     >
+      {/* 40×40 wrapper matches the nav-button footprint above so the avatar
+          centers on the same column rhythm. Inner circle stays compact. */}
       <div
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
+          width: 40,
+          height: 40,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 11,
-          fontWeight: 700,
-          background: "var(--accent)",
-          color: "#000",
-          cursor: "default",
-          userSelect: "none",
         }}
       >
-        {email[0]?.toUpperCase()}
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: "50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 12,
+            fontWeight: 700,
+            background: "var(--accent)",
+            color: "#000",
+            cursor: "default",
+            userSelect: "none",
+          }}
+        >
+          {email[0]?.toUpperCase()}
+        </div>
       </div>
       {avatarHovered && <Tooltip label={email} />}
     </div>

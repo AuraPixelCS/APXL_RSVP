@@ -258,7 +258,10 @@ function MoreMenu({ items }: { items: MoreMenuItem[] }) {
 // ─── Standard event hero ──────────────────────────────────────────────────────
 
 interface HeroActions {
-  onOpenSeatMap: () => void;
+  /** Opens the existing SeatMapModal in read-only mode for quick viewing. */
+  onPreviewSeatMap: () => void;
+  /** Navigates to the dedicated full-page allocator at /admin/events/[id]/seat-map. */
+  onOpenSeatMapPage: () => void;
   onOpenNotifications: () => void;
   onAllocatePending: () => void;
   bulkAllocating: boolean;
@@ -360,12 +363,30 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
         >
           <div className="flex items-center gap-2">
             <button
-              onClick={actions.onOpenSeatMap}
+              onClick={actions.onOpenSeatMapPage}
               className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
               style={{ background: "var(--accent)", color: "#000" }}
             >
               <GridIcon />
-              Open Seat Map
+              Seat Map
+            </button>
+            <button
+              onClick={actions.onPreviewSeatMap}
+              title="Preview the seat map (read-only)"
+              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              style={{
+                background: "var(--surface-3)",
+                color: "var(--muted)",
+                border: "1px solid var(--border)",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.color = "white"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface-3)"; e.currentTarget.style.color = "var(--muted)"; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Preview
             </button>
             <MoreMenu items={actions.moreItems} />
           </div>
@@ -493,13 +514,27 @@ function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; 
 
           <div className="flex flex-wrap gap-2 mt-1">
             <button
-              onClick={actions.onOpenSeatMap}
+              onClick={actions.onOpenSeatMapPage}
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
               style={{ background: "#22c55e", color: "#000" }}
             >
               <GridIcon />
-              Open Seat Map
+              Seat Map
               <ArrowRightIcon />
+            </button>
+            <button
+              onClick={actions.onPreviewSeatMap}
+              title="Preview the seat map (read-only)"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+              style={{ background: "var(--surface-3)", color: "#fff", border: "1px solid var(--border)" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "var(--surface-3)")}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+              Preview
             </button>
             <button
               onClick={actions.onOpenNotifications}
@@ -590,6 +625,10 @@ const EventDetailPage: NextPageWithLayout = () => {
   const [seatSelectingRsvp, setSeatSelectingRsvp] = useState<{ rsvpId: string; name: string } | null>(null);
   const [seatAssigning, setSeatAssigning] = useState(false);
   const [isReassigning, setIsReassigning] = useState(false);
+  // Preview mode = open the seat map modal in read-only state (no allocate /
+  // reassign / cancel actions). Cleared on close so the next time the admin
+  // hits Allocate from a row, the modal opens in interactive mode again.
+  const [previewMode, setPreviewMode] = useState(false);
   const [showGFormsModal, setShowGFormsModal] = useState(false);
   // Google Forms lifted state
   const [googleFormMode, setGoogleFormMode] = useState(false);
@@ -620,6 +659,7 @@ const EventDetailPage: NextPageWithLayout = () => {
     (rsvpId: string) => {
       const rsvp = rsvps.find((r) => r.id === rsvpId);
       if (!rsvp) return;
+      setPreviewMode(false);
       setSeatSelectingRsvp({ rsvpId, name: rsvp.name });
       setShowSeatMap(true);
     },
@@ -846,7 +886,12 @@ const EventDetailPage: NextPageWithLayout = () => {
   ];
 
   const heroActions: HeroActions = {
-    onOpenSeatMap: () => setShowSeatMap(true),
+    onPreviewSeatMap: () => {
+      setPreviewMode(true);
+      setSeatSelectingRsvp(null);
+      setShowSeatMap(true);
+    },
+    onOpenSeatMapPage: () => router.push(`/admin/events/${event.id}/seat-map`),
     onOpenNotifications: () => router.push(`/admin/events/${event.id}/notifications`),
     onAllocatePending: handleBulkAllocate,
     bulkAllocating,
@@ -919,16 +964,17 @@ const EventDetailPage: NextPageWithLayout = () => {
             if (!seatAssigning) {
               setShowSeatMap(false);
               setSeatSelectingRsvp(null);
+              setPreviewMode(false);
             }
           }}
           event={event}
           rsvps={rsvps}
-          selectingFor={seatSelectingRsvp}
-          onSeatSelect={handleSeatSelect}
+          selectingFor={previewMode ? null : seatSelectingRsvp}
+          onSeatSelect={previewMode ? undefined : handleSeatSelect}
           assigning={seatAssigning}
-          onReassign={handleReassign}
-          onCancel={handleInlineCancel}
-          onLayoutChange={isAdmin ? handleLayoutChange : undefined}
+          onReassign={previewMode ? undefined : handleReassign}
+          onCancel={previewMode ? undefined : handleInlineCancel}
+          onLayoutChange={!previewMode && isAdmin ? handleLayoutChange : undefined}
         />
       )}
 

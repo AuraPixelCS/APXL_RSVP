@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useDroppable } from "@dnd-kit/core";
 import type { Event, RSVP, SeatingConfig, VipTable } from "@/types";
 import SeatingConfigurator from "@/components/ui/SeatingConfigurator";
 import { getSeatLabel } from "@/lib/seatLabel";
@@ -27,7 +28,68 @@ interface Props {
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 
-const STATUS_COLORS: Record<string, { fill: string; stroke: string; label: string; dot: string }> = {
+// Optional drop-target wrapper used by the full-page seat allocator. Only
+// registers as a droppable when an id is provided — modal usage passes nothing
+// and the wrapper renders as a plain pass-through.
+function MaybeDroppable({ id, children }: { id?: string; children: ReactNode }) {
+  if (!id) return <>{children}</>;
+  return <DroppableEl id={id}>{children}</DroppableEl>;
+}
+
+function DroppableEl({ id, children }: { id: string; children: ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <span
+      ref={setNodeRef}
+      data-drop-id={id}
+      style={{
+        display: "inline-flex",
+        position: "relative",
+        outline: isOver ? "2px solid #22c55e" : "none",
+        outlineOffset: 2,
+        borderRadius: 999,
+        transition: "outline-color 120ms",
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+// Block-level variant used by container elements that participate in flex/grid
+// layouts (e.g. BanquetTableCell). When id is omitted, pass-through with no
+// extra DOM wrapper.
+function MaybeDroppableBlock({ id, children, style }: { id?: string; children: ReactNode; style?: React.CSSProperties }) {
+  if (!id) return <>{children}</>;
+  return <DroppableBlock id={id} style={style}>{children}</DroppableBlock>;
+}
+
+function DroppableBlock({ id, children, style }: { id: string; children: ReactNode; style?: React.CSSProperties }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      data-drop-id={id}
+      style={{
+        display: "flex",
+        flex: 1,
+        position: "relative",
+        borderRadius: 14,
+        // box-shadow ring + soft glow so the indicator is visible even on top
+        // of gold-bordered VIP cards (an outline would be hidden behind them).
+        boxShadow: isOver
+          ? "0 0 0 2px #22c55e, 0 0 18px rgba(34,197,94,0.45)"
+          : "none",
+        transition: "box-shadow 120ms",
+        ...style,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+export const STATUS_COLORS: Record<string, { fill: string; stroke: string; label: string; dot: string }> = {
   available:     { fill: "var(--surface-3)",         stroke: "var(--border)",                  label: "Available",     dot: "var(--muted)" },
   pending:       { fill: "rgba(251,191,36,0.18)",     stroke: "rgba(251,191,36,0.55)",           label: "Pending",       dot: "#fbbf24" },
   allocated:     { fill: "rgba(61,155,245,0.18)",     stroke: "rgba(61,155,245,0.55)",           label: "Allocated",     dot: "#3d9bf5" },
@@ -41,7 +103,7 @@ const SELECTABLE_STROKE = "rgba(34,197,94,0.4)";
 
 // ─── Seat info ─────────────────────────────────────────────────────────────────
 
-interface SeatInfo {
+export interface SeatInfo {
   seatNumber: number;
   status: string;
   guestName?: string;
@@ -49,7 +111,7 @@ interface SeatInfo {
   rsvpId?: string;
 }
 
-function buildSeatMap(totalSeats: number, rsvps: RSVP[]): SeatInfo[] {
+export function buildSeatMap(totalSeats: number, rsvps: RSVP[]): SeatInfo[] {
   const map = new Map<number, SeatInfo>();
   for (const rsvp of rsvps) {
     if (rsvp.seatNumber != null) {
@@ -95,13 +157,13 @@ function StageBar({ width }: { width?: number | string }) {
   );
 }
 
-interface VipTableGroup {
+export interface VipTableGroup {
   table: VipTable;
   tableIndex: number;
   seats: SeatInfo[];
 }
 
-function buildVipTableGroups(
+export function buildVipTableGroups(
   allSeats: SeatInfo[],
   config: SeatingConfig | undefined,
   totalStandardSeats: number
@@ -126,9 +188,10 @@ interface SeatProps {
   displayNumber?: number;                     // position-within-row, shown inside the seat in seat mode
   onAssign?: (seatNumber: number) => void;   // selection mode: assign seat
   onInspect?: (seat: SeatInfo) => void;       // view mode: show detail panel
+  dropId?: string;                            // when set, wraps the seat in a @dnd-kit droppable
 }
 
-function SeatEl({ seat, shape, selectionMode, isHighlighted, isCancelled, isTableMode, displayNumber, onAssign, onInspect }: SeatProps) {
+export function SeatEl({ seat, shape, selectionMode, isHighlighted, isCancelled, isTableMode, displayNumber, onAssign, onInspect, dropId }: SeatProps) {
   const isAvailable  = seat.status === "available";
   const isSelectable = selectionMode && isAvailable;
   const isDisabled   = selectionMode && !isAvailable;
@@ -149,6 +212,7 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isCancelled, isTabl
   const isClickable = isSelectable || isInspectable;
 
   return (
+    <MaybeDroppable id={dropId}>
     <div
       title={
         seat.guestName
@@ -197,15 +261,16 @@ function SeatEl({ seat, shape, selectionMode, isHighlighted, isCancelled, isTabl
     >
       {showNumber ? displayNumber : null}
     </div>
+    </MaybeDroppable>
   );
 }
 
 // ─── Grid seat map (theater / auditorium / classroom) ─────────────────────────
 
-function GridSeatMap({
+export function GridSeatMap({
   seats, seatsPerRow, style, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
-  onSeatAssign, onSeatInspect,
+  onSeatAssign, onSeatInspect, getSeatDropId,
 }: {
   seats: SeatInfo[];
   seatsPerRow: number;
@@ -216,6 +281,7 @@ function GridSeatMap({
   isTableMode: boolean;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
+  getSeatDropId?: (seatNumber: number) => string | undefined;
 }) {
   const rows: SeatInfo[][] = [];
   for (let i = 0; i < seats.length; i += seatsPerRow) {
@@ -265,6 +331,7 @@ function GridSeatMap({
                   displayNumber={idx + 1}
                   onAssign={onSeatAssign}
                   onInspect={onSeatInspect}
+                  dropId={getSeatDropId?.(seat.seatNumber)}
                 />
               ))}
             </div>
@@ -284,10 +351,10 @@ function GridSeatMap({
 
 // ─── Runway seat map (stage front, red carpet center aisle, seats on sides) ────
 
-function RunwaySeatMap({
+export function RunwaySeatMap({
   seats, seatsPerRow, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
-  onSeatAssign, onSeatInspect,
+  onSeatAssign, onSeatInspect, getSeatDropId,
 }: {
   seats: SeatInfo[];
   seatsPerRow: number;
@@ -297,6 +364,7 @@ function RunwaySeatMap({
   isTableMode: boolean;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
+  getSeatDropId?: (seatNumber: number) => string | undefined;
 }) {
   const perSide = seatsPerRow;
   const fullRowSize = perSide * 2;
@@ -354,6 +422,7 @@ function RunwaySeatMap({
                   displayNumber={idx + 1}
                   onAssign={onSeatAssign}
                   onInspect={onSeatInspect}
+                  dropId={getSeatDropId?.(seat.seatNumber)}
                 />
               ))}
             </div>
@@ -383,6 +452,7 @@ function RunwaySeatMap({
                   displayNumber={perSide + idx + 1}
                   onAssign={onSeatAssign}
                   onInspect={onSeatInspect}
+                  dropId={getSeatDropId?.(seat.seatNumber)}
                 />
               ))}
             </div>
@@ -395,11 +465,11 @@ function RunwaySeatMap({
 
 // ─── Banquet seat map ──────────────────────────────────────────────────────────
 
-function BanquetSeatMap({
+export function BanquetSeatMap({
   seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
-  onSeatAssign, onSeatInspect,
+  onSeatAssign, onSeatInspect, getSeatDropId, getTableDropId, onTableSelect,
 }: {
   seats: SeatInfo[]; // standard seats only (excludes VIP seats — those come via vipTableGroups)
   seatsPerTable: number;
@@ -411,6 +481,9 @@ function BanquetSeatMap({
   vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
+  getSeatDropId?: (seatNumber: number) => string | undefined;
+  getTableDropId?: (tableIndex: number, variant: "vip" | "standard") => string | undefined;
+  onTableSelect?: (tableIndex: number, variant: "vip" | "standard") => void;
 }) {
   const tables: SeatInfo[][] = [];
   for (let i = 0; i < seats.length; i += seatsPerTable) {
@@ -432,6 +505,8 @@ function BanquetSeatMap({
               key={g.table.id}
               tableSeats={g.seats}
               tableIndex={g.tableIndex}
+              getSeatDropId={getSeatDropId}
+              tableDropId={getTableDropId?.(g.tableIndex, "vip")}
               seatsPerTable={g.table.seats}
               selectionMode={selectionMode}
               highlightedSeat={highlightedSeat}
@@ -439,6 +514,7 @@ function BanquetSeatMap({
               isTableMode={isTableMode}
               onSeatAssign={onSeatAssign}
               onSeatInspect={onSeatInspect}
+              onTableSelect={onTableSelect}
               tableR={TABLE_R}
               seatR={SEAT_R}
               orbitR={ORBIT_R}
@@ -475,6 +551,8 @@ function BanquetSeatMap({
                     key={li}
                     tableSeats={tableSeats}
                     tableIndex={baseTi + li}
+                    getSeatDropId={getSeatDropId}
+                    tableDropId={getTableDropId?.(baseTi + li, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -482,6 +560,7 @@ function BanquetSeatMap({
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
+                    onTableSelect={onTableSelect}
                     tableR={TABLE_R}
                     seatR={SEAT_R}
                     orbitR={ORBIT_R}
@@ -502,6 +581,8 @@ function BanquetSeatMap({
                     key={ri2}
                     tableSeats={tableSeats}
                     tableIndex={baseTi + tablesPerSide + ri2}
+                    getSeatDropId={getSeatDropId}
+                    tableDropId={getTableDropId?.(baseTi + tablesPerSide + ri2, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -509,6 +590,7 @@ function BanquetSeatMap({
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
+                    onTableSelect={onTableSelect}
                     tableR={TABLE_R}
                     seatR={SEAT_R}
                     orbitR={ORBIT_R}
@@ -536,6 +618,8 @@ function BanquetSeatMap({
           key={ti}
           tableSeats={tableSeats}
           tableIndex={ti}
+          getSeatDropId={getSeatDropId}
+          tableDropId={getTableDropId?.(ti, "standard")}
           seatsPerTable={seatsPerTable}
           selectionMode={selectionMode}
           highlightedSeat={highlightedSeat}
@@ -543,6 +627,7 @@ function BanquetSeatMap({
           isTableMode={isTableMode}
           onSeatAssign={onSeatAssign}
           onSeatInspect={onSeatInspect}
+          onTableSelect={onTableSelect}
           tableR={TABLE_R}
           seatR={SEAT_R}
           orbitR={ORBIT_R}
@@ -556,11 +641,11 @@ function BanquetSeatMap({
 
 // ─── Banquet-Runway seat map (stage front, red carpet aisle, round tables on each side) ───
 
-function BanquetRunwaySeatMap({
+export function BanquetRunwaySeatMap({
   seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
-  onSeatAssign, onSeatInspect,
+  onSeatAssign, onSeatInspect, getSeatDropId, getTableDropId, onTableSelect,
 }: {
   seats: SeatInfo[];
   seatsPerTable: number;
@@ -572,6 +657,9 @@ function BanquetRunwaySeatMap({
   vipTableGroups?: VipTableGroup[];
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
+  getSeatDropId?: (seatNumber: number) => string | undefined;
+  getTableDropId?: (tableIndex: number, variant: "vip" | "standard") => string | undefined;
+  onTableSelect?: (tableIndex: number, variant: "vip" | "standard") => void;
 }) {
   const tables: SeatInfo[][] = [];
   for (let i = 0; i < seats.length; i += seatsPerTable) {
@@ -601,6 +689,8 @@ function BanquetRunwaySeatMap({
               key={g.table.id}
               tableSeats={g.seats}
               tableIndex={g.tableIndex}
+              getSeatDropId={getSeatDropId}
+              tableDropId={getTableDropId?.(g.tableIndex, "vip")}
               seatsPerTable={g.table.seats}
               selectionMode={selectionMode}
               highlightedSeat={highlightedSeat}
@@ -608,6 +698,7 @@ function BanquetRunwaySeatMap({
               isTableMode={isTableMode}
               onSeatAssign={onSeatAssign}
               onSeatInspect={onSeatInspect}
+              onTableSelect={onTableSelect}
               tableR={TABLE_R}
               seatR={SEAT_R}
               orbitR={ORBIT_R}
@@ -634,6 +725,8 @@ function BanquetRunwaySeatMap({
                     key={li}
                     tableSeats={tableSeats}
                     tableIndex={baseTi + li}
+                    getSeatDropId={getSeatDropId}
+                    tableDropId={getTableDropId?.(baseTi + li, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -641,6 +734,7 @@ function BanquetRunwaySeatMap({
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
+                    onTableSelect={onTableSelect}
                     tableR={TABLE_R}
                     seatR={SEAT_R}
                     orbitR={ORBIT_R}
@@ -672,6 +766,8 @@ function BanquetRunwaySeatMap({
                     key={ri2}
                     tableSeats={tableSeats}
                     tableIndex={baseTi + tablesPerSide + ri2}
+                    getSeatDropId={getSeatDropId}
+                    tableDropId={getTableDropId?.(baseTi + tablesPerSide + ri2, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -679,6 +775,7 @@ function BanquetRunwaySeatMap({
                     isTableMode={isTableMode}
                     onSeatAssign={onSeatAssign}
                     onSeatInspect={onSeatInspect}
+                    onTableSelect={onTableSelect}
                     tableR={TABLE_R}
                     seatR={SEAT_R}
                     orbitR={ORBIT_R}
@@ -697,11 +794,12 @@ function BanquetRunwaySeatMap({
   );
 }
 
-function BanquetTableCell({
+export function BanquetTableCell({
   tableSeats, tableIndex, seatsPerTable, selectionMode, highlightedSeat, cancelledSeat, isTableMode,
-  onSeatAssign, onSeatInspect,
+  onSeatAssign, onSeatInspect, onTableSelect,
   tableR, seatR, orbitR, svgSize,
   variant = "standard", tableLabel,
+  getSeatDropId, tableDropId,
 }: {
   tableSeats: SeatInfo[];
   tableIndex: number;
@@ -710,6 +808,10 @@ function BanquetTableCell({
   highlightedSeat: number | null;
   cancelledSeat: number | null;
   isTableMode: boolean;
+  /** When provided AND selectionMode is on, clicking the table card fires
+   *  this callback (instead of clicking individual seats) so the page can
+   *  open the table seat-picker modal. */
+  onTableSelect?: (tableIndex: number, variant: "vip" | "standard") => void;
   onSeatAssign?: (seatNumber: number) => void;
   onSeatInspect?: (seat: SeatInfo) => void;
   tableR: number;
@@ -719,14 +821,24 @@ function BanquetTableCell({
   variant?: "standard" | "vip";
   /** Override the "T{n+1}" label inside the table circle (used for VIP tables). */
   tableLabel?: string;
+  getSeatDropId?: (seatNumber: number) => string | undefined;
+  tableDropId?: string;
 }) {
   const occupiedSeats = tableSeats.filter((s) => s.status !== "available");
   const isVip = variant === "vip";
   const innerLabel = isVip ? `T${tableIndex + 1}` : (tableLabel ?? `T${tableIndex + 1}`);
+  // In selection mode AND when the page wants table-level clicks (page-allocator
+  // flow), the entire card becomes the click target — individual seat circles
+  // stop being directly clickable so the only entry point is the table picker.
+  const tableLevelClick = selectionMode && !!onTableSelect;
+  const effectiveSeatAssign = tableLevelClick ? undefined : onSeatAssign;
   return (
+    <MaybeDroppableBlock id={tableDropId} style={{ flex: 1, minWidth: isVip ? svgSize * 2.4 : undefined }}>
     <div
+      onClick={tableLevelClick ? () => onTableSelect!(tableIndex, isVip ? "vip" : "standard") : undefined}
       style={{
         flex: 1,
+        width: "100%",
         border: `1px solid ${isVip ? VIP_GOLD_RING : "var(--border)"}`,
         borderRadius: 12,
         padding: isVip ? "14px 28px 12px" : "12px 10px 10px",
@@ -735,6 +847,18 @@ function BanquetTableCell({
         flexDirection: "column",
         alignItems: "center",
         minWidth: isVip ? svgSize * 2.4 : undefined,
+        cursor: tableLevelClick ? "pointer" : undefined,
+        transition: "border-color 120ms, background 120ms, box-shadow 120ms",
+      }}
+      onMouseEnter={(e) => {
+        if (!tableLevelClick) return;
+        (e.currentTarget as HTMLElement).style.borderColor = isVip ? VIP_GOLD : SELECTABLE_HOVER;
+        (e.currentTarget as HTMLElement).style.boxShadow = `0 0 0 2px ${isVip ? "rgba(212,175,55,0.55)" : SELECTABLE_HOVER}`;
+      }}
+      onMouseLeave={(e) => {
+        if (!tableLevelClick) return;
+        (e.currentTarget as HTMLElement).style.borderColor = isVip ? VIP_GOLD_RING : "var(--border)";
+        (e.currentTarget as HTMLElement).style.boxShadow = "none";
       }}
     >
       {isVip && (
@@ -801,9 +925,19 @@ function BanquetTableCell({
                 transition: "fill 120ms, stroke 120ms",
                 filter: isCancelled ? "drop-shadow(0 0 4px rgba(239,68,68,0.55))" : isHighlighted ? "drop-shadow(0 0 4px rgba(61,155,245,0.5))" : "none",
               }}
-              onClick={() => {
-                if (isSelectable) onSeatAssign?.(seat.seatNumber);
-                else if (isInspectable) onSeatInspect?.(seat);
+              onClick={(e) => {
+                if (tableLevelClick) {
+                  // Let the click bubble to the table card so the picker opens
+                  // for the whole table — don't allocate this specific seat.
+                  return;
+                }
+                if (isSelectable) {
+                  e.stopPropagation();
+                  effectiveSeatAssign?.(seat.seatNumber);
+                } else if (isInspectable) {
+                  e.stopPropagation();
+                  onSeatInspect?.(seat);
+                }
               }}
               onMouseEnter={(e) => {
                 if (isHighlighted || isCancelled) return;
@@ -876,12 +1010,13 @@ function BanquetTableCell({
         )}
       </div>
     </div>
+    </MaybeDroppableBlock>
   );
 }
 
 // ─── Seat detail panel ─────────────────────────────────────────────────────────
 
-function SeatDetailPanel({
+export function SeatDetailPanel({
   seat, onDismiss, isTableMode, perGroup, seatingConfig, totalStandardSeats, onReassign, onCancel,
 }: {
   seat: SeatInfo;
