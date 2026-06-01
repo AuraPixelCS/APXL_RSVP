@@ -19,12 +19,18 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { subscribeToRSVPs, getEvent, updateRSVP } from "@/lib/firestore";
 import { getAuthHeaders } from "@/lib/auth";
 import { getSeatLabel } from "@/lib/seatLabel";
-import { getTotalSeatCount, getVipSeatRanges } from "@/lib/seating";
+import {
+  getTotalSeatCount,
+  getVipSeatRanges,
+  planGroupAllocation,
+  type AllocationStep,
+} from "@/lib/seating";
 import type { Event, RSVP, SeatingConfig } from "@/types";
 
 import SeatMapBoard from "@/components/ui/SeatMapBoard";
-import GuestListColumn from "@/components/ui/GuestListColumn";
+import GuestListColumn, { buildGroupMap, type GroupField } from "@/components/ui/GuestListColumn";
 import TableSeatPickerModal from "@/components/ui/TableSeatPickerModal";
+import GroupAllocConfirmModal from "@/components/ui/GroupAllocConfirmModal";
 import SeatingConfigurator from "@/components/ui/SeatingConfigurator";
 import { buildSeatMap, buildVipTableGroups } from "@/components/ui/SeatMapModal";
 
@@ -44,8 +50,30 @@ function SeatMapPage() {
   const [eventLoading, setEventLoading] = useState(true);
 
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
-  const [activeDragGuest, setActiveDragGuest] = useState<{ name: string; rsvpId: string } | null>(null);
+  // Active drag carries the full group's ids — single-guest drags are an
+  // array of length 1. primaryName is the dragged card's name (so the overlay
+  // can read "Ak Tesr +4 more from {label}"). groupLabel is set only when the
+  // drag covers a real >1 group.
+  const [activeDragGuest, setActiveDragGuest] = useState<
+    | { rsvpIds: string[]; primaryName: string; groupLabel?: string }
+    | null
+  >(null);
   const [assigning, setAssigning] = useState(false);
+
+  // Group-by state — ephemeral, page-level. Clearing returns to single-drag.
+  const [groupBy, setGroupBy] = useState<GroupField[]>([]);
+  // Pending overflow confirm (plan spans 2+ steps).
+  const [pendingGroupPlan, setPendingGroupPlan] = useState<
+    | { plan: AllocationStep[]; rsvpIds: string[]; groupLabel?: string }
+    | null
+  >(null);
+
+  // Edit Layout modal state lives at the page level so the modal can be
+  // mounted at the page root (avoiding the header's backdrop-filter containing
+  // block, which broke `position: fixed` centering).
+  const [editLayoutOpen, setEditLayoutOpen] = useState(false);
+  const [editLayoutPendingConfig, setEditLayoutPendingConfig] = useState<SeatingConfig | null>(null);
+  const [editLayoutSaving, setEditLayoutSaving] = useState(false);
 
   // Sidebar slide-out: collapsed=true means hidden off-screen.
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -199,6 +227,43 @@ function SeatMapPage() {
     [event, allSeats, seatsPerTable]
   );
 
+  // ── Edit Layout handlers ───────────────────────────────────────────────────
+  const handleEditLayoutOpen = useCallback(() => {
+    if (!event) return;
+    setEditLayoutPendingConfig(event.seatingConfig ?? { style: "theater", seatsPerRow: 10 });
+    setEditLayoutOpen(true);
+  }, [event]);
+
+  const handleEditLayoutSave = useCallback(async () => {
+    if (!event?.id || !editLayoutPendingConfig) return;
+    setEditLayoutSaving(true);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/change-layout`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({
+            eventId: event.id,
+            seatingConfig: editLayoutPendingConfig,
+          }),
+        }
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || "Failed to update layout");
+        return;
+      }
+      setEvent({ ...event, seatingConfig: editLayoutPendingConfig });
+      // Layout regenerates seat ids — drop any active group state.
+      setGroupBy([]);
+      setEditLayoutOpen(false);
+    } finally {
+      setEditLayoutSaving(false);
+    }
+  }, [event, editLayoutPendingConfig]);
+
   // ── SeatDetailPanel actions ────────────────────────────────────────────────
   // Change [Seat/Table/VIP] — flips into selection mode for that guest. From
   // there: seat layouts → click any free seat; banquet → click any table to
@@ -241,35 +306,155 @@ function SeatMapPage() {
     [selectedGuestId, rsvps, openVipTablePicker, openStandardTablePicker]
   );
 
+  // ── Group-by computation ───────────────────────────────────────────────────
+  // groupMap maps every rsvp.id → full ordered list of ids in the same group
+  // (length 1 for solo / ungrouped). Shared between the list column (for the
+  // visual accent bar + sibling-ghost-on-drag) and the drag-start handler
+  // (which uses it to populate the dragged set).
+  const groupMap = useMemo(() => buildGroupMap(rsvps, groupBy), [rsvps, groupBy]);
+
+  // Group label for the drag overlay + confirm modal. Looks up the first id
+  // in the group, derives the label from the active fields.
+  const groupLabelFor = useCallback(
+    (rsvp: RSVP | undefined): string | undefined => {
+      if (!rsvp || groupBy.length === 0) return undefined;
+      const parts = groupBy.map((f) => (rsvp[f] ?? "").trim()).filter(Boolean);
+      if (parts.length === 0) return undefined;
+      return parts.join(" · ");
+    },
+    [groupBy]
+  );
+
+  // Executes a multi-step allocation plan sequentially (Firestore subscription
+  // reconciles after each call). Stops on first failure and surfaces an alert.
+  const executePlan = useCallback(
+    async (plan: AllocationStep[], rsvpIds: string[]) => {
+      if (!event?.id) return;
+      // Flatten plan into ordered (rsvpId, seatNumber) pairs.
+      const seatNumbers = plan.flatMap((s) => s.seatNumbers);
+      if (seatNumbers.length !== rsvpIds.length) {
+        alert("Allocation plan does not match group size — aborted.");
+        return;
+      }
+      setAssigning(true);
+      try {
+        const authHeaders = await getAuthHeaders();
+        for (let i = 0; i < rsvpIds.length; i++) {
+          const rsvpId = rsvpIds[i];
+          const seatNumber = seatNumbers[i];
+          const wasAllocated = rsvps.find((r) => r.id === rsvpId)?.seatNumber != null;
+          const res = await fetch(
+            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/allocate`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...authHeaders },
+              body: JSON.stringify({
+                eventId: event.id,
+                rsvpId,
+                seatNumber,
+                force: wasAllocated,
+              }),
+            }
+          );
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            alert(`Stopped at guest ${i + 1}/${rsvpIds.length}: ${data.error ?? "allocation failed"}`);
+            break;
+          }
+        }
+      } catch {
+        alert("Network error during group allocation");
+      } finally {
+        setAssigning(false);
+        setSelectedGuestId(null);
+      }
+    },
+    [event, rsvps]
+  );
+
+  // Common dispatch for a group drop (resolved seat or table start). Handles
+  // the plan → either silent allocate (1 step) or open confirm modal (>1 step).
+  const dispatchGroupDrop = useCallback(
+    (
+      rsvpIds: string[],
+      groupLabel: string | undefined,
+      start: Parameters<typeof planGroupAllocation>[0]["start"]
+    ) => {
+      if (!event) return;
+      const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+      const allSeats = buildSeatMap(totalSeats, rsvps);
+      const result = planGroupAllocation({
+        allSeats,
+        seatingConfig: event.seatingConfig,
+        totalStandardSeats: event.totalSeats,
+        groupSize: rsvpIds.length,
+        start,
+      });
+      if (!result.ok) {
+        alert(
+          `Only ${result.available} free seat${result.available === 1 ? "" : "s"} available — need ${rsvpIds.length}. Allocation cancelled.`
+        );
+        return;
+      }
+      if (result.steps.length === 1) {
+        void executePlan(result.steps, rsvpIds);
+      } else {
+        setPendingGroupPlan({ plan: result.steps, rsvpIds, groupLabel });
+      }
+    },
+    [event, rsvps, executePlan]
+  );
+
   const handleDragStart = (e: DragStartEvent) => {
     const data = e.active.data.current as { name?: string; rsvpId?: string } | undefined;
-    if (data?.name && data?.rsvpId) {
-      setActiveDragGuest({ name: data.name, rsvpId: data.rsvpId });
-    }
+    if (!data?.rsvpId || !data?.name) return;
+    const ids = groupMap.get(data.rsvpId) ?? [data.rsvpId];
+    const primary = rsvps.find((r) => r.id === data.rsvpId);
+    setActiveDragGuest({
+      rsvpIds: ids,
+      primaryName: data.name,
+      groupLabel: ids.length > 1 ? groupLabelFor(primary) : undefined,
+    });
   };
 
   const handleDragEnd = (e: DragEndEvent) => {
+    const dragged = activeDragGuest;
     setActiveDragGuest(null);
     const { active, over } = e;
     if (!over) return;
     const overId = String(over.id);
     const data = active.data.current as { rsvpId?: string; name?: string; currentSeat?: number | null } | undefined;
     if (!data?.rsvpId) return;
-    const isReassignment = data.currentSeat != null;
+
+    // Resolve the full set of guests this drag carries — falls back to the
+    // single dragged id if the group computation hasn't refreshed yet.
+    const rsvpIds = dragged?.rsvpIds ?? groupMap.get(data.rsvpId) ?? [data.rsvpId];
+    const isGroup = rsvpIds.length > 1;
+    const groupLabel = dragged?.groupLabel;
 
     if (overId.startsWith("seat-")) {
       const seatNumber = parseInt(overId.slice("seat-".length), 10);
-      if (!Number.isNaN(seatNumber)) {
+      if (Number.isNaN(seatNumber)) return;
+      if (isGroup) {
+        dispatchGroupDrop(rsvpIds, groupLabel, { kind: "seat", seatNumber });
+      } else {
+        const isReassignment = data.currentSeat != null;
         void allocateSeat(data.rsvpId, seatNumber, isReassignment);
       }
     } else if (overId.startsWith("vip-table-")) {
       const tableIndex = parseInt(overId.slice("vip-table-".length), 10);
-      if (!Number.isNaN(tableIndex)) {
+      if (Number.isNaN(tableIndex)) return;
+      if (isGroup) {
+        dispatchGroupDrop(rsvpIds, groupLabel, { kind: "table", tableIndex, variant: "vip" });
+      } else {
         openVipTablePicker(tableIndex, data.rsvpId, data.name ?? "guest");
       }
     } else if (overId.startsWith("std-table-")) {
       const tableIndex = parseInt(overId.slice("std-table-".length), 10);
-      if (!Number.isNaN(tableIndex)) {
+      if (Number.isNaN(tableIndex)) return;
+      if (isGroup) {
+        dispatchGroupDrop(rsvpIds, groupLabel, { kind: "table", tableIndex, variant: "standard" });
+      } else {
         openStandardTablePicker(tableIndex, data.rsvpId, data.name ?? "guest");
       }
     }
@@ -435,7 +620,7 @@ function SeatMapPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              <EditLayoutLauncher event={event} onSaved={(e) => setEvent(e)} />
+              <EditLayoutButton onOpen={handleEditLayoutOpen} />
               <StatusChip rsvps={rsvps} totalSeats={totalSeats} />
             </div>
           </header>
@@ -447,6 +632,14 @@ function SeatMapPage() {
               selectedGuestId={selectedGuestId}
               onSelectGuest={setSelectedGuestId}
               renderSeatLabel={renderSeatLabel}
+              groupBy={groupBy}
+              setGroupBy={setGroupBy}
+              groupMap={groupMap}
+              draggingRsvpIds={
+                activeDragGuest && activeDragGuest.rsvpIds.length > 1
+                  ? new Set(activeDragGuest.rsvpIds)
+                  : null
+              }
             />
 
             <div className="flex flex-col flex-1 min-w-0 min-h-0">
@@ -522,13 +715,76 @@ function SeatMapPage() {
                 color: "#fff",
                 boxShadow: "0 18px 40px rgba(0,0,0,0.5)",
                 cursor: "grabbing",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                whiteSpace: "nowrap",
+                maxWidth: 420,
               }}
             >
-              {activeDragGuest.name}
+              <span
+                style={{
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  maxWidth: 180,
+                }}
+              >
+                {activeDragGuest.primaryName}
+              </span>
+              {activeDragGuest.rsvpIds.length > 1 && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    padding: "2px 7px",
+                    borderRadius: 999,
+                    background: "rgba(61,155,245,0.2)",
+                    color: "var(--accent)",
+                    fontFamily: "'Fira Code', monospace",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    maxWidth: 220,
+                    flexShrink: 0,
+                  }}
+                  title={activeDragGuest.groupLabel}
+                >
+                  +{activeDragGuest.rsvpIds.length - 1} more
+                  {activeDragGuest.groupLabel ? ` · ${activeDragGuest.groupLabel}` : ""}
+                </span>
+              )}
             </div>
           )}
         </DragOverlay>
       </DndContext>
+
+      <GroupAllocConfirmModal
+        open={!!pendingGroupPlan}
+        plan={pendingGroupPlan?.plan ?? []}
+        rsvpCount={pendingGroupPlan?.rsvpIds.length ?? 0}
+        groupLabel={pendingGroupPlan?.groupLabel}
+        assigning={assigning}
+        onCancel={() => setPendingGroupPlan(null)}
+        onConfirm={async () => {
+          const pending = pendingGroupPlan;
+          if (!pending) return;
+          setPendingGroupPlan(null);
+          await executePlan(pending.plan, pending.rsvpIds);
+        }}
+      />
+
+      <AnimatePresence>
+        {editLayoutOpen && editLayoutPendingConfig && event && (
+          <EditLayoutModal
+            event={event}
+            pendingConfig={editLayoutPendingConfig}
+            setPendingConfig={setEditLayoutPendingConfig}
+            saving={editLayoutSaving}
+            onClose={() => setEditLayoutOpen(false)}
+            onSave={handleEditLayoutSave}
+          />
+        )}
+      </AnimatePresence>
 
       <TableSeatPickerModal
         open={!!pendingTableDrop}
@@ -590,77 +846,26 @@ function StatusChip({ rsvps, totalSeats }: { rsvps: RSVP[]; totalSeats: number }
   );
 }
 
-function EditLayoutLauncher({
-  event,
-  onSaved,
-}: {
-  event: Event;
-  onSaved: (next: Event) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [pendingConfig, setPendingConfig] = useState<SeatingConfig | null>(null);
-  const [saving, setSaving] = useState(false);
-
+// Button only — the modal is mounted at the page root so its `position: fixed`
+// anchors to the viewport, not the header (which creates a containing block
+// via `backdrop-filter` per the CSS spec).
+function EditLayoutButton({ onOpen }: { onOpen: () => void }) {
   return (
-    <>
-      <button
-        onClick={() => {
-          setPendingConfig(event.seatingConfig ?? { style: "theater", seatsPerRow: 10 });
-          setOpen(true);
-        }}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors shrink-0"
-        style={{
-          background: "var(--surface-3)",
-          color: "var(--muted)",
-          border: "1px solid var(--border)",
-        }}
-      >
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-        </svg>
-        <span className="hidden sm:inline">Edit Layout</span>
-      </button>
-
-      <AnimatePresence>
-        {open && pendingConfig && (
-          <EditLayoutModal
-            event={event}
-            pendingConfig={pendingConfig}
-            setPendingConfig={setPendingConfig}
-            saving={saving}
-            onClose={() => setOpen(false)}
-            onSave={async () => {
-              if (!event.id || !pendingConfig) return;
-              setSaving(true);
-              try {
-                const authHeaders = await getAuthHeaders();
-                const res = await fetch(
-                  `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/change-layout`,
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json", ...authHeaders },
-                    body: JSON.stringify({
-                      eventId: event.id,
-                      seatingConfig: pendingConfig,
-                    }),
-                  }
-                );
-                const data = await res.json().catch(() => ({}));
-                if (!res.ok) {
-                  alert(data.error || "Failed to update layout");
-                  return;
-                }
-                onSaved({ ...event, seatingConfig: pendingConfig });
-                setOpen(false);
-              } finally {
-                setSaving(false);
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-    </>
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors shrink-0"
+      style={{
+        background: "var(--surface-3)",
+        color: "var(--muted)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+      </svg>
+      <span className="hidden sm:inline">Edit Layout</span>
+    </button>
   );
 }
 
