@@ -4,7 +4,7 @@ import type { ReactElement } from "react";
 import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { getEvent, subscribeToRSVPs, updateEvent } from "@/lib/firestore";
-import { buildSeatEmail } from "@/lib/emailTemplates";
+import { buildSeatEmail, buildBlastEmail } from "@/lib/emailTemplates";
 import type { Event, RSVP } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { storage } from "@/lib/firebase";
@@ -209,7 +209,7 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [loading, setLoading]       = useState(true);
 
   // Tab
-  const [activeTab, setActiveTab] = useState<"template" | "guests">("guests");
+  const [activeTab, setActiveTab] = useState<"template" | "guests" | "blast">("guests");
 
   // Banners
   const [bannerUrl, setBannerUrl]                       = useState("");
@@ -232,6 +232,15 @@ const NotificationsPage: NextPageWithLayout = () => {
   // Guest table filter + search
   const [guestFilter, setGuestFilter] = useState<"all" | "unnotified" | "notified">("unnotified");
   const [guestSearch, setGuestSearch] = useState("");
+
+  // Email blast
+  const [blastSubject, setBlastSubject]         = useState("");
+  const [blastBody, setBlastBody]               = useState("");
+  const [selectedBlastIds, setSelectedBlastIds] = useState<Set<string>>(new Set());
+  const [blastSelInit, setBlastSelInit]         = useState(false);
+  const [sendingBlast, setSendingBlast]         = useState(false);
+  const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number } | null>(null);
+  const [blastSearch, setBlastSearch]           = useState("");
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -285,6 +294,30 @@ const NotificationsPage: NextPageWithLayout = () => {
     bannerUrl !== savedBanner ||
     rsvpBannerUrl !== savedRsvpBanner ||
     showTitle !== savedShowTitle;
+
+  // ── Email blast recipients ───────────────────────────────────────────────────
+  // Everyone who RSVP'd and didn't decline — pending, allocated, or checked_in.
+  const blastRecipients = rsvps.filter((r) => r.status !== "not_attending");
+  const filteredBlastRecipients = (() => {
+    const q = blastSearch.trim().toLowerCase();
+    if (!q) return blastRecipients;
+    return blastRecipients.filter((r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.email.toLowerCase().includes(q)
+    );
+  })();
+
+  // Default selection to "all recipients" once the RSVP list first loads.
+  useEffect(() => {
+    if (!blastSelInit && blastRecipients.length > 0) {
+      setSelectedBlastIds(new Set(blastRecipients.map((r) => r.id!).filter(Boolean)));
+      setBlastSelInit(true);
+    }
+  }, [blastRecipients, blastSelInit]);
+
+  const allBlastSelected =
+    filteredBlastRecipients.length > 0 &&
+    filteredBlastRecipients.every((r) => selectedBlastIds.has(r.id!));
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
@@ -358,6 +391,56 @@ const NotificationsPage: NextPageWithLayout = () => {
     }
   }, [event, bulkNotifying]);
 
+  const toggleBlastSelect = useCallback((rsvpId: string) => {
+    setSelectedBlastIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rsvpId)) next.delete(rsvpId);
+      else next.add(rsvpId);
+      return next;
+    });
+  }, []);
+
+  const toggleBlastSelectAll = useCallback(() => {
+    setSelectedBlastIds((prev) => {
+      const next = new Set(prev);
+      const ids = filteredBlastRecipients.map((r) => r.id!).filter(Boolean);
+      const allOn = ids.length > 0 && ids.every((id) => next.has(id));
+      if (allOn) ids.forEach((id) => next.delete(id));
+      else ids.forEach((id) => next.add(id));
+      return next;
+    });
+  }, [filteredBlastRecipients]);
+
+  const handleSendBlast = useCallback(async () => {
+    if (!event?.id || sendingBlast) return;
+    if (!blastSubject.trim() || !blastBody.trim() || selectedBlastIds.size === 0) return;
+    setSendingBlast(true);
+    setBlastResult(null);
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/blast`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          eventId: event.id,
+          subject: blastSubject,
+          body: blastBody,
+          rsvpIds: [...selectedBlastIds],
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBlastResult({ sent: data.sent ?? 0, failed: data.failed ?? 0 });
+      } else {
+        setBlastResult({ sent: 0, failed: selectedBlastIds.size });
+      }
+    } catch {
+      setBlastResult({ sent: 0, failed: selectedBlastIds.size });
+    } finally {
+      setSendingBlast(false);
+    }
+  }, [event, sendingBlast, blastSubject, blastBody, selectedBlastIds]);
+
   // ── Email preview HTML ───────────────────────────────────────────────────────
 
   const isTableMode = event?.assignmentMode === "table";
@@ -375,6 +458,24 @@ const NotificationsPage: NextPageWithLayout = () => {
         tableNumber: isTableMode ? 1 : undefined,
         qrDataUrl: PREVIEW_QR,
         bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
+        showTitleOnBanner: showTitle,
+      })
+    : "";
+
+  const blastPreviewHtml = event
+    ? buildBlastEmail({
+        name: "Preview Guest",
+        eventTitle: event.title,
+        body:
+          blastBody.trim() ||
+          "Your message will appear here. Use {{name}} for the guest's name and {{event}} for the event title.",
+        eventDate: event.date,
+        eventTime: event.time,
+        venue: event.venue,
+        address: event.address,
+        bannerUrl:
+          rsvpBannerUrl ||
+          (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
         showTitleOnBanner: showTitle,
       })
     : "";
@@ -437,6 +538,7 @@ const NotificationsPage: NextPageWithLayout = () => {
         {([
           { key: "guests",   label: `Allocated Guests${allocatedRsvps.length ? ` (${allocatedRsvps.length})` : ""}` },
           { key: "template", label: "Template" },
+          { key: "blast",    label: "Email Blast" },
         ] as const).map((t) => {
           const active = activeTab === t.key;
           return (
@@ -922,6 +1024,217 @@ const NotificationsPage: NextPageWithLayout = () => {
             </table>
           </div>
         )}
+      </div>
+      )}
+
+      {/* ── Section D: Email Blast tab ────────────────────────────────────── */}
+      {activeTab === "blast" && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+        {/* Compose */}
+        <div
+          className="rounded-xl p-5 space-y-4"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div>
+            <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+              Email Blast
+            </h2>
+            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
+              Send a one-off announcement to your guests. No QR or seat info — just your message,
+              with the RSVP-confirmation banner. Use <code>{"{{name}}"}</code> and <code>{"{{event}}"}</code> to personalize.
+            </p>
+          </div>
+
+          {/* Subject */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+              Subject
+            </label>
+            <input
+              type="text"
+              value={blastSubject}
+              onChange={(e) => setBlastSubject(e.target.value)}
+              placeholder={`An update about ${event.title}`}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+              style={{
+                background: "var(--surface-2)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+              }}
+            />
+          </div>
+
+          {/* Body */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+              Message
+            </label>
+            <textarea
+              value={blastBody}
+              onChange={(e) => setBlastBody(e.target.value)}
+              rows={8}
+              placeholder={`Hi {{name}},\n\nWe wanted to share an update about {{event}}...`}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y"
+              style={{
+                background: "var(--surface-2)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+                lineHeight: 1.6,
+              }}
+            />
+          </div>
+
+          {/* Recipients */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
+                Recipients
+              </label>
+              <span className="text-xs" style={{ color: "var(--muted)" }}>
+                {selectedBlastIds.size} of {blastRecipients.length} selected
+              </span>
+            </div>
+
+            <input
+              type="text"
+              value={blastSearch}
+              onChange={(e) => setBlastSearch(e.target.value)}
+              placeholder="Search name or email…"
+              className="w-full rounded-lg px-3 py-1.5 text-xs outline-none"
+              style={{
+                background: "var(--surface-2)",
+                color: "var(--foreground)",
+                border: "1px solid var(--border)",
+              }}
+            />
+
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ border: "1px solid var(--border)" }}
+            >
+              {/* Select all */}
+              <button
+                onClick={toggleBlastSelectAll}
+                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium cursor-pointer transition-colors"
+                style={{
+                  background: "var(--surface-2)",
+                  color: "var(--foreground)",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <span
+                  className="flex items-center justify-center rounded"
+                  style={{
+                    width: 16,
+                    height: 16,
+                    border: `1px solid ${allBlastSelected ? "var(--accent)" : "var(--border)"}`,
+                    background: allBlastSelected ? "var(--accent)" : "transparent",
+                    color: "#000",
+                    fontSize: 11,
+                  }}
+                >
+                  {allBlastSelected ? "✓" : ""}
+                </span>
+                Select all{blastSearch.trim() ? " (filtered)" : ""} ({filteredBlastRecipients.length})
+              </button>
+
+              {/* Rows */}
+              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+                {filteredBlastRecipients.length === 0 ? (
+                  <div className="px-3 py-4 text-xs text-center" style={{ color: "var(--muted)" }}>
+                    No matching guests.
+                  </div>
+                ) : (
+                  filteredBlastRecipients.map((r) => {
+                    const checked = selectedBlastIds.has(r.id!);
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => toggleBlastSelect(r.id!)}
+                        className="flex items-center gap-2 w-full px-3 py-2 text-xs cursor-pointer transition-colors text-left"
+                        style={{ color: "var(--foreground)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <span
+                          className="flex items-center justify-center rounded shrink-0"
+                          style={{
+                            width: 16,
+                            height: 16,
+                            border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
+                            background: checked ? "var(--accent)" : "transparent",
+                            color: "#000",
+                            fontSize: 11,
+                          }}
+                        >
+                          {checked ? "✓" : ""}
+                        </span>
+                        <span className="truncate flex-1">
+                          <span className="font-medium">{r.name}</span>
+                          <span style={{ color: "var(--muted)" }}> · {r.email}</span>
+                        </span>
+                        <span
+                          className="shrink-0 px-1.5 py-0.5 rounded text-[10px]"
+                          style={{ background: "var(--surface-2)", color: "var(--muted)" }}
+                        >
+                          {r.status}
+                        </span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Result + send */}
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <div className="text-xs" style={{ color: "var(--muted)" }}>
+              {blastResult && (
+                <span style={{ color: blastResult.failed > 0 ? "#f59e0b" : "#22c55e" }}>
+                  Sent {blastResult.sent}{blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={handleSendBlast}
+              disabled={
+                !isAdmin ||
+                sendingBlast ||
+                !blastSubject.trim() ||
+                !blastBody.trim() ||
+                selectedBlastIds.size === 0
+              }
+              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ background: "var(--accent)", color: "#000" }}
+            >
+              {sendingBlast ? "Sending…" : `Send blast to ${selectedBlastIds.size} guest${selectedBlastIds.size === 1 ? "" : "s"}`}
+            </button>
+          </div>
+        </div>
+
+        {/* Live preview */}
+        <div
+          className="rounded-xl overflow-hidden self-start"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div
+            className="px-4 py-2 text-xs font-medium"
+            style={{
+              background: "var(--surface-2)",
+              color: "var(--muted)",
+              borderBottom: "1px solid var(--border)",
+            }}
+          >
+            Live Preview &mdash; {"{{name}}"} shows as &ldquo;Preview Guest&rdquo;
+          </div>
+          <iframe
+            srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="margin:0;padding:24px;background:#f5f5f5;">${blastPreviewHtml}</body></html>`}
+            style={{ width: "100%", height: 560, border: "none", display: "block", background: "#f5f5f5" }}
+            title="Blast Preview"
+          />
+        </div>
       </div>
       )}
 

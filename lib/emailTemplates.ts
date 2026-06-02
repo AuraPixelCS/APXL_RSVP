@@ -15,13 +15,23 @@ export interface RsvpConfirmEmailOpts {
   showTitleOnBanner?: boolean;
 }
 
+/** Minimal shape needed to build a calendar link — satisfied by both the
+ *  confirmation and blast email option objects. */
+interface CalendarFields {
+  eventTitle: string;
+  eventDate: string;
+  eventTime?: string;
+  venue?: string;
+  address?: string;
+}
+
 /** Build a Google Calendar TEMPLATE link from event date/time fields. */
-function buildCalendarUrl(opts: RsvpConfirmEmailOpts): string {
+function buildCalendarUrl(opts: CalendarFields, details?: string): string {
   const params = new URLSearchParams({
     action: "TEMPLATE",
     text: opts.eventTitle,
     location: [opts.venue, opts.address].filter(Boolean).join(", "),
-    details: `RSVP confirmed for ${opts.eventTitle}.`,
+    details: details ?? `RSVP confirmed for ${opts.eventTitle}.`,
   });
 
   // Convert YYYY-MM-DD + HH:MM into Google Calendar's expected basic ISO form.
@@ -286,6 +296,101 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
       <div style="background: #f7f7f7; padding: 20px 40px; text-align: center; border-top: 1px solid #e5e5e5;">
         <p style="font-size: 11px; color: #aaaaaa; margin: 0;">
           Powered by AuraPixel &middot; This is an automated message.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Email Blast Template ────────────────────────────────────────────────────
+//
+// Ad-hoc announcement email. Shares the branded white-card + banner header +
+// footer look of the other two templates, but the body is ENTIRELY the admin's
+// message — no RSVP-confirmation copy, no event-details table, no seat/QR. An
+// "Add to Google Calendar" CTA is appended when an event date is present. The
+// caller is expected to have already substituted {{name}} and {{event}} in
+// `body`. Pure string function — client-safe for live preview.
+
+export interface BlastEmailOpts {
+  name: string;
+  eventTitle: string;
+  /** Admin's message body; already {{name}}/{{event}}-substituted by the caller */
+  body: string;
+  /** Event date — when set, an "Add to Google Calendar" button is rendered. "YYYY-MM-DD" or pre-formatted. */
+  eventDate?: string;
+  /** "HH:MM" 24h, used to build the calendar link. Optional. */
+  eventTime?: string;
+  venue?: string;
+  address?: string;
+  /** Firebase Storage URL (or cid:...) — replaces the dark text header with an image */
+  bannerUrl?: string;
+  /** When true and a banner is set, render the event title in a strip below the banner */
+  showTitleOnBanner?: boolean;
+}
+
+export function buildBlastEmail(opts: BlastEmailOpts): string {
+  const titleStrip = opts.showTitleOnBanner
+    ? `<div style="background: #0a1628; padding: 14px 20px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 0.3px;">${opts.eventTitle}</h1>
+      </div>`
+    : "";
+
+  const header = opts.bannerUrl
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:580px;display:block;" /></div>${titleStrip}`
+    : `<div style="background: #0a1628; padding: 36px 40px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${opts.eventTitle}</h1>
+      </div>`;
+
+  // Render the admin's message: blank lines separate <p> blocks; single newlines
+  // become <br/> so the admin's line breaks survive.
+  const bodyHtml = opts.body
+    .trim()
+    .split(/\n\s*\n/)
+    .map(
+      (para) =>
+        `<p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">${para
+          .trim()
+          .replace(/\n/g, "<br/>")}</p>`
+    )
+    .join("");
+
+  // Add-to-Google-Calendar CTA — only when an event date is provided.
+  const calendarHtml = opts.eventDate
+    ? `
+        <!-- Add to Google Calendar CTA -->
+        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 20px auto 4px;">
+          <tr>
+            <td align="center" style="background: #1a6fd4; border-radius: 6px;">
+              <a href="${buildCalendarUrl(
+                { eventTitle: opts.eventTitle, eventDate: opts.eventDate, eventTime: opts.eventTime, venue: opts.venue, address: opts.address },
+                opts.eventTitle,
+              )}" target="_blank" style="display: inline-block; padding: 12px 24px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 600; color: #ffffff; text-decoration: none; border-radius: 6px; letter-spacing: 0.2px;">
+                Add to Google Calendar
+              </a>
+            </td>
+          </tr>
+        </table>`
+    : "";
+
+  return `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e5;">
+
+      ${header}
+
+      <!-- Body -->
+      <div style="padding: 40px 40px 32px;">
+        <p style="font-size: 15px; color: #222222; margin: 0 0 20px; line-height: 1.6;">
+          Dear <strong>${opts.name}</strong>,
+        </p>
+
+        ${bodyHtml}
+        ${calendarHtml}
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #0a1628; padding: 20px 40px; text-align: center;">
+        <p style="font-size: 11px; color: #4a6a9a; margin: 0;">
+          You are receiving this because you registered for ${opts.eventTitle}.
         </p>
       </div>
     </div>
