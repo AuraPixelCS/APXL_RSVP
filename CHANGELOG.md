@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.1.2] — 2026-06-03
+
+- **Fix Email Blast 504 on large sends (real fix): batch the send client-side.** Sending ~190 recipients in one request still timed the serverless function out even without the banner attachment — a single synchronous SMTP run of that size exceeds the gateway timeout. The Notifications page now dispatches the blast in **batches of 20 recipients per request** ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)), each completing in a few seconds. Shows live progress ("Sending… 60/188"), accumulates sent/failed across batches, and a single failed batch no longer aborts the rest. API unchanged.
+
 ## [2.1.1] — 2026-06-03
 
 - **Fix Email Blast 504 timeout on large sends**: the PEOPLElogy banner was embedded as a ~185KB CID attachment on *every* message, so a ~190-recipient blast pushed ~35MB through one SMTP connection and timed the serverless function out (504, 0 delivered). The blast now references the banner by its **hosted public URL** (`{host}{basePath}/EmailBanner.png`) instead of attaching it ([pages/api/blast.ts](pages/api/blast.ts)). The banner still renders identically in the email — this is the same hosted-URL mechanism `customRsvpConfirmBanner` already uses — but each email is now tiny and the full blast completes in ~20s. Transactional confirmation/entry-pass emails are unchanged and keep their CID attachment.

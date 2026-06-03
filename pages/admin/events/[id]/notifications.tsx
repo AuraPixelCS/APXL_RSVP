@@ -240,7 +240,7 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [selectedBlastIds, setSelectedBlastIds] = useState<Set<string>>(new Set());
   const [blastSelInit, setBlastSelInit]         = useState(false);
   const [sendingBlast, setSendingBlast]         = useState(false);
-  const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number; firstError?: string } | null>(null);
+  const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number; total?: number; done?: boolean; firstError?: string } | null>(null);
   const [blastSearch, setBlastSearch]           = useState("");
 
   // ── Data loading ────────────────────────────────────────────────────────────
@@ -416,28 +416,51 @@ const NotificationsPage: NextPageWithLayout = () => {
     if (!event?.id || sendingBlast) return;
     if (!blastSubject.trim() || !blastBody.trim() || selectedBlastIds.size === 0) return;
     setSendingBlast(true);
-    setBlastResult(null);
+
+    // Send in small batches, one request each. A single request with ~200
+    // recipients times the serverless function out (504); ~20 per request
+    // finishes in a few seconds, well under any timeout, and lets us show
+    // running progress + survive a single batch failing.
+    const ids = [...selectedBlastIds];
+    const CHUNK = 20;
+    const total = ids.length;
+    let sent = 0;
+    let failed = 0;
+    let firstError: string | undefined;
+    setBlastResult({ sent: 0, failed: 0, total, done: false });
+
     try {
       const authHeaders = await getAuthHeaders();
-      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/blast`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({
-          eventId: event.id,
-          subject: blastSubject,
-          body: blastBody,
-          rsvpIds: [...selectedBlastIds],
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setBlastResult({ sent: data.sent ?? 0, failed: data.failed ?? 0, firstError: data.firstError });
-      } else {
-        setBlastResult({ sent: 0, failed: selectedBlastIds.size, firstError: data.error });
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        try {
+          const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/blast`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({
+              eventId: event.id,
+              subject: blastSubject,
+              body: blastBody,
+              rsvpIds: chunk,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            sent += data.sent ?? 0;
+            failed += data.failed ?? 0;
+            if (!firstError && data.firstError) firstError = data.firstError;
+          } else {
+            failed += chunk.length;
+            if (!firstError) firstError = `Server error (${res.status})`;
+          }
+        } catch (e) {
+          failed += chunk.length;
+          if (!firstError) firstError = e instanceof Error ? e.message : "Request failed";
+        }
+        setBlastResult({ sent, failed, total, firstError, done: i + CHUNK >= ids.length });
       }
-    } catch {
-      setBlastResult({ sent: 0, failed: selectedBlastIds.size });
     } finally {
+      setBlastResult((prev) => (prev ? { ...prev, done: true } : prev));
       setSendingBlast(false);
     }
   }, [event, sendingBlast, blastSubject, blastBody, selectedBlastIds]);
@@ -1200,9 +1223,11 @@ const NotificationsPage: NextPageWithLayout = () => {
               {blastResult && (
                 <div className="flex flex-col gap-0.5">
                   <span style={{ color: blastResult.failed > 0 ? "#f59e0b" : "#22c55e" }}>
-                    Sent {blastResult.sent}{blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
+                    {blastResult.done ? "Sent" : "Sending…"} {blastResult.sent}
+                    {blastResult.total ? ` of ${blastResult.total}` : ""}
+                    {blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
                   </span>
-                  {blastResult.failed > 0 && blastResult.firstError && (
+                  {blastResult.done && blastResult.failed > 0 && blastResult.firstError && (
                     <span className="truncate" style={{ color: "#ef4444", maxWidth: 260 }} title={blastResult.firstError}>
                       {blastResult.firstError}
                     </span>
@@ -1222,7 +1247,9 @@ const NotificationsPage: NextPageWithLayout = () => {
               className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: "var(--accent)", color: "#000" }}
             >
-              {sendingBlast ? "Sending…" : `Send blast to ${selectedBlastIds.size} guest${selectedBlastIds.size === 1 ? "" : "s"}`}
+              {sendingBlast
+                ? `Sending… ${(blastResult?.sent ?? 0) + (blastResult?.failed ?? 0)}/${blastResult?.total ?? selectedBlastIds.size}`
+                : `Send blast to ${selectedBlastIds.size} guest${selectedBlastIds.size === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>
