@@ -24,6 +24,7 @@ export interface RSVP {
   whatsappConfirmSent: boolean;
   whatsappQRSent: boolean;
   notifiedAt: string | null; // ISO timestamp; null = not yet notified via Notifications page
+  blastSentAt?: string | null; // ISO timestamp of the last email blast sent to this guest
   allocatedBy?: { uid: string; displayName: string } | null;
   submittedAt: string; // ISO timestamp
   updatedAt: string;

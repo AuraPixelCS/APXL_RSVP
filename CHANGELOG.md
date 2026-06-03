@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.2.0] — 2026-06-03
+
+### Email Blast now sends via Resend
+
+- **Switched the blast sender from Gmail SMTP to Resend** ([lib/resend.ts](lib/resend.ts), [pages/api/blast.ts](pages/api/blast.ts)). Gmail's per-account daily cap (~100–150 on a new account) and SMTP concurrency limits made a ~190-recipient blast impossible — it capped at ~140 with `550-5.4.5 Daily user sending limit exceeded`. Resend's batch API sends from the verified `aurapixel.live` domain in one fast HTTP call, no SMTP, no timeout, no tiny daily cap. New env vars: `RESEND_API_KEY`, `RESEND_FROM`, `RESEND_REPLY_TO`. Transactional confirmation/entry-pass emails still go via Gmail SMTP, unchanged.
+- **Per-recipient delivery tracking**: each blast stamps `blastSentAt` on the guest's RSVP ([types/index.ts](types/index.ts)). The blast recipient list gains an **"Unsent only"** filter so a follow-up send targets just guests who haven't received one yet — no duplicates.
+- **Banner unchanged**: still the hosted `EmailBanner.png` URL (or a custom banner), rendered identically by Resend.
+
 ## [2.1.2] — 2026-06-03
 
 - **Fix Email Blast 504 on large sends (real fix): batch the send client-side.** Sending ~190 recipients in one request still timed the serverless function out even without the banner attachment — a single synchronous SMTP run of that size exceeds the gateway timeout. The Notifications page now dispatches the blast in **batches of 20 recipients per request** ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)), each completing in a few seconds. Shows live progress ("Sending… 60/188"), accumulates sent/failed across batches, and a single failed batch no longer aborts the rest. API unchanged.

@@ -242,6 +242,7 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [sendingBlast, setSendingBlast]         = useState(false);
   const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number; total?: number; done?: boolean; firstError?: string } | null>(null);
   const [blastSearch, setBlastSearch]           = useState("");
+  const [blastUnsentOnly, setBlastUnsentOnly]   = useState(false);
 
   // ── Data loading ────────────────────────────────────────────────────────────
 
@@ -299,13 +300,17 @@ const NotificationsPage: NextPageWithLayout = () => {
   // ── Email blast recipients ───────────────────────────────────────────────────
   // Everyone who RSVP'd and didn't decline — pending, allocated, or checked_in.
   const blastRecipients = rsvps.filter((r) => r.status !== "not_attending");
+  const blastUnsentCount = blastRecipients.filter((r) => !r.blastSentAt).length;
   const filteredBlastRecipients = (() => {
+    let list = blastUnsentOnly ? blastRecipients.filter((r) => !r.blastSentAt) : blastRecipients;
     const q = blastSearch.trim().toLowerCase();
-    if (!q) return blastRecipients;
-    return blastRecipients.filter((r) =>
-      r.name.toLowerCase().includes(q) ||
-      r.email.toLowerCase().includes(q)
-    );
+    if (q) {
+      list = list.filter((r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q)
+      );
+    }
+    return list;
   })();
 
   // Default selection to "all recipients" once the RSVP list first loads.
@@ -1125,18 +1130,32 @@ const NotificationsPage: NextPageWithLayout = () => {
               </span>
             </div>
 
-            <input
-              type="text"
-              value={blastSearch}
-              onChange={(e) => setBlastSearch(e.target.value)}
-              placeholder="Search name or email…"
-              className="w-full rounded-lg px-3 py-1.5 text-xs outline-none"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--foreground)",
-                border: "1px solid var(--border)",
-              }}
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={blastSearch}
+                onChange={(e) => setBlastSearch(e.target.value)}
+                placeholder="Search name or email…"
+                className="flex-1 rounded-lg px-3 py-1.5 text-xs outline-none"
+                style={{
+                  background: "var(--surface-2)",
+                  color: "var(--foreground)",
+                  border: "1px solid var(--border)",
+                }}
+              />
+              <button
+                onClick={() => setBlastUnsentOnly((v) => !v)}
+                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
+                title="Show only guests who haven't received a blast yet"
+                style={{
+                  background: blastUnsentOnly ? "rgba(61,155,245,0.12)" : "var(--surface-2)",
+                  color: blastUnsentOnly ? "var(--accent)" : "var(--muted)",
+                  border: `1px solid ${blastUnsentOnly ? "rgba(61,155,245,0.3)" : "var(--border)"}`,
+                }}
+              >
+                Unsent only ({blastUnsentCount})
+              </button>
+            </div>
 
             <div
               className="rounded-lg overflow-hidden"

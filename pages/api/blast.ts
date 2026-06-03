@@ -1,14 +1,16 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
-import { sendBulkEmails } from "@/lib/email";
+import { sendResendBatch } from "@/lib/resend";
 import { buildBlastEmail } from "@/lib/emailTemplates";
 
 // ─── Send an ad-hoc email blast to selected guests ──────────────────────────
 //
 // A general announcement — no QR, no seat info, no calendar CTA. Just the
-// event's banner + the admin's subject and message body. Independent of
-// `notifiedAt`, so it can be re-sent any number of times.
+// event's banner + the admin's subject and message body. Sent via Resend
+// (verified domain, no Gmail concurrency/daily-cap limits). Independent of
+// `notifiedAt`; stamps `blastSentAt` per recipient so a re-send can target
+// only those who haven't received it yet.
 
 async function handler(req: AuthedRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -35,8 +37,8 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     return res.status(400).json({ error: "rsvpIds must be a non-empty array" });
   }
 
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    return res.status(500).json({ error: "Email is not configured (missing SMTP credentials)" });
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(500).json({ error: "Email is not configured (missing RESEND_API_KEY)" });
   }
 
   try {
@@ -48,11 +50,10 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     const event = eventSnap.data()!;
 
     // Resolve banner once. Unlike the transactional emails (which embed the
-    // PEOPLElogy banner as a ~185KB CID attachment per message), the blast
-    // references it by its HOSTED public URL instead. Attaching 185KB to each
-    // of ~200 emails is ~35MB through one SMTP connection — enough to time the
-    // serverless function out (504). A hosted URL keeps each email tiny and the
-    // whole blast fast.
+    // PEOPLElogy banner as a CID attachment), the blast references it by its
+    // HOSTED public URL — the same image, rendered identically, but it keeps
+    // each message tiny. Falls back to the public EmailBanner.png for
+    // PEOPLElogy events when no custom banner URL is set.
     let bannerUrl: string | undefined = event.customRsvpConfirmBanner;
     if (!bannerUrl && event.title.toLowerCase().includes("peoplelogy")) {
       const proto = (req.headers["x-forwarded-proto"] as string) || "https";
@@ -101,23 +102,32 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       };
     });
 
-    // …and send them all over one pooled, rate-limited connection.
-    const results = await sendBulkEmails(messages);
+    // …and hand the whole batch to Resend (one fast HTTP call, ≤100/batch).
+    // The client sends ~20 ids per request, so this is a single batch.
+    const result = await sendResendBatch(messages);
 
-    const sent = results.filter((r) => r.success).length;
-    const failed = results.length - sent;
-    const firstError = results.find((r) => !r.success)?.error;
-    if (firstError) console.error(`Blast: ${failed} failed. First error:`, firstError);
+    if (!result.success) {
+      console.error("Blast send failed:", result.error);
+      return res.status(200).json({ success: true, sent: 0, failed: targets.length, firstError: result.error });
+    }
 
-    return res.status(200).json({ success: true, sent, failed, firstError });
+    // Stamp blastSentAt on every delivered recipient so a follow-up send can
+    // target only those who haven't received it yet.
+    const sentAt = new Date().toISOString();
+    await Promise.allSettled(
+      targets.map((rsvp) =>
+        adminDb
+          .collection("events").doc(eventId)
+          .collection("rsvps").doc(rsvp.id)
+          .update({ blastSentAt: sentAt })
+      )
+    );
+
+    return res.status(200).json({ success: true, sent: targets.length, failed: 0 });
   } catch (err) {
     console.error("Blast error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
-
-// Bulk sending over Gmail takes time — give the function room beyond the
-// default so a large blast isn't cut off mid-send.
-export const config = { maxDuration: 60 };
 
 export default withAuth(handler, "admin");
