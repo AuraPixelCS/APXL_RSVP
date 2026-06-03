@@ -4,7 +4,7 @@ import { useDroppable } from "@dnd-kit/core";
 import type { Event, RSVP, SeatingConfig, VipTable } from "@/types";
 import SeatingConfigurator from "@/components/ui/SeatingConfigurator";
 import { getSeatLabel } from "@/lib/seatLabel";
-import { getTotalSeatCount, getVipSeatRanges } from "@/lib/seating";
+import { getTotalSeatCount, getVipSeatRanges, vipTableShortLabel } from "@/lib/seating";
 
 // ─── Props ─────────────────────────────────────────────────────────────────────
 
@@ -826,7 +826,7 @@ export function BanquetTableCell({
 }) {
   const occupiedSeats = tableSeats.filter((s) => s.status !== "available");
   const isVip = variant === "vip";
-  const innerLabel = isVip ? `T${tableIndex + 1}` : (tableLabel ?? `T${tableIndex + 1}`);
+  const innerLabel = isVip ? vipTableShortLabel(tableIndex) : (tableLabel ?? `T${tableIndex + 1}`);
   // In selection mode AND when the page wants table-level clicks (page-allocator
   // flow), the entire card becomes the click target — individual seat circles
   // stop being directly clickable so the only entry point is the table picker.
@@ -961,7 +961,7 @@ export function BanquetTableCell({
               <title>
                 {(() => {
                   const seatLabel = isVip
-                    ? `VIP · ${innerLabel} · Seat ${si + 1}`
+                    ? `${innerLabel} · Seat ${si + 1}`
                     : isTableMode
                       ? `Table ${Math.ceil(seat.seatNumber / seatsPerTable)}`
                       : `Seat ${seat.seatNumber}`;
@@ -1059,7 +1059,7 @@ export function SeatDetailPanel({
   const vipInfo = getVipSeatRanges(seatingConfig, totalStandardSeats)
     .find((r) => seat.seatNumber >= r.start && seat.seatNumber <= r.end);
   const isVip = !!vipInfo;
-  const label = isVip ? "VIP" : isTableMode ? "Table" : "Seat";
+  const label = isVip ? "VIP Table" : isTableMode ? "Table" : "Seat";
   const seatLabel = !isVip && !isTableMode ? getSeatLabel(seat.seatNumber, seatingConfig) : null;
   const displayNumber = isVip
     ? vipInfo!.tableIndex + 1

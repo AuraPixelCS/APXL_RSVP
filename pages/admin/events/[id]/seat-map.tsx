@@ -23,6 +23,7 @@ import {
   getTotalSeatCount,
   getVipSeatRanges,
   planGroupAllocation,
+  vipTableLongLabel,
   type AllocationStep,
 } from "@/lib/seating";
 import type { Event, RSVP, SeatingConfig } from "@/types";
@@ -508,8 +509,7 @@ function SeatMapPage() {
       );
       if (vipRange) {
         const seatInTable = rsvp.seatNumber! - vipRange.start + 1;
-        const label = vipRange.table.label ?? `T${vipRange.tableIndex + 1}`;
-        return `VIP ${label} · #${seatInTable}`;
+        return `${vipTableLongLabel(vipRange.tableIndex)} · #${seatInTable}`;
       }
       if (event.assignmentMode === "table") {
         const t = Math.ceil(rsvp.seatNumber! / seatsPerTable);

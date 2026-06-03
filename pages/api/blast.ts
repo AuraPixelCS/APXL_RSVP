@@ -3,7 +3,6 @@ import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { sendBulkEmails } from "@/lib/email";
 import { buildBlastEmail } from "@/lib/emailTemplates";
-import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 
 // ─── Send an ad-hoc email blast to selected guests ──────────────────────────
 //
@@ -48,13 +47,18 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     }
     const event = eventSnap.data()!;
 
-    // Resolve banner once (reuses the RSVP-confirmation banner + PEOPLElogy fallback).
+    // Resolve banner once. Unlike the transactional emails (which embed the
+    // PEOPLElogy banner as a ~185KB CID attachment per message), the blast
+    // references it by its HOSTED public URL instead. Attaching 185KB to each
+    // of ~200 emails is ~35MB through one SMTP connection — enough to time the
+    // serverless function out (504). A hosted URL keeps each email tiny and the
+    // whole blast fast.
     let bannerUrl: string | undefined = event.customRsvpConfirmBanner;
-    let attachments: any[] | undefined;
-    if (!bannerUrl) {
-      const fallback = loadPeoplelogyEmailBanner(event.title, "blast_banner");
-      bannerUrl = fallback.bannerUrl;
-      if (fallback.attachment) attachments = [fallback.attachment];
+    if (!bannerUrl && event.title.toLowerCase().includes("peoplelogy")) {
+      const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+      const host = req.headers.host;
+      const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+      if (host) bannerUrl = `${proto}://${host}${basePath}/EmailBanner.png`;
     }
 
     // Fetch the selected RSVPs, skipping any that declined.
@@ -94,7 +98,6 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           bannerUrl,
           showTitleOnBanner: !!event.showEventTitleOnBanner,
         }),
-        attachments,
       };
     });
 

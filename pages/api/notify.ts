@@ -5,7 +5,7 @@ import { sendEmail } from "@/lib/email";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildSeatEmail } from "@/lib/emailTemplates";
 import { getSeatLabel } from "@/lib/seatLabel";
-import { getVipSeatInfo } from "@/lib/seating";
+import { getVipSeatInfo, vipTableLongLabel } from "@/lib/seating";
 import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
@@ -98,7 +98,9 @@ async function sendOneNotification(
         seatNumber: seatPos ?? rsvp.seatNumber,
         tableNumber,
         rowLabel,
-        vipTableLabel: vipInfo?.table.label,
+        // The email's info row descriptor already reads "VIP Table", so the value
+        // cell shows just the number → renders as "VIP Table  1".
+        vipTableLabel: vipInfo ? String(vipInfo.tableIndex + 1) : undefined,
         vipSeatInTable: vipInfo?.seatInTable,
         bannerUrl,
         headerTitle: event.customEmailTitle,
@@ -107,7 +109,7 @@ async function sendOneNotification(
         // No qrDataUrl — cid:qr_code is used for actual email send
       });
       const subjectLabel = vipInfo
-        ? `VIP ${vipInfo.table.label} · Seat ${vipInfo.seatInTable}`
+        ? `${vipTableLongLabel(vipInfo.tableIndex)} · Seat ${vipInfo.seatInTable}`
         : tableNumber != null
           ? `Table #${tableNumber}`
           : rowLabel && seatPos
@@ -133,7 +135,7 @@ async function sendOneNotification(
       const templateName = process.env.WATI_SEAT_TEMPLATE_NAME ?? "seat_confirmed";
 
       const seatParam = vipInfo
-        ? `VIP ${vipInfo.table.label} #${vipInfo.seatInTable}`
+        ? `${vipTableLongLabel(vipInfo.tableIndex)} #${vipInfo.seatInTable}`
         : tableNumber != null
           ? `Table ${tableNumber}`
           : rowLabel && seatPos

@@ -63,6 +63,20 @@ export function getVipSeatInfo(
   return null;
 }
 
+/**
+ * VIP tables are auto-numbered by position — the custom `label` field no longer
+ * drives display. Keep both forms here so every surface (email, list, seat map)
+ * stays consistent. `tableIndex` is 0-based.
+ */
+/** Compact VIP label for dense UI, e.g. "VIP1". */
+export function vipTableShortLabel(tableIndex: number): string {
+  return `VIP${tableIndex + 1}`;
+}
+/** Readable VIP label for emails/dialogs, e.g. "VIP Table 1". */
+export function vipTableLongLabel(tableIndex: number): string {
+  return `VIP Table ${tableIndex + 1}`;
+}
+
 export function isVipSeat(
   seatNumber: number,
   config: SeatingConfig | undefined,
@@ -188,13 +202,11 @@ export function planGroupAllocation(args: PlanGroupAllocationArgs): AllocationPl
       byTable.get(range.tableIndex)!.push(n);
     }
     for (const [tIdx, seats] of byTable.entries()) {
-      const range = vipRanges.find((r) => r.tableIndex === tIdx);
-      const tableLabel = range?.table.label || `T${tIdx + 1}`;
       steps.push({
         tableIndex: tIdx,
         variant: "vip",
         seatNumbers: seats,
-        label: `VIP · ${tableLabel}`,
+        label: vipTableLongLabel(tIdx),
       });
     }
   } else if (isBanquet) {

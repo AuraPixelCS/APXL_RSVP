@@ -581,14 +581,13 @@ function VipTablesEditor({
               className="flex items-center gap-2 rounded-lg px-2 py-1.5"
               style={{ background: "var(--surface)", border: `1px solid ${VIP_GOLD_RING}` }}
             >
-              <input
-                type="text"
-                value={t.label}
-                onChange={(e) => update(idx, { label: e.target.value })}
-                placeholder="Label, e.g. Stage Front"
-                className="flex-1 min-w-0 px-2 py-1 rounded text-xs text-white"
-                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
-              />
+              {/* VIP tables are auto-numbered by position — name is not editable. */}
+              <span
+                className="flex-1 min-w-0 px-2 py-1 text-xs font-semibold truncate"
+                style={{ color: VIP_GOLD }}
+              >
+                VIP Table {idx + 1}
+              </span>
               <input
                 type="number"
                 min={4}

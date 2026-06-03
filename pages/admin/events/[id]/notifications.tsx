@@ -5,6 +5,7 @@ import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { getEvent, subscribeToRSVPs, updateEvent } from "@/lib/firestore";
 import { buildSeatEmail, buildBlastEmail } from "@/lib/emailTemplates";
+import { getVipSeatInfo, vipTableShortLabel } from "@/lib/seating";
 import type { Event, RSVP } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { storage } from "@/lib/firebase";
@@ -941,11 +942,16 @@ const NotificationsPage: NextPageWithLayout = () => {
                       </td>
                       {/* Seat / Table */}
                       <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: "var(--accent)" }}>
-                        {rsvp.seatNumber != null
-                          ? isTableMode
+                        {(() => {
+                          if (rsvp.seatNumber == null) return "—";
+                          // VIP seats sit above totalSeats — resolve them first so
+                          // they show "VIP1" instead of a bogus table number.
+                          const vip = getVipSeatInfo(rsvp.seatNumber, event?.seatingConfig, event?.totalSeats ?? 0);
+                          if (vip) return vipTableShortLabel(vip.tableIndex);
+                          return isTableMode
                             ? `T${Math.ceil(rsvp.seatNumber / seatsPerTable)}`
-                            : `#${rsvp.seatNumber}`
-                          : "—"}
+                            : `#${rsvp.seatNumber}`;
+                        })()}
                       </td>
                       {/* Last Notified */}
                       <td className="px-4 py-3 text-xs whitespace-nowrap">
