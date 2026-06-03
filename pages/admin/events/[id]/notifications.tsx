@@ -239,7 +239,7 @@ const NotificationsPage: NextPageWithLayout = () => {
   const [selectedBlastIds, setSelectedBlastIds] = useState<Set<string>>(new Set());
   const [blastSelInit, setBlastSelInit]         = useState(false);
   const [sendingBlast, setSendingBlast]         = useState(false);
-  const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number } | null>(null);
+  const [blastResult, setBlastResult]           = useState<{ sent: number; failed: number; firstError?: string } | null>(null);
   const [blastSearch, setBlastSearch]           = useState("");
 
   // ── Data loading ────────────────────────────────────────────────────────────
@@ -430,9 +430,9 @@ const NotificationsPage: NextPageWithLayout = () => {
       });
       const data = await res.json();
       if (res.ok) {
-        setBlastResult({ sent: data.sent ?? 0, failed: data.failed ?? 0 });
+        setBlastResult({ sent: data.sent ?? 0, failed: data.failed ?? 0, firstError: data.firstError });
       } else {
-        setBlastResult({ sent: 0, failed: selectedBlastIds.size });
+        setBlastResult({ sent: 0, failed: selectedBlastIds.size, firstError: data.error });
       }
     } catch {
       setBlastResult({ sent: 0, failed: selectedBlastIds.size });
@@ -1190,11 +1190,18 @@ const NotificationsPage: NextPageWithLayout = () => {
 
           {/* Result + send */}
           <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="text-xs" style={{ color: "var(--muted)" }}>
+            <div className="text-xs min-w-0" style={{ color: "var(--muted)" }}>
               {blastResult && (
-                <span style={{ color: blastResult.failed > 0 ? "#f59e0b" : "#22c55e" }}>
-                  Sent {blastResult.sent}{blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span style={{ color: blastResult.failed > 0 ? "#f59e0b" : "#22c55e" }}>
+                    Sent {blastResult.sent}{blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
+                  </span>
+                  {blastResult.failed > 0 && blastResult.firstError && (
+                    <span className="truncate" style={{ color: "#ef4444", maxWidth: 260 }} title={blastResult.firstError}>
+                      {blastResult.firstError}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             <button

@@ -1,7 +1,7 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
-import { sendEmail } from "@/lib/email";
+import { sendBulkEmails } from "@/lib/email";
 import { buildBlastEmail } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 
@@ -71,16 +71,19 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       return res.status(200).json({ success: true, sent: 0, failed: 0 });
     }
 
-    const results = await Promise.allSettled(
-      targets.map(async (rsvp) => {
-        const subbedSubject = subject
-          .replace(/\{\{name\}\}/g, rsvp.name)
-          .replace(/\{\{event\}\}/g, event.title);
-        const subbedBody = body
-          .replace(/\{\{name\}\}/g, rsvp.name)
-          .replace(/\{\{event\}\}/g, event.title);
+    // Build one personalized message per recipient…
+    const messages = targets.map((rsvp) => {
+      const subbedSubject = subject
+        .replace(/\{\{name\}\}/g, rsvp.name)
+        .replace(/\{\{event\}\}/g, event.title);
+      const subbedBody = body
+        .replace(/\{\{name\}\}/g, rsvp.name)
+        .replace(/\{\{event\}\}/g, event.title);
 
-        const html = buildBlastEmail({
+      return {
+        to: rsvp.email,
+        subject: subbedSubject,
+        html: buildBlastEmail({
           name: rsvp.name,
           eventTitle: event.title,
           body: subbedBody,
@@ -90,28 +93,28 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           address: event.address,
           bannerUrl,
           showTitleOnBanner: !!event.showEventTitleOnBanner,
-        });
+        }),
+        attachments,
+      };
+    });
 
-        const result = await sendEmail({
-          to: rsvp.email,
-          subject: subbedSubject,
-          html,
-          attachments,
-        });
-        if (!result.success) {
-          throw new Error((result as any).error || (result as any).message || "send failed");
-        }
-      })
-    );
+    // …and send them all over one pooled, rate-limited connection.
+    const results = await sendBulkEmails(messages);
 
-    const sent = results.filter((r) => r.status === "fulfilled").length;
-    const failed = results.filter((r) => r.status === "rejected").length;
+    const sent = results.filter((r) => r.success).length;
+    const failed = results.length - sent;
+    const firstError = results.find((r) => !r.success)?.error;
+    if (firstError) console.error(`Blast: ${failed} failed. First error:`, firstError);
 
-    return res.status(200).json({ success: true, sent, failed });
+    return res.status(200).json({ success: true, sent, failed, firstError });
   } catch (err) {
     console.error("Blast error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+// Bulk sending over Gmail takes time — give the function room beyond the
+// default so a large blast isn't cut off mid-send.
+export const config = { maxDuration: 60 };
 
 export default withAuth(handler, "admin");

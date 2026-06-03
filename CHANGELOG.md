@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.0] — 2026-06-03
+
+### Email Blast — ad-hoc announcements to guests
+
+- **New "Email Blast" tab** on the Notifications page ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)): admins compose a one-off announcement (separate Subject + Message fields) and send it to all or a hand-picked subset of an event's guests. No QR, no seat info — just the message on the branded template with the RSVP-confirmation banner. `{{name}}` and `{{event}}` placeholders are substituted per recipient. Independent of `notifiedAt`, so it can be re-sent any time.
+- **Recipient checklist** with select-all, search, and per-guest checkboxes (defaults to everyone who RSVP'd except those marked not-attending) plus a live email preview.
+- **New blast email template** `buildBlastEmail` ([lib/emailTemplates.ts](lib/emailTemplates.ts)) — shares the branded card/banner/footer look of the existing emails; body is the admin's message only. Includes an **Add to Google Calendar** CTA built from the event date/time (reuses `buildCalendarUrl`). Existing confirmation and entry-pass emails are unchanged.
+- **New API route** [pages/api/blast.ts](pages/api/blast.ts) — `withAuth(handler, "admin")`, `maxDuration: 60`.
+- **Reliable bulk sending**: new `sendBulkEmails` ([lib/email.ts](lib/email.ts)) sends over a single pooled, rate-limited Gmail connection (maxConnections 4, ~8/sec) instead of opening a fresh login per email. Fixes the `421 too many concurrent connections` failures that capped large blasts at ~13 delivered. Failures now surface the first error message in the UI.
+
 ## [2.0.2] — 2026-05-30
 
 - **Settings → Account panel alignment**: container widened from `max-w-lg` → `max-w-2xl` to match Workspace. Password and Session cards now share one identical horizontal layout (title + sub-text on left, action button on right) — eliminates the row-stacking inconsistency where Password's button sat on a separate line. Profile card gets a divider above the Save row. Button touch targets bumped to `px-4 py-2` ([pages/admin/settings.tsx](pages/admin/settings.tsx)).
