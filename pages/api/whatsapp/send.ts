@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { sendWhatsAppTemplate, sendWhatsAppImage } from "@/lib/whatsapp";
 import { adminDb } from "@/lib/firebaseAdmin";
+import { formatAssignment } from "@/lib/seatLabel";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -58,10 +59,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       // We need a public URL for the QR image — for now use a placeholder approach
       // In production, upload to Firebase Storage and get public URL
+      const assignment = formatAssignment(rsvp.seatNumber, event as never);
+      const seatLine = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
       const result = await sendWhatsAppImage(
         rsvp.phone,
         `${process.env.NEXT_PUBLIC_BASE_URL || "https://rsvp.aurapixel.com"}/api/qr/image?token=${encodeURIComponent(rsvp.qrToken)}`,
-        `🎟️ Your ticket for ${event.title}\nSeat #${rsvp.seatNumber}\n\nShow this QR code at the entrance.`
+        `🎟️ Your ticket for ${event.title}\n${seatLine}\n\nShow this QR code at the entrance.`
       );
 
       if (result.success) {

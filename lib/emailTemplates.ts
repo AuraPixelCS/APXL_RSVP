@@ -172,6 +172,12 @@ export interface SeatEmailOpts {
   vipSeatInTable?: number;
   /** Row letter (e.g. "A"). When provided in seat mode, email shows a separate "Row" row above "Seat No." */
   rowLabel?: string;
+  /**
+   * Pre-formatted assignment rows (from formatAssignment().rows). When provided,
+   * these drive the "Event Details" assignment block — the single source of truth
+   * for the seat/table scheme. Falls back to the legacy fields when absent.
+   */
+  assignmentRows?: { label: string; value: string; vip?: boolean }[];
   /** base64 data URL (data:image/png;base64,...) used for live preview only */
   qrDataUrl?: string;
   /** Admin-editable body paragraph. Supports {{name}} and {{event}} variables. */
@@ -185,13 +191,48 @@ export interface SeatEmailOpts {
 }
 
 export function buildSeatEmail(opts: SeatEmailOpts): string {
-  const isVip = !!opts.vipTableLabel;
+  const useRows = opts.assignmentRows && opts.assignmentRows.length > 0;
+  const isVip = useRows ? opts.assignmentRows!.some((r) => r.vip) : !!opts.vipTableLabel;
+
+  // Noun for the "… Confirmed" header strip + body sentence ("table" vs "seat").
+  const confirmNoun = useRows
+    ? (opts.assignmentRows![0].label.toLowerCase().includes("table") ? "Table" : "Seat")
+    : (opts.tableNumber != null ? "Table" : "Seat");
+
   const assignLabel = isVip
     ? "VIP Seat"
     : opts.tableNumber != null ? "Table No." : "Seat No.";
   const assignValue = isVip
     ? (opts.vipSeatInTable ?? opts.seatNumber)
     : opts.tableNumber != null ? opts.tableNumber : opts.seatNumber;
+
+  // Assignment block inside the "Event Details" table. Prefer the structured
+  // rows (single source of truth) and fall back to the legacy Row/VIP/assign rows.
+  const assignmentRowsHtml = useRows
+    ? opts.assignmentRows!
+        .map(
+          (r) => `<tr>
+              <td style="padding: 5px 0; color: #888888;">${r.label}</td>
+              <td style="padding: 5px 0; font-size: ${r.vip ? 16 : 18}px; font-weight: 700; color: ${r.vip ? "#b7791f" : "#111111"};">${r.value}</td>
+            </tr>`
+        )
+        .join("")
+    : `${opts.tableNumber == null && opts.rowLabel && !isVip
+          ? `<tr>
+              <td style="padding: 5px 0; color: #888888;">Row</td>
+              <td style="padding: 5px 0; font-size: 18px; font-weight: 700; color: #111111;">${opts.rowLabel}</td>
+            </tr>`
+          : ""}
+        ${isVip
+          ? `<tr>
+              <td style="padding: 5px 0; color: #888888;">VIP Table</td>
+              <td style="padding: 5px 0; font-size: 16px; font-weight: 700; color: #b7791f;">${opts.vipTableLabel}</td>
+            </tr>`
+          : ""}
+        <tr>
+          <td style="padding: 5px 0; color: #888888;">${assignLabel}</td>
+          <td style="padding: 5px 0; font-size: 18px; font-weight: 700; color: #111111;">#${assignValue}</td>
+        </tr>`;
 
   // Substitute {{name}} and {{event}} variables in custom body
   const resolvedBody = (opts.customBody ?? "").trim()
@@ -201,14 +242,14 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
     : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        Your ${opts.tableNumber != null ? "table" : "seat"} has been confirmed for <strong>${opts.eventTitle}</strong>.
+        Your ${confirmNoun.toLowerCase()} has been confirmed for <strong>${opts.eventTitle}</strong>.
         Please find your entry QR pass below &mdash; show this at the entrance on the day of the event.
       </p>`;
 
   const seatTitleStrip = opts.showTitleOnBanner
     ? `<div style="background: #111111; padding: 14px 20px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${opts.tableNumber != null ? "Table" : "Seat"} Confirmed &#x2705;</p>
+        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${confirmNoun} Confirmed &#x2705;</p>
       </div>`
     : "";
 
@@ -217,7 +258,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
     ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:560px;display:block;" /></div>${seatTitleStrip}`
     : `<div style="background: #111111; padding: 32px 40px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${opts.tableNumber != null ? "Table" : "Seat"} Confirmed &#x2705;</p>
+        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmNoun} Confirmed &#x2705;</p>
       </div>`;
 
   // Address row (only if present)
@@ -261,22 +302,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
               <td style="padding: 5px 0; font-weight: 600;">${opts.venue}</td>
             </tr>
             ${addressRow}
-            ${opts.tableNumber == null && opts.rowLabel && !isVip
-              ? `<tr>
-              <td style="padding: 5px 0; color: #888888;">Row</td>
-              <td style="padding: 5px 0; font-size: 18px; font-weight: 700; color: #111111;">${opts.rowLabel}</td>
-            </tr>`
-              : ""}
-            ${isVip
-              ? `<tr>
-              <td style="padding: 5px 0; color: #888888;">VIP Table</td>
-              <td style="padding: 5px 0; font-size: 16px; font-weight: 700; color: #b7791f;">${opts.vipTableLabel}</td>
-            </tr>`
-              : ""}
-            <tr>
-              <td style="padding: 5px 0; color: #888888;">${assignLabel}</td>
-              <td style="padding: 5px 0; font-size: 18px; font-weight: 700; color: #111111;">#${assignValue}</td>
-            </tr>
+            ${assignmentRowsHtml}
           </table>
         </div>
 

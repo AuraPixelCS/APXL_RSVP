@@ -933,6 +933,8 @@ const EventDetailPage: NextPageWithLayout = () => {
         onDeleteRsvp={isAdmin ? handleDeleteRsvp : undefined}
         deletingRsvpId={deletingRsvpId}
         assignmentMode={event?.assignmentMode}
+        seatingConfig={event?.seatingConfig}
+        totalSeats={event?.totalSeats}
         googleFormMode={googleFormMode}
         formMappings={formMappings}
         starredFieldId={starredFieldId}

@@ -68,9 +68,9 @@ export function getVipSeatInfo(
  * drives display. Keep both forms here so every surface (email, list, seat map)
  * stays consistent. `tableIndex` is 0-based.
  */
-/** Compact VIP label for dense UI, e.g. "VIP1". */
+/** Compact VIP label for dense UI, e.g. "V1". */
 export function vipTableShortLabel(tableIndex: number): string {
-  return `VIP${tableIndex + 1}`;
+  return `V${tableIndex + 1}`;
 }
 /** Readable VIP label for emails/dialogs, e.g. "VIP Table 1". */
 export function vipTableLongLabel(tableIndex: number): string {

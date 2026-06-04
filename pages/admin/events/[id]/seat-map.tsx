@@ -18,12 +18,10 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { subscribeToRSVPs, getEvent, updateRSVP } from "@/lib/firestore";
 import { getAuthHeaders } from "@/lib/auth";
-import { getSeatLabel } from "@/lib/seatLabel";
+import { formatAssignment } from "@/lib/seatLabel";
 import {
   getTotalSeatCount,
-  getVipSeatRanges,
   planGroupAllocation,
-  vipTableLongLabel,
   type AllocationStep,
 } from "@/lib/seating";
 import type { Event, RSVP, SeatingConfig } from "@/types";
@@ -502,24 +500,10 @@ function SeatMapPage() {
   // ── Seat-label derivation for guest cards ──────────────────────────────────
   const renderSeatLabel = useCallback(
     (rsvp: RSVP): string | null => {
-      if (rsvp.seatNumber == null || !event) return null;
-      // VIP?
-      const vipRange = getVipSeatRanges(event.seatingConfig, event.totalSeats).find(
-        (r) => rsvp.seatNumber! >= r.start && rsvp.seatNumber! <= r.end
-      );
-      if (vipRange) {
-        const seatInTable = rsvp.seatNumber! - vipRange.start + 1;
-        return `${vipTableLongLabel(vipRange.tableIndex)} · #${seatInTable}`;
-      }
-      if (event.assignmentMode === "table") {
-        const t = Math.ceil(rsvp.seatNumber! / seatsPerTable);
-        return `Table ${t}`;
-      }
-      const cfg = event.seatingConfig ?? { style: "theater" as const, seatsPerRow: 10 };
-      const lbl = getSeatLabel(rsvp.seatNumber!, cfg);
-      return lbl ? `${lbl.row}${lbl.pos}` : `#${rsvp.seatNumber}`;
+      if (!event) return null;
+      return formatAssignment(rsvp.seatNumber, event)?.long ?? null;
     },
-    [event, seatsPerTable]
+    [event]
   );
 
   // ── DnD sensors ────────────────────────────────────────────────────────────

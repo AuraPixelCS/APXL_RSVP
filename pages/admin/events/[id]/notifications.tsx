@@ -5,7 +5,7 @@ import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
 import { getEvent, subscribeToRSVPs, updateEvent } from "@/lib/firestore";
 import { buildSeatEmail, buildBlastEmail } from "@/lib/emailTemplates";
-import { getVipSeatInfo, vipTableShortLabel } from "@/lib/seating";
+import { formatAssignment } from "@/lib/seatLabel";
 import type { Event, RSVP } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { storage } from "@/lib/firebase";
@@ -473,7 +473,6 @@ const NotificationsPage: NextPageWithLayout = () => {
   // ── Email preview HTML ───────────────────────────────────────────────────────
 
   const isTableMode = event?.assignmentMode === "table";
-  const seatsPerTable = event?.seatingConfig?.seatsPerTable ?? 10;
 
   const previewHtml = event
     ? buildSeatEmail({
@@ -484,7 +483,7 @@ const NotificationsPage: NextPageWithLayout = () => {
         venue: event.venue,
         address: event.address,
         seatNumber: 1,
-        tableNumber: isTableMode ? 1 : undefined,
+        assignmentRows: formatAssignment(1, event)?.rows,
         qrDataUrl: PREVIEW_QR,
         bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
         showTitleOnBanner: showTitle,
@@ -970,16 +969,9 @@ const NotificationsPage: NextPageWithLayout = () => {
                       </td>
                       {/* Seat / Table */}
                       <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: "var(--accent)" }}>
-                        {(() => {
-                          if (rsvp.seatNumber == null) return "—";
-                          // VIP seats sit above totalSeats — resolve them first so
-                          // they show "VIP1" instead of a bogus table number.
-                          const vip = getVipSeatInfo(rsvp.seatNumber, event?.seatingConfig, event?.totalSeats ?? 0);
-                          if (vip) return vipTableShortLabel(vip.tableIndex);
-                          return isTableMode
-                            ? `T${Math.ceil(rsvp.seatNumber / seatsPerTable)}`
-                            : `#${rsvp.seatNumber}`;
-                        })()}
+                        {event
+                          ? formatAssignment(rsvp.seatNumber, event)?.short ?? "—"
+                          : "—"}
                       </td>
                       {/* Last Notified */}
                       <td className="px-4 py-3 text-xs whitespace-nowrap">

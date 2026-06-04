@@ -4,7 +4,8 @@ import { format } from "date-fns";
 import { useDebounce } from "use-debounce";
 import StatusChip from "./StatusChip";
 import SeatBadge from "./SeatBadge";
-import type { RSVP, RSVPStatus, FieldMapping } from "@/types";
+import { formatAssignment } from "@/lib/seatLabel";
+import type { RSVP, RSVPStatus, FieldMapping, SeatingConfig } from "@/types";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +18,9 @@ interface RSVPTableProps {
   onDeleteRsvp?: (rsvpId: string) => void;
   deletingRsvpId?: string | null;
   assignmentMode?: "seat" | "table";
+  // Event seating context — needed to format the seat/table label consistently.
+  seatingConfig?: SeatingConfig;
+  totalSeats?: number;
   // Google Form mode
   googleFormMode?: boolean;
   formMappings?: FieldMapping[];
@@ -31,6 +35,12 @@ const STATUS_FILTERS: { label: string; value: RSVPStatus | "all" }[] = [
   { label: "Allocated",     value: "allocated"    },
   { label: "Checked In",    value: "checked_in"   },
   { label: "Not Attending", value: "not_attending"},
+];
+
+const SORT_OPTIONS: { label: string; value: "az" | "za" | "vip" }[] = [
+  { label: "A–Z",       value: "az"  },
+  { label: "Z–A",       value: "za"  },
+  { label: "VIP first", value: "vip" },
 ];
 
 function splitName(name: string): [string, string] {
@@ -98,8 +108,9 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-function RsvpInfoModal({ rsvp, onClose, assignmentMode }: { rsvp: RSVP; onClose: () => void; assignmentMode?: "seat" | "table" }) {
+function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeats }: { rsvp: RSVP; onClose: () => void; assignmentMode?: "seat" | "table"; seatingConfig?: SeatingConfig; totalSeats?: number }) {
   const seatLabel = assignmentMode === "table" ? "Table" : "Seat";
+  const assignment = formatAssignment(rsvp.seatNumber, { assignmentMode, totalSeats: totalSeats ?? 0, seatingConfig });
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -138,9 +149,8 @@ function RsvpInfoModal({ rsvp, onClose, assignmentMode }: { rsvp: RSVP; onClose:
           <InfoRow label="Job Title" value={rsvp.jobTitle} />
           <InfoRow label="Industry" value={rsvp.industry} />
           <InfoRow label="Phone" value={rsvp.phone} />
-          <InfoRow label={`${seatLabel} Number`} value={rsvp.seatNumber != null ? String(rsvp.seatNumber) : null} />
+          <InfoRow label={`${seatLabel}`} value={assignment ? assignment.long : null} />
           <InfoRow label="Allocated By" value={rsvp.allocatedBy?.displayName ?? null} />
-          <InfoRow label="+1 Guest" value={rsvp.plusOne ? (rsvp.plusOneName || "Yes") : null} />
           <InfoRow label="Dietary Restrictions" value={rsvp.dietaryRestrictions} />
           <InfoRow label="Message / Notes" value={rsvp.message} />
           <InfoRow label="Submitted" value={format(new Date(rsvp.submittedAt), "dd MMM yyyy, HH:mm")} />
@@ -161,6 +171,8 @@ export default function RSVPTable({
   onDeleteRsvp,
   deletingRsvpId,
   assignmentMode,
+  seatingConfig,
+  totalSeats,
   googleFormMode = false,
   formMappings = [],
   starredFieldId = null,
@@ -168,6 +180,7 @@ export default function RSVPTable({
   const [search, setSearch]             = useState("");
   const [debouncedSearch]               = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<RSVPStatus | "all">("all");
+  const [sortBy, setSortBy]             = useState<"default" | "az" | "za" | "vip">("default");
   const [infoRsvp, setInfoRsvp]         = useState<RSVP | null>(null);
 
   const filtered = useMemo(() => {
@@ -184,8 +197,19 @@ export default function RSVPTable({
           r.partOf?.toLowerCase().includes(q)
       );
     }
+    if (sortBy !== "default") {
+      items = [...items];
+      if (sortBy === "az" || sortBy === "za") {
+        items.sort((a, b) => a.name.localeCompare(b.name));
+        if (sortBy === "za") items.reverse();
+      } else if (sortBy === "vip") {
+        const isVip = (r: RSVP) =>
+          formatAssignment(r.seatNumber, { assignmentMode, totalSeats: totalSeats ?? 0, seatingConfig })?.isVip ? 0 : 1;
+        items.sort((a, b) => isVip(a) - isVip(b));
+      }
+    }
     return items;
-  }, [rsvps, statusFilter, debouncedSearch]);
+  }, [rsvps, statusFilter, debouncedSearch, sortBy, assignmentMode, totalSeats, seatingConfig]);
 
   // ── Derive column config from mappings ──────────────────────────────────────
 
@@ -211,7 +235,6 @@ export default function RSVPTable({
     1 + // phone
     3 + // part of, company, job title (hidden mobile)
     1 + // seat
-    1 + // +1
     1 + // submitted (hidden mobile)
     (starredLabel && googleFormMode ? 1 : 0) +
     1 + // status
@@ -252,6 +275,28 @@ export default function RSVPTable({
               {f.label}
             </button>
           ))}
+        </div>
+
+        {/* Sort */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {SORT_OPTIONS.map((s) => {
+            const active = sortBy === s.value;
+            const gold = s.value === "vip";
+            return (
+              <button
+                key={s.value}
+                onClick={() => setSortBy(active ? "default" : s.value)}
+                className="px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer"
+                style={{
+                  background: active ? (gold ? "rgba(212,175,55,0.14)" : "var(--accent-subtle)") : "transparent",
+                  color:      active ? (gold ? "#d4af37" : "var(--accent)") : "var(--muted)",
+                  border: `1px solid ${active ? (gold ? "rgba(212,175,55,0.35)" : "rgba(61,155,245,0.3)") : "transparent"}`,
+                }}
+              >
+                {s.label}
+              </button>
+            );
+          })}
         </div>
 
         {googleFormMode && (
@@ -295,7 +340,6 @@ export default function RSVPTable({
                 <th className={`${TH} hidden lg:table-cell`} style={{ color: "var(--muted)" }}>Job Title</th>
 
                 <th className={TH} style={{ color: "var(--muted)" }}>{seatLabel}</th>
-                <th className={TH} style={{ color: "var(--muted)" }}>+1</th>
 
                 <th className={`${TH} hidden lg:table-cell`} style={{ color: "var(--muted)" }}>Submitted</th>
 
@@ -360,11 +404,10 @@ export default function RSVPTable({
                           {rsvp.jobTitle || "—"}
                         </td>
 
-                        <td className={TD}><SeatBadge seat={rsvp.seatNumber} /></td>
-
-                        <td className={TD} style={{ fontSize: 12, color: rsvp.plusOne ? "#22c55e" : "var(--muted-2)" }}>
-                          {rsvp.plusOne ? (rsvp.plusOneName || "Yes") : "—"}
-                        </td>
+                        <td className={TD}>{(() => {
+                          const a = formatAssignment(rsvp.seatNumber, { assignmentMode, totalSeats: totalSeats ?? 0, seatingConfig });
+                          return <SeatBadge label={a?.short ?? null} vip={a?.isVip} />;
+                        })()}</td>
 
                         <td className={`${TD} hidden lg:table-cell`} style={{ fontSize: 12, fontFamily: "monospace", color: "var(--muted)" }}>
                           {format(new Date(rsvp.submittedAt), "dd MMM HH:mm")}
@@ -476,6 +519,8 @@ export default function RSVPTable({
             rsvp={infoRsvp}
             onClose={() => setInfoRsvp(null)}
             assignmentMode={assignmentMode}
+            seatingConfig={seatingConfig}
+            totalSeats={totalSeats}
           />
         )}
       </AnimatePresence>

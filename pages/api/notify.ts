@@ -4,8 +4,7 @@ import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { sendEmail } from "@/lib/email";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildSeatEmail } from "@/lib/emailTemplates";
-import { getSeatLabel } from "@/lib/seatLabel";
-import { getVipSeatInfo, vipTableLongLabel } from "@/lib/seating";
+import { formatAssignment } from "@/lib/seatLabel";
 import QRCode from "qrcode";
 import fs from "fs";
 import path from "path";
@@ -24,30 +23,8 @@ async function sendOneNotification(
     .replace(/\{\{name\}\}/g, rsvp.name)
     .replace(/\{\{event\}\}/g, event.title) || undefined;
 
-  // Detect VIP seats first — they bypass the standard row/table math because
-  // their seat numbers sit above event.totalSeats in a per-VIP-table range.
-  const vipInfo = getVipSeatInfo(rsvp.seatNumber, event.seatingConfig, event.totalSeats);
-
-  // Derive table number when event uses table-based assignment (standard tables only).
-  const seatsPerTable = event.seatingConfig?.seatsPerTable ?? 10;
-  const tableNumber: number | undefined = !vipInfo && event.assignmentMode === "table"
-    ? Math.ceil(rsvp.seatNumber / seatsPerTable)
-    : undefined;
-
-  // In seat mode, derive row + position-within-row from the global seatNumber.
-  // Only meaningful for grid/runway-style layouts; banquet variants describe seats
-  // by table number instead, so we skip the row label there.
-  let rowLabel: string | undefined;
-  let seatPos: number | undefined;
-  const rowableStyle =
-    event.seatingConfig &&
-    event.seatingConfig.style !== "banquet" &&
-    event.seatingConfig.style !== "banquet-runway";
-  if (!vipInfo && event.assignmentMode !== "table" && rowableStyle) {
-    const { row, pos } = getSeatLabel(rsvp.seatNumber, event.seatingConfig);
-    rowLabel = row;
-    seatPos = pos;
-  }
+  // Single source of truth for the seat/table label (VIP-, mode- and style-aware).
+  const assignment = formatAssignment(rsvp.seatNumber, event);
 
   // Re-generate QR data URL from stored token
   const qrDataUrl = await QRCode.toDataURL(rsvp.qrToken, {
@@ -95,26 +72,15 @@ async function sendOneNotification(
         eventTime: event.time,
         venue: event.venue ?? "",
         address: event.address,
-        seatNumber: seatPos ?? rsvp.seatNumber,
-        tableNumber,
-        rowLabel,
-        // The email's info row descriptor already reads "VIP Table", so the value
-        // cell shows just the number → renders as "VIP Table  1".
-        vipTableLabel: vipInfo ? String(vipInfo.tableIndex + 1) : undefined,
-        vipSeatInTable: vipInfo?.seatInTable,
+        seatNumber: rsvp.seatNumber,
+        assignmentRows: assignment?.rows,
         bannerUrl,
         headerTitle: event.customEmailTitle,
         showTitleOnBanner: !!event.showEventTitleOnBanner,
         customBody,
         // No qrDataUrl — cid:qr_code is used for actual email send
       });
-      const subjectLabel = vipInfo
-        ? `${vipTableLongLabel(vipInfo.tableIndex)} · Seat ${vipInfo.seatInTable}`
-        : tableNumber != null
-          ? `Table #${tableNumber}`
-          : rowLabel && seatPos
-            ? `Seat ${rowLabel}${seatPos}`
-            : `Seat #${rsvp.seatNumber}`;
+      const subjectLabel = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
       await sendEmail({
         to: rsvp.email,
         subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
@@ -134,13 +100,7 @@ async function sendOneNotification(
       const internationalPhone = cleanPhone.startsWith("0") ? "6" + cleanPhone : cleanPhone;
       const templateName = process.env.WATI_SEAT_TEMPLATE_NAME ?? "seat_confirmed";
 
-      const seatParam = vipInfo
-        ? `${vipTableLongLabel(vipInfo.tableIndex)} #${vipInfo.seatInTable}`
-        : tableNumber != null
-          ? `Table ${tableNumber}`
-          : rowLabel && seatPos
-            ? `${rowLabel}${seatPos}`
-            : String(rsvp.seatNumber);
+      const seatParam = assignment ? assignment.long : String(rsvp.seatNumber);
       const result = await sendWhatsAppTemplate(internationalPhone, templateName, [
         { name: "name",  value: rsvp.name },
         { name: "event", value: event.title },
