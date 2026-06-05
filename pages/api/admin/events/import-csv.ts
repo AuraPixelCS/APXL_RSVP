@@ -1,7 +1,7 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { sendResendEmail } from "@/lib/resend";
-import { buildRsvpConfirmEmail } from "@/lib/emailTemplates";
+import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 
@@ -98,19 +98,21 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           bannerUrl = fallback.bannerUrl;
           if (fallback.attachment) attachments = [fallback.attachment];
         }
+        const confirmOpts = {
+          name: rsvpData.name,
+          eventTitle: event.title,
+          eventDate: event.date,
+          eventTime: event.time,
+          venue: event.venue ?? "",
+          address: event.address,
+          bannerUrl,
+          showTitleOnBanner: !!event.showEventTitleOnBanner,
+        };
         await sendResendEmail({
           to: rsvpData.email,
           subject: `RSVP Confirmation – ${event.title}`,
-          html: buildRsvpConfirmEmail({
-            name: rsvpData.name,
-            eventTitle: event.title,
-            eventDate: event.date,
-            eventTime: event.time,
-            venue: event.venue ?? "",
-            address: event.address,
-            bannerUrl,
-            showTitleOnBanner: !!event.showEventTitleOnBanner,
-          }),
+          html: buildRsvpConfirmEmail(confirmOpts),
+          text: buildRsvpConfirmText(confirmOpts),
           attachments,
         });
       } catch (e) {

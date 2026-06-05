@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.1] — 2026-06-05
+
+### Cross-provider deliverability hardening
+
+Content/header best-practices so messages are trusted by Gmail, Outlook/Hotmail, Yahoo and corporate (M365/Workspace) filters alike. Authentication (SPF/DKIM/DMARC on `aurapixel.live`) was already correct; this removes the remaining *content* reasons to junk.
+
+- **Every email now ships a plain-text part** alongside the HTML — HTML-only is a spam signal across all major providers. New `buildRsvpConfirmText` / `buildBlastText` ([lib/emailTemplates.ts](lib/emailTemplates.ts)); the entry pass already had one (v2.3.0).
+- **`List-Unsubscribe` header on the blast** ([pages/api/blast.ts](pages/api/blast.ts)) — Gmail/Yahoo bulk-sender guidance and an Outlook trust signal. New `headers` passthrough on `sendResendEmail`/`sendResendBatch` ([lib/resend.ts](lib/resend.ts)).
+- **Confirmation footer** now invites a reply (engagement signal) instead of "do not reply", consistent with the Reply-To we set.
+
+> Note: the dominant remaining lever for Outlook/Hotmail is **sender reputation** — a new sending domain is junked on first contact until it warms up. Operational fixes (guest whitelisting, gradual warm-up, engagement) matter more than any code change here.
+
 ## [2.3.0] — 2026-06-05
 
 ### All email now sends via Resend + online entry-pass fallback

@@ -43,6 +43,8 @@ export interface ResendMessage {
   attachments?: ResendAttachment[];
   /** Overrides the default `blastFrom()` sender. */
   from?: string;
+  /** Extra SMTP headers (e.g. List-Unsubscribe) — improves deliverability. */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -67,6 +69,7 @@ export async function sendResendEmail(
       html: msg.html,
       ...(msg.text ? { text: msg.text } : {}),
       ...(msg.attachments ? { attachments: msg.attachments } : {}),
+      ...(msg.headers ? { headers: msg.headers } : {}),
       ...(rt ? { replyTo: rt } : {}),
     });
     if (error) return { success: false, error: error.message };
@@ -103,6 +106,7 @@ export async function sendResendBatch(
         html: m.html,
         ...(m.text ? { text: m.text } : {}),
         ...(m.attachments ? { attachments: m.attachments } : {}),
+        ...(m.headers ? { headers: m.headers } : {}),
         ...(rt ? { replyTo: rt } : {}),
       }))
     );

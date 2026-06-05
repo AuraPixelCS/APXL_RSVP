@@ -2,7 +2,12 @@ import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { sendResendBatch } from "@/lib/resend";
-import { buildBlastEmail } from "@/lib/emailTemplates";
+import { buildBlastEmail, buildBlastText } from "@/lib/emailTemplates";
+
+// Unsubscribe contact for the List-Unsubscribe header (deliverability signal —
+// Gmail/Yahoo bulk guidelines + Outlook trust). Reply-to address, else the
+// sender mailbox on the verified domain.
+const UNSUB_MAILTO = process.env.RESEND_REPLY_TO ?? "events@aurapixel.live";
 
 // ─── Send an ad-hoc email blast to selected guests ──────────────────────────
 //
@@ -85,20 +90,25 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
         .replace(/\{\{name\}\}/g, rsvp.name)
         .replace(/\{\{event\}\}/g, event.title);
 
+      const blastOpts = {
+        name: rsvp.name,
+        eventTitle: event.title,
+        body: subbedBody,
+        eventDate: event.date,
+        eventTime: event.time,
+        venue: event.venue,
+        address: event.address,
+        bannerUrl,
+        showTitleOnBanner: !!event.showEventTitleOnBanner,
+      };
       return {
         to: rsvp.email,
         subject: subbedSubject,
-        html: buildBlastEmail({
-          name: rsvp.name,
-          eventTitle: event.title,
-          body: subbedBody,
-          eventDate: event.date,
-          eventTime: event.time,
-          venue: event.venue,
-          address: event.address,
-          bannerUrl,
-          showTitleOnBanner: !!event.showEventTitleOnBanner,
-        }),
+        html: buildBlastEmail(blastOpts),
+        text: buildBlastText(blastOpts),
+        headers: {
+          "List-Unsubscribe": `<mailto:${UNSUB_MAILTO}?subject=Unsubscribe>`,
+        },
       };
     });
 

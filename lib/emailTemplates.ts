@@ -15,6 +15,29 @@ export interface RsvpConfirmEmailOpts {
   showTitleOnBanner?: boolean;
 }
 
+/**
+ * Plain-text alternative for the RSVP confirmation. Every email should ship a
+ * text part alongside the HTML — an HTML-only message is a spam signal at Gmail,
+ * Outlook and most corporate filters.
+ */
+export function buildRsvpConfirmText(opts: RsvpConfirmEmailOpts): string {
+  const venueLine = [opts.venue, opts.address].filter(Boolean).join(", ");
+  const parts = [
+    `Dear ${opts.name},`,
+    "",
+    `Thank you for your RSVP to ${opts.eventTitle}.`,
+    "",
+    `Date: ${opts.eventDate}`,
+  ];
+  if (opts.eventTime) parts.push(`Time: ${opts.eventTime}`);
+  if (venueLine) parts.push(`Venue: ${venueLine}`);
+  parts.push("");
+  parts.push(`We look forward to welcoming you.`);
+  parts.push("");
+  parts.push(`The ${opts.eventTitle} Team`);
+  return parts.join("\n");
+}
+
 /** Minimal shape needed to build a calendar link — satisfied by both the
  *  confirmation and blast email option objects. */
 interface CalendarFields {
@@ -141,7 +164,7 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
       <!-- Footer -->
       <div style="background: #0a1628; padding: 20px 40px; text-align: center;">
         <p style="font-size: 11px; color: #4a6a9a; margin: 0;">
-          This is an automated confirmation. Please do not reply to this email.
+          Questions about your RSVP? Just reply to this email.
         </p>
       </div>
     </div>
@@ -364,6 +387,18 @@ export interface BlastEmailOpts {
   bannerUrl?: string;
   /** When true and a banner is set, render the event title in a strip below the banner */
   showTitleOnBanner?: boolean;
+}
+
+/** Plain-text alternative for a blast — strips the admin's HTML-ish body to text. */
+export function buildBlastText(opts: BlastEmailOpts): string {
+  const body = opts.body
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+  const parts = [`Dear ${opts.name},`, "", body, ""];
+  parts.push(`You are receiving this because you registered for ${opts.eventTitle}.`);
+  return parts.join("\n");
 }
 
 export function buildBlastEmail(opts: BlastEmailOpts): string {

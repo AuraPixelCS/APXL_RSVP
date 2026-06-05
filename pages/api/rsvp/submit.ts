@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { sendResendEmail } from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
-import { buildRsvpConfirmEmail } from "@/lib/emailTemplates";
+import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -88,19 +88,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         bannerUrl = fallback.bannerUrl;
         if (fallback.attachment) attachments = [fallback.attachment];
       }
+      const confirmOpts = {
+        name: rsvpData.name,
+        eventTitle: event.title,
+        eventDate: event.date,
+        eventTime: event.time,
+        venue: event.venue ?? "",
+        address: event.address,
+        bannerUrl,
+        showTitleOnBanner: !!event.showEventTitleOnBanner,
+      };
       const emailResult = await sendResendEmail({
         to: rsvpData.email,
         subject: `RSVP Confirmation – ${event.title}`,
-        html: buildRsvpConfirmEmail({
-          name: rsvpData.name,
-          eventTitle: event.title,
-          eventDate: event.date,
-          eventTime: event.time,
-          venue: event.venue ?? "",
-          address: event.address,
-          bannerUrl,
-          showTitleOnBanner: !!event.showEventTitleOnBanner,
-        }),
+        html: buildRsvpConfirmEmail(confirmOpts),
+        text: buildRsvpConfirmText(confirmOpts),
         attachments,
       });
       console.log("✉️ EMAIL LOG:", emailResult);
