@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.5.0] — 2026-06-05
+
+### Downloadable entry pass (image + PDF)
+
+- **The online pass page ([pages/pass.tsx](pages/pass.tsx)) now has "Download image" and "Download PDF" buttons** so guests can save their QR to their device. The image is the bare scannable QR (PNG); the PDF is a printable ticket with event, name, seat and the QR.
+- **New [pages/api/pass/pdf.ts](pages/api/pass/pdf.ts)** — generates the ticket PDF server-side with `pdf-lib` (pure-JS, serverless-safe), verifying the signed token like the pass page.
+- **[pages/api/qr/image.ts](pages/api/qr/image.ts)** gains a `?download=1` param (sets `Content-Disposition: attachment`) and now renders at 600px / error-correction H for crisper saves/prints.
+- **Removed the emoji** from the "View or download your entry pass" button in the entry-pass email ([lib/emailTemplates.ts](lib/emailTemplates.ts)).
+
 ## [2.3.1] — 2026-06-05
 
 ### Cross-provider deliverability hardening

@@ -12,6 +12,7 @@ import Head from "next/head";
 
 interface PassProps {
   valid: boolean;
+  token?: string;
   name?: string;
   eventTitle?: string;
   eventDate?: string;
@@ -23,6 +24,10 @@ interface PassProps {
 }
 
 export default function PassPage(props: PassProps) {
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const tok = encodeURIComponent(props.token ?? "");
+  const imgDownloadUrl = `${basePath}/api/qr/image?token=${tok}&download=1`;
+  const pdfDownloadUrl = `${basePath}/api/pass/pdf?t=${tok}`;
   return (
     <>
       <Head>
@@ -105,6 +110,49 @@ export default function PassPage(props: PassProps) {
               <p style={{ color: "#6b7280", fontSize: 11, margin: "12px 0 0" }}>
                 Show this QR code at the entrance. Do not share it.
               </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  marginTop: 18,
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <a
+                  href={imgDownloadUrl}
+                  download="entry-pass-qr.png"
+                  style={{
+                    flex: "1 1 130px",
+                    background: "#3d9bf5",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    padding: "11px 14px",
+                    borderRadius: 8,
+                  }}
+                >
+                  Download image
+                </a>
+                <a
+                  href={pdfDownloadUrl}
+                  style={{
+                    flex: "1 1 130px",
+                    background: "transparent",
+                    color: "#ffffff",
+                    textDecoration: "none",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    padding: "11px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #3d9bf5",
+                  }}
+                >
+                  Download PDF
+                </a>
+              </div>
             </div>
 
             <div
@@ -181,6 +229,7 @@ export const getServerSideProps: GetServerSideProps<PassProps> = async (ctx) => 
     return {
       props: {
         valid: true,
+        token,
         name: rsvp.name ?? "",
         eventTitle: event.title ?? "",
         eventDate: event.date ?? "",

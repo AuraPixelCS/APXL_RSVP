@@ -342,7 +342,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
           <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for the event above. Do not share this QR code.</p>
           ${opts.passUrl
             ? `<div style="margin-top: 18px;">
-            <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">🎫 View or download your entry pass</a>
+            <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">View or download your entry pass</a>
             <p style="font-size: 12px; color: #888888; margin: 10px 0 0;">Can't see the QR code above? Tap the button to open your pass.</p>
           </div>`
             : ""}
