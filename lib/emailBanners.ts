@@ -1,11 +1,12 @@
 import fs from "fs";
 import path from "path";
 
+// Resend-shaped inline attachment. `contentId` is referenced in the HTML as
+// `cid:<contentId>`; `content` is base64. Assignable to ResendAttachment.
 export interface BannerAttachment {
   filename: string;
   content: string;
-  encoding: string;
-  cid: string;
+  contentId: string;
 }
 
 export interface BannerFallback {
@@ -38,8 +39,7 @@ export function loadPeoplelogyEmailBanner(eventTitle: string, cid: string): Bann
     attachment: {
       filename: "EmailBanner.png",
       content: fs.readFileSync(bannerPath).toString("base64"),
-      encoding: "base64",
-      cid,
+      contentId: cid,
     },
   };
 }

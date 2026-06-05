@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.3.0] — 2026-06-05
+
+### All email now sends via Resend + online entry-pass fallback
+
+- **Fixes QR entry-pass emails landing in junk.** The v2.2.0 Resend migration only moved the *blast*; the **QR entry-pass** ([pages/api/notify.ts](pages/api/notify.ts)) and **RSVP-confirmation** emails ([submit.ts](pages/api/rsvp/submit.ts), [webhook.ts](pages/api/rsvp/webhook.ts), [import-csv.ts](pages/api/admin/events/import-csv.ts)) were still sent through **Gmail SMTP** from a `@gmail.com` address — no DMARC alignment to a branded domain, so spam filters junked roughly half of them. When junked, the email client blocks all images and the inline QR shows as a broken "can't open this file" icon (it was suppressed, not corrupted). **Every email now sends from the verified `aurapixel.live` domain via Resend**, so messages land in the inbox and the QR renders.
+- **New `sendResendEmail` (single send) + attachment/`text` support** on [lib/resend.ts](lib/resend.ts). Inline images use Resend's `contentId` (referenced as `cid:` in the HTML) — the QR stays embedded inline (small, ~1–2KB). Bulk entry-pass sends go through Resend's **batch API in chunks of 100**, replacing the per-recipient Gmail send (no SMTP connection churn, no rate-limit 429s on ~190 recipients). The entry-pass banner now uses the **hosted** `EmailBanner.png` URL (like the blast) to keep batch payloads small; confirmation emails keep the inline CID banner. All sends now include a plain-text part for better deliverability.
+- **New online entry pass** [pages/pass.tsx](pages/pass.tsx) — the entry-pass email now includes a **"View or download your entry pass"** button linking to `/pass?t=<signed-token>`. It's a plain text link (not a blocked image), so the QR stays reachable even if a message is ever filtered or a client blocks images. The page verifies the signed token, loads the event/seat, and renders the QR server-side — a self-contained digital ticket. New `passUrl` option on `buildSeatEmail` ([lib/emailTemplates.ts](lib/emailTemplates.ts)).
+- **Retired Gmail SMTP**: deleted `lib/email.ts` and removed the `nodemailer` / `@types/nodemailer` dependencies. `SMTP_*` env vars are no longer used. WhatsApp sending is unchanged.
+
 ## [2.2.0] — 2026-06-03
 
 ### Email Blast now sends via Resend

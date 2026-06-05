@@ -1,6 +1,6 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { sendEmail } from "@/lib/email";
+import { sendResendEmail } from "@/lib/resend";
 import { buildRsvpConfirmEmail } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
@@ -98,7 +98,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           bannerUrl = fallback.bannerUrl;
           if (fallback.attachment) attachments = [fallback.attachment];
         }
-        await sendEmail({
+        await sendResendEmail({
           to: rsvpData.email,
           subject: `RSVP Confirmation – ${event.title}`,
           html: buildRsvpConfirmEmail({

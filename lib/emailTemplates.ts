@@ -180,6 +180,12 @@ export interface SeatEmailOpts {
   assignmentRows?: { label: string; value: string; vip?: boolean }[];
   /** base64 data URL (data:image/png;base64,...) used for live preview only */
   qrDataUrl?: string;
+  /**
+   * Online entry-pass URL. When set, a "View / download your entry pass" button
+   * renders below the QR. This is a plain text link (not an image), so it stays
+   * reachable even when an email client blocks images — e.g. in the junk folder.
+   */
+  passUrl?: string;
   /** Admin-editable body paragraph. Supports {{name}} and {{event}} variables. */
   customBody?: string;
   /** Firebase Storage URL — replaces black header with an image */
@@ -311,6 +317,12 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
           <p style="font-size: 13px; color: #888888; margin: 0 0 16px; text-transform: uppercase; letter-spacing: 1px;">Your Entry Pass</p>
           <img src="${qrSrc}" alt="QR Entry Pass" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
           <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for the event above. Do not share this QR code.</p>
+          ${opts.passUrl
+            ? `<div style="margin-top: 18px;">
+            <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">🎫 View or download your entry pass</a>
+            <p style="font-size: 12px; color: #888888; margin: 10px 0 0;">Can't see the QR code above? Tap the button to open your pass.</p>
+          </div>`
+            : ""}
         </div>
 
         <p style="font-size: 13px; color: #555555; line-height: 1.6; margin: 0;">

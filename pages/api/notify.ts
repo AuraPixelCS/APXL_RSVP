@@ -1,23 +1,36 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
-import { sendEmail } from "@/lib/email";
+import {
+  isResendConfigured,
+  sendResendEmail,
+  sendResendBatch,
+  type ResendMessage,
+  type ResendAttachment,
+} from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildSeatEmail } from "@/lib/emailTemplates";
 import { formatAssignment } from "@/lib/seatLabel";
 import QRCode from "qrcode";
-import fs from "fs";
-import path from "path";
 
-// ─── Send notification to a single RSVP ─────────────────────────────────────
+// Resend's batch endpoint sends up to 100 messages per HTTP call.
+const RESEND_BATCH_SIZE = 100;
 
-async function sendOneNotification(
+// ─── Build the entry-pass email for one RSVP ────────────────────────────────
+//
+// The QR code is embedded INLINE as a CID attachment (small — a few KB) so it
+// renders without the recipient having to "load remote images". The banner, by
+// contrast, is referenced by its HOSTED public URL (it's ~185KB — embedding it
+// inline across a 100-message batch would blow Resend's request-size limit, the
+// same reason blast.ts uses a hosted banner). `origin` already includes the
+// app basePath (e.g. https://host/rsvp).
+
+async function buildEntryPassMessage(
   rsvp: any,
   event: any,
-  eventId: string,
-  rsvpId: string,
+  origin: string,
   htmlBody?: string
-): Promise<void> {
+): Promise<ResendMessage> {
   const rawBody = htmlBody ?? event.customEmailBody ?? "";
   const customBody = rawBody
     .replace(/\{\{name\}\}/g, rsvp.name)
@@ -26,74 +39,98 @@ async function sendOneNotification(
   // Single source of truth for the seat/table label (VIP-, mode- and style-aware).
   const assignment = formatAssignment(rsvp.seatNumber, event);
 
-  // Re-generate QR data URL from stored token
+  // Re-generate QR data URL from stored token, embed it inline (cid:qr_code).
   const qrDataUrl = await QRCode.toDataURL(rsvp.qrToken, {
     errorCorrectionLevel: "H",
     margin: 2,
     width: 300,
     color: { dark: "#000000", light: "#ffffff" },
   });
+  const attachments: ResendAttachment[] = [
+    {
+      filename: "qr-entry-pass.png",
+      content: qrDataUrl.split(",")[1],
+      contentId: "qr_code",
+    },
+  ];
 
-  // ── Email ──────────────────────────────────────────────────────────────────
-  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-    try {
-      let bannerUrl = event.customEmailBanner;
-      const attachments: any[] = [
-        {
-          filename: "qr-entry-pass.png",
-          content: qrDataUrl.split(",")[1],
-          encoding: "base64",
-          cid: "qr_code",
-        },
-      ];
-
-      if (event.title.toLowerCase().includes("peoplelogy") && !bannerUrl) {
-        bannerUrl = "cid:email_banner";
-        try {
-          const bannerPath = path.join(process.cwd(), "public", "EmailBanner.png");
-          if (fs.existsSync(bannerPath)) {
-            attachments.push({
-              filename: "EmailBanner.png",
-              path: bannerPath,
-              cid: "email_banner",
-            });
-          } else {
-             bannerUrl = undefined;
-          }
-        } catch (e) {
-           bannerUrl = undefined;
-        }
-      }
-
-      const html = buildSeatEmail({
-        name: rsvp.name,
-        eventTitle: event.title,
-        eventDate: event.date,
-        eventTime: event.time,
-        venue: event.venue ?? "",
-        address: event.address,
-        seatNumber: rsvp.seatNumber,
-        assignmentRows: assignment?.rows,
-        bannerUrl,
-        headerTitle: event.customEmailTitle,
-        showTitleOnBanner: !!event.showEventTitleOnBanner,
-        customBody,
-        // No qrDataUrl — cid:qr_code is used for actual email send
-      });
-      const subjectLabel = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
-      await sendEmail({
-        to: rsvp.email,
-        subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
-        html,
-        attachments,
-      });
-      console.log(`✉️  Email sent to ${rsvp.email}`);
-    } catch (e) {
-      console.error("Notify email error:", e);
-    }
+  // Banner: admin-provided URL, else the bundled PEOPLElogy banner by hosted URL.
+  let bannerUrl: string | undefined = event.customEmailBanner;
+  if (!bannerUrl && event.title.toLowerCase().includes("peoplelogy") && origin) {
+    bannerUrl = `${origin}/EmailBanner.png`;
   }
 
-  // ── WhatsApp ───────────────────────────────────────────────────────────────
+  // Online fallback pass — a plain link that survives image-blocking in junk.
+  const passUrl = origin
+    ? `${origin}/pass?t=${encodeURIComponent(rsvp.qrToken)}`
+    : undefined;
+
+  const html = buildSeatEmail({
+    name: rsvp.name,
+    eventTitle: event.title,
+    eventDate: event.date,
+    eventTime: event.time,
+    venue: event.venue ?? "",
+    address: event.address,
+    seatNumber: rsvp.seatNumber,
+    assignmentRows: assignment?.rows,
+    bannerUrl,
+    headerTitle: event.customEmailTitle,
+    showTitleOnBanner: !!event.showEventTitleOnBanner,
+    customBody,
+    passUrl,
+    // No qrDataUrl — cid:qr_code is used for the actual email send.
+  });
+
+  const subjectLabel = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
+
+  return {
+    to: rsvp.email,
+    subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
+    html,
+    text: buildEntryPassText(rsvp, event, subjectLabel, passUrl),
+    attachments,
+  };
+}
+
+// Plain-text alternative — improves deliverability (spam score) and a11y.
+function buildEntryPassText(
+  rsvp: any,
+  event: any,
+  label: string,
+  passUrl?: string
+): string {
+  const parts = [
+    `Hi ${rsvp.name},`,
+    "",
+    `Your entry pass for ${event.title} is confirmed.`,
+    "",
+    `Date: ${event.date}`,
+    `Time: ${event.time}`,
+  ];
+  if (event.venue) parts.push(`Venue: ${event.venue}`);
+  if (event.address) parts.push(`Address: ${event.address}`);
+  parts.push(label);
+  parts.push("");
+  parts.push("Your QR entry pass is attached to this email.");
+  if (passUrl) {
+    parts.push(`If you can't see the QR code, open your pass here: ${passUrl}`);
+  }
+  parts.push("");
+  parts.push("See you there!");
+  return parts.join("\n");
+}
+
+// ─── WhatsApp + mark-as-notified for one RSVP ───────────────────────────────
+
+async function sendWhatsAppAndMark(
+  rsvp: any,
+  event: any,
+  eventId: string,
+  rsvpId: string
+): Promise<void> {
+  const assignment = formatAssignment(rsvp.seatNumber, event);
+
   if (process.env.WATI_API_ENDPOINT && process.env.WATI_API_TOKEN) {
     try {
       const cleanPhone = rsvp.phone.replace(/[^0-9]/g, "");
@@ -112,7 +149,6 @@ async function sendOneNotification(
     }
   }
 
-  // ── Mark notifiedAt ────────────────────────────────────────────────────────
   await adminDb
     .collection("events")
     .doc(eventId)
@@ -128,11 +164,21 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
+  if (!isResendConfigured()) {
+    return res.status(500).json({ error: "RESEND_API_KEY is not configured" });
+  }
+
   const { eventId, rsvpId, bulk, htmlBody } = req.body;
 
   if (!eventId) {
     return res.status(400).json({ error: "eventId is required" });
   }
+
+  // Origin for hosted banner + online pass link (includes the app basePath).
+  const proto = (req.headers["x-forwarded-proto"] as string) || "https";
+  const host = req.headers.host;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const origin = host ? `${proto}://${host}${basePath}` : "";
 
   try {
     // Fetch event
@@ -160,14 +206,34 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
         return res.status(200).json({ success: true, notified: 0, failed: 0 });
       }
 
-      const results = await Promise.allSettled(
-        targets.map((rsvp) =>
-          sendOneNotification(rsvp, event, eventId, rsvp.id, htmlBody)
-        )
+      // Build every email up front, then send via Resend's batch API in chunks
+      // of 100 — one HTTP request per chunk, no SMTP connection churn, no
+      // per-message rate-limit 429s.
+      const messages = await Promise.all(
+        targets.map((rsvp) => buildEntryPassMessage(rsvp, event, origin, htmlBody))
       );
 
-      const notified = results.filter((r) => r.status === "fulfilled").length;
-      const failed   = results.filter((r) => r.status === "rejected").length;
+      let notified = 0;
+      let failed = 0;
+
+      for (let i = 0; i < messages.length; i += RESEND_BATCH_SIZE) {
+        const chunk = messages.slice(i, i + RESEND_BATCH_SIZE);
+        const chunkTargets = targets.slice(i, i + RESEND_BATCH_SIZE);
+        const result = await sendResendBatch(chunk);
+
+        if (result.success) {
+          notified += chunk.length;
+          // WhatsApp + mark notifiedAt only for the chunk that was accepted.
+          await Promise.allSettled(
+            chunkTargets.map((rsvp) =>
+              sendWhatsAppAndMark(rsvp, event, eventId, rsvp.id)
+            )
+          );
+        } else {
+          failed += chunk.length;
+          console.error("Bulk notify batch error:", result.error);
+        }
+      }
 
       return res.status(200).json({ success: true, notified, failed });
     }
@@ -194,7 +260,15 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       return res.status(400).json({ error: "RSVP has no QR token — allocate a seat first" });
     }
 
-    await sendOneNotification(rsvp, event, eventId, rsvpId, htmlBody);
+    const message = await buildEntryPassMessage(rsvp, event, origin, htmlBody);
+    const result = await sendResendEmail(message);
+    if (result.success) {
+      console.log(`✉️  Email sent to ${rsvp.email}`);
+    } else {
+      console.error("Notify email error:", result.error);
+    }
+
+    await sendWhatsAppAndMark(rsvp, event, eventId, rsvpId);
 
     return res.status(200).json({ success: true, notifiedAt: new Date().toISOString() });
 
