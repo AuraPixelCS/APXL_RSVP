@@ -120,6 +120,7 @@ export interface SeatingConfig {
   seatsPerRow?: number;   // theater, auditorium, classroom — default 10
   seatsPerTable?: number; // banquet, banquet-runway — default 10
   tablesPerSide?: number; // banquet, banquet-runway — tables per side per row (total per row = 2 × tablesPerSide)
+  frontRowTablesPerSide?: number; // banquet only — when set (< tablesPerSide), the FIRST row uses this many tables per side, dropping its inner tables to widen the front aisle. Unset = uniform rows.
   vipTables?: VipTable[]; // optional VIP tables rendered near the stage; seats are numbered above the standard range
 }
 

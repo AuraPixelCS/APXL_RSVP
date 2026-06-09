@@ -466,7 +466,7 @@ export function RunwaySeatMap({
 // ─── Banquet seat map ──────────────────────────────────────────────────────────
 
 export function BanquetSeatMap({
-  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
+  seats, seatsPerTable, tablesPerSide, frontRowTablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
   onSeatAssign, onSeatInspect, getSeatDropId, getTableDropId, onTableSelect,
@@ -474,6 +474,7 @@ export function BanquetSeatMap({
   seats: SeatInfo[]; // standard seats only (excludes VIP seats — those come via vipTableGroups)
   seatsPerTable: number;
   tablesPerSide?: number;
+  frontRowTablesPerSide?: number; // banquet only — smaller FIRST row (drops inner tables to widen front aisle)
   selectionMode: boolean;
   highlightedSeat: number | null;
   cancelledSeat: number | null;
@@ -531,18 +532,44 @@ export function BanquetSeatMap({
   // New mode: explicit tablesPerSide → fixed left/right structure per row.
   if (tablesPerSide != null) {
     const perRow = tablesPerSide * 2;
-    const rows: SeatInfo[][][] = [];
-    for (let i = 0; i < tables.length; i += perRow) {
-      rows.push(tables.slice(i, i + perRow));
+    // Optional smaller FIRST row: drop the inner tables nearest the centre so
+    // the front of the room gets a wider aisle / dance floor. Defaults to
+    // tablesPerSide (uniform rows — unchanged behaviour for every other event).
+    const frontPerSide = Math.max(1, Math.min(tablesPerSide, frontRowTablesPerSide ?? tablesPerSide));
+    const firstRowCount = frontPerSide * 2;
+    const hasFrontRow = frontPerSide < tablesPerSide;
+
+    // Build rows, recording each row's starting GLOBAL table index. tableIndex
+    // must stay equal to the seat-block index (tables[k] = seats k*spt+1…) so
+    // the positional label sites — caption `Table {tableIndex+1}` and the
+    // per-seat tooltip `ceil(seatNumber/spt)` — always agree.
+    const rows: { startTi: number; tables: SeatInfo[][]; perSide: number; isFront: boolean }[] = [];
+    if (tables.length > 0) {
+      rows.push({
+        startTi: 0,
+        tables: tables.slice(0, firstRowCount),
+        perSide: frontPerSide,
+        isFront: hasFrontRow,
+      });
+    }
+    for (let i = firstRowCount; i < tables.length; i += perRow) {
+      rows.push({ startTi: i, tables: tables.slice(i, i + perRow), perSide: tablesPerSide, isFront: false });
     }
 
     return (
       <div className="flex flex-col items-center gap-3">
         {stageAndVip}
-        {rows.map((rowTables, ri) => {
-          const leftTables  = rowTables.slice(0, tablesPerSide);
-          const rightTables = rowTables.slice(tablesPerSide);
-          const baseTi = ri * perRow;
+        {rows.map((row, ri) => {
+          const { startTi, perSide, isFront } = row;
+          const leftTables  = row.tables.slice(0, perSide);
+          const rightTables = row.tables.slice(perSide);
+          // Pad to the widest row's per-side count so outer columns line up.
+          // A reduced front row pads its INNER edges (toward the gutter) so the
+          // missing tables read as a centre aisle; other rows keep the original
+          // outer padding used for a partial last row.
+          const leftPad       = tablesPerSide - leftTables.length;
+          const rightInnerPad = isFront ? tablesPerSide - rightTables.length : 0;
+          const rightOuterPad = isFront ? 0 : tablesPerSide - rightTables.length;
           return (
             <div key={ri} className="flex items-stretch gap-2 w-full justify-center">
               <div className="flex items-stretch gap-2">
@@ -550,9 +577,9 @@ export function BanquetSeatMap({
                   <BanquetTableCell
                     key={li}
                     tableSeats={tableSeats}
-                    tableIndex={baseTi + li}
+                    tableIndex={startTi + li}
                     getSeatDropId={getSeatDropId}
-                    tableDropId={getTableDropId?.(baseTi + li, "standard")}
+                    tableDropId={getTableDropId?.(startTi + li, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -567,7 +594,7 @@ export function BanquetSeatMap({
                     svgSize={SVG_SIZE}
                   />
                 ))}
-                {Array.from({ length: tablesPerSide - leftTables.length }).map((_, i) => (
+                {Array.from({ length: leftPad }).map((_, i) => (
                   <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
                 ))}
               </div>
@@ -576,13 +603,16 @@ export function BanquetSeatMap({
               <div style={{ width: 24, flexShrink: 0 }} />
 
               <div className="flex items-stretch gap-2">
+                {Array.from({ length: rightInnerPad }).map((_, i) => (
+                  <div key={`pad-ri-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
                 {rightTables.map((tableSeats, ri2) => (
                   <BanquetTableCell
                     key={ri2}
                     tableSeats={tableSeats}
-                    tableIndex={baseTi + tablesPerSide + ri2}
+                    tableIndex={startTi + perSide + ri2}
                     getSeatDropId={getSeatDropId}
-                    tableDropId={getTableDropId?.(baseTi + tablesPerSide + ri2, "standard")}
+                    tableDropId={getTableDropId?.(startTi + perSide + ri2, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -597,7 +627,7 @@ export function BanquetSeatMap({
                     svgSize={SVG_SIZE}
                   />
                 ))}
-                {Array.from({ length: tablesPerSide - rightTables.length }).map((_, i) => (
+                {Array.from({ length: rightOuterPad }).map((_, i) => (
                   <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
                 ))}
               </div>
@@ -642,7 +672,7 @@ export function BanquetSeatMap({
 // ─── Banquet-Runway seat map (stage front, red carpet aisle, round tables on each side) ───
 
 export function BanquetRunwaySeatMap({
-  seats, seatsPerTable, tablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
+  seats, seatsPerTable, tablesPerSide, frontRowTablesPerSide, selectionMode, highlightedSeat, cancelledSeat,
   isTableMode,
   vipTableGroups = [],
   onSeatAssign, onSeatInspect, getSeatDropId, getTableDropId, onTableSelect,
@@ -650,6 +680,7 @@ export function BanquetRunwaySeatMap({
   seats: SeatInfo[];
   seatsPerTable: number;
   tablesPerSide: number;
+  frontRowTablesPerSide?: number; // smaller FIRST row (drops inner tables nearest the aisle to widen the front)
   selectionMode: boolean;
   highlightedSeat: number | null;
   cancelledSeat: number | null;
@@ -673,9 +704,19 @@ export function BanquetRunwaySeatMap({
 
   // Pack N tables on each side per row. T1..Tn = left of row 1, T(n+1)..T(2n) = right of row 1, etc.
   const perRow = tablesPerSide * 2;
-  const rows: SeatInfo[][][] = [];
-  for (let i = 0; i < tables.length; i += perRow) {
-    rows.push(tables.slice(i, i + perRow));
+  // Optional smaller FIRST row: drop the inner tables nearest the aisle so the
+  // front of the room gets a wider gap. Defaults to tablesPerSide (uniform).
+  const frontPerSide = Math.max(1, Math.min(tablesPerSide, frontRowTablesPerSide ?? tablesPerSide));
+  const firstRowCount = frontPerSide * 2;
+  const hasFrontRow = frontPerSide < tablesPerSide;
+  // Rows carry their starting GLOBAL table index so tableIndex stays equal to
+  // the seat-block index (positional labels must agree across all sites).
+  const rows: { startTi: number; tables: SeatInfo[][]; perSide: number; isFront: boolean }[] = [];
+  if (tables.length > 0) {
+    rows.push({ startTi: 0, tables: tables.slice(0, firstRowCount), perSide: frontPerSide, isFront: hasFrontRow });
+  }
+  for (let i = firstRowCount; i < tables.length; i += perRow) {
+    rows.push({ startTi: i, tables: tables.slice(i, i + perRow), perSide: tablesPerSide, isFront: false });
   }
 
   return (
@@ -712,10 +753,15 @@ export function BanquetRunwaySeatMap({
 
       {/* Rows of (N tables) | aisle | (N tables) */}
       <div className="flex flex-col gap-2">
-        {rows.map((rowTables, ri) => {
-          const leftTables  = rowTables.slice(0, tablesPerSide);
-          const rightTables = rowTables.slice(tablesPerSide);
-          const baseTi = ri * perRow;
+        {rows.map((row, ri) => {
+          const { startTi, perSide, isFront } = row;
+          const leftTables  = row.tables.slice(0, perSide);
+          const rightTables = row.tables.slice(perSide);
+          // A reduced front row pads its INNER edges (toward the aisle) so the
+          // missing tables widen the centre; other rows keep outer padding.
+          const leftPad       = tablesPerSide - leftTables.length;
+          const rightInnerPad = isFront ? tablesPerSide - rightTables.length : 0;
+          const rightOuterPad = isFront ? 0 : tablesPerSide - rightTables.length;
           return (
             <div key={ri} className="flex items-stretch gap-2">
               {/* Left side */}
@@ -724,9 +770,9 @@ export function BanquetRunwaySeatMap({
                   <BanquetTableCell
                     key={li}
                     tableSeats={tableSeats}
-                    tableIndex={baseTi + li}
+                    tableIndex={startTi + li}
                     getSeatDropId={getSeatDropId}
-                    tableDropId={getTableDropId?.(baseTi + li, "standard")}
+                    tableDropId={getTableDropId?.(startTi + li, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -741,8 +787,8 @@ export function BanquetRunwaySeatMap({
                     svgSize={SVG_SIZE}
                   />
                 ))}
-                {/* Pad missing left tables to keep alignment when the row is incomplete */}
-                {Array.from({ length: tablesPerSide - leftTables.length }).map((_, i) => (
+                {/* Pad missing left tables to keep alignment (inner edge) */}
+                {Array.from({ length: leftPad }).map((_, i) => (
                   <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
                 ))}
               </div>
@@ -761,13 +807,16 @@ export function BanquetRunwaySeatMap({
 
               {/* Right side */}
               <div className="flex items-stretch gap-2">
+                {Array.from({ length: rightInnerPad }).map((_, i) => (
+                  <div key={`pad-ri-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                ))}
                 {rightTables.map((tableSeats, ri2) => (
                   <BanquetTableCell
                     key={ri2}
                     tableSeats={tableSeats}
-                    tableIndex={baseTi + tablesPerSide + ri2}
+                    tableIndex={startTi + perSide + ri2}
                     getSeatDropId={getSeatDropId}
-                    tableDropId={getTableDropId?.(baseTi + tablesPerSide + ri2, "standard")}
+                    tableDropId={getTableDropId?.(startTi + perSide + ri2, "standard")}
                     seatsPerTable={seatsPerTable}
                     selectionMode={selectionMode}
                     highlightedSeat={highlightedSeat}
@@ -782,7 +831,7 @@ export function BanquetRunwaySeatMap({
                     svgSize={SVG_SIZE}
                   />
                 ))}
-                {Array.from({ length: tablesPerSide - rightTables.length }).map((_, i) => (
+                {Array.from({ length: rightOuterPad }).map((_, i) => (
                   <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
                 ))}
               </div>
@@ -1663,6 +1712,7 @@ export default function SeatMapModal({
                   seats={standardSeats}
                   seatsPerTable={seatsPerTable}
                   tablesPerSide={config.tablesPerSide != null ? Math.max(1, Math.min(6, config.tablesPerSide)) : undefined}
+                  frontRowTablesPerSide={config.frontRowTablesPerSide}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   cancelledSeat={recentlyCancelledSeat}
@@ -1676,6 +1726,7 @@ export default function SeatMapModal({
                   seats={standardSeats}
                   seatsPerTable={seatsPerTable}
                   tablesPerSide={Math.max(1, Math.min(6, config.tablesPerSide ?? 1))}
+                  frontRowTablesPerSide={config.frontRowTablesPerSide}
                   selectionMode={selectionMode}
                   highlightedSeat={selectedSeat?.seatNumber ?? null}
                   cancelledSeat={recentlyCancelledSeat}

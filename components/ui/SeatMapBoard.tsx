@@ -176,6 +176,7 @@ export default function SeatMapBoard({
                 ? Math.max(1, Math.min(6, config.tablesPerSide))
                 : undefined
             }
+            frontRowTablesPerSide={config.frontRowTablesPerSide}
             vipTableGroups={vipTableGroups}
             {...layoutCommon}
             getTableDropId={getTableDropId}
@@ -186,6 +187,7 @@ export default function SeatMapBoard({
             seats={standardSeats}
             seatsPerTable={seatsPerTable}
             tablesPerSide={Math.max(1, Math.min(6, config.tablesPerSide ?? 1))}
+            frontRowTablesPerSide={config.frontRowTablesPerSide}
             vipTableGroups={vipTableGroups}
             {...layoutCommon}
             getTableDropId={getTableDropId}

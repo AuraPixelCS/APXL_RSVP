@@ -33,8 +33,7 @@ const APPLY = process.argv.includes('--apply');
 
 // Email changes: { from: exact current email, to: new email }
 const CHANGES = [
-  { from: 'limkj@gmail.com', to: 'kjlim288@gmail.com' },
-  { from: 'limkj288@gmail.com', to: 'kjlim@gmail.com' },
+  { from: 'kjlim288@gmail.com', to: 'yapsc@mychem.com.my' },
 ];
 
 if (!admin.apps.length) {

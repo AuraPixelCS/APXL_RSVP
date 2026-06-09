@@ -300,7 +300,14 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
     const tablesPerSide = Math.max(1, Math.min(6, config.tablesPerSide ?? 1));
     const perRow = tablesPerSide * 2;
     const tableCount = Math.ceil(totalSeats / seatsPerTable);
-    const visibleTables = Math.min(tableCount, Math.max(8, perRow * 4));
+    // Optional smaller FIRST row (mirrors BanquetRunwaySeatMap) — drops the
+    // inner tables nearest the aisle to widen the front. Unset = uniform.
+    const frontPerSide = Math.max(1, Math.min(tablesPerSide, config.frontRowTablesPerSide ?? tablesPerSide));
+    const firstRowCount = frontPerSide * 2;
+    const hasFrontRow = frontPerSide < tablesPerSide;
+    const visibleTables = hasFrontRow
+      ? Math.min(tableCount, firstRowCount + perRow * 4)
+      : Math.min(tableCount, Math.max(8, perRow * 4));
     const TABLE_R = 9;
     const SEAT_R = 2;
     const ORBIT_R = TABLE_R + SEAT_R + 1.5;
@@ -310,7 +317,25 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
     const AISLE_W = 10;
     const sideW = tablesPerSide * CELL_W + (tablesPerSide - 1) * CELL_GAP;
     const svgW = sideW * 2 + AISLE_W + 8;
-    const rowsNeeded = Math.ceil(visibleTables / perRow);
+    // Place a table by its sequential index: row 0 holds firstRowCount tables
+    // (frontPerSide per side), every later row holds perRow.
+    const place = (ti: number) => {
+      if (ti < firstRowCount) {
+        const isLeft = ti < frontPerSide;
+        return { rowIdx: 0, isLeft, colInSide: isLeft ? ti : ti - frontPerSide, perSide: frontPerSide };
+      }
+      const after = ti - firstRowCount;
+      const posInRow = after % perRow;
+      const isLeft = posInRow < tablesPerSide;
+      return {
+        rowIdx: 1 + Math.floor(after / perRow),
+        isLeft,
+        colInSide: isLeft ? posInRow : posInRow - tablesPerSide,
+        perSide: tablesPerSide,
+      };
+    };
+    const rowsNeeded =
+      visibleTables <= firstRowCount ? 1 : 1 + Math.ceil((visibleTables - firstRowCount) / perRow);
     const svgH = rowsNeeded * ROW_H + 16;
     const lastTableSeats = totalSeats - (tableCount - 1) * seatsPerTable;
 
@@ -322,13 +347,12 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
         <rect x={(svgW - 4) / 2} y="9" width="4" height={svgH - 11} rx="1.5" fill="rgba(220,38,38,0.3)" />
         {/* Tables */}
         {Array.from({ length: visibleTables }).map((_, ti) => {
-          const rowIdx = Math.floor(ti / perRow);
-          const posInRow = ti % perRow;
-          const isLeft = posInRow < tablesPerSide;
-          const colInSide = isLeft ? posInRow : posInRow - tablesPerSide;
+          const { rowIdx, isLeft, colInSide, perSide } = place(ti);
+          // Right side aligns to OUTER columns (perSide) so a reduced front row
+          // leaves its gap at the centre aisle, not the edge.
           const cx = isLeft
             ? 4 + CELL_W / 2 + colInSide * (CELL_W + CELL_GAP)
-            : svgW - 4 - CELL_W / 2 - (tablesPerSide - 1 - colInSide) * (CELL_W + CELL_GAP);
+            : svgW - 4 - CELL_W / 2 - (perSide - 1 - colInSide) * (CELL_W + CELL_GAP);
           const cy = 12 + rowIdx * ROW_H + ROW_H / 2;
           const seatCount = ti === tableCount - 1 ? Math.max(lastTableSeats, 1) : seatsPerTable;
           return (
@@ -376,24 +400,48 @@ function LivePreview({ totalSeats, config }: { totalSeats: number; config: Seati
     if (config.tablesPerSide != null) {
       const tablesPerSide = Math.max(1, Math.min(6, config.tablesPerSide));
       const perRow = tablesPerSide * 2;
-      const visibleTables = Math.min(tableCount, Math.max(6, perRow * 3));
+      // Optional smaller FIRST row (mirrors BanquetSeatMap) — drops the inner
+      // tables nearest the centre to widen the front aisle. Unset = uniform.
+      const frontPerSide = Math.max(1, Math.min(tablesPerSide, config.frontRowTablesPerSide ?? tablesPerSide));
+      const firstRowCount = frontPerSide * 2;
+      const hasFrontRow = frontPerSide < tablesPerSide;
+      const visibleTables = hasFrontRow
+        ? Math.min(tableCount, firstRowCount + perRow * 3)
+        : Math.min(tableCount, Math.max(6, perRow * 3));
       const CELL_GAP = 8;
       const CENTER_GAP = 18;
       const sideW = tablesPerSide * CELL + (tablesPerSide - 1) * CELL_GAP;
       const svgW = sideW * 2 + CENTER_GAP + 8;
-      const rowsNeeded = Math.ceil(visibleTables / perRow);
+      // Place a table by its sequential index: row 0 holds firstRowCount tables
+      // (frontPerSide per side), every later row holds perRow.
+      const place = (ti: number) => {
+        if (ti < firstRowCount) {
+          const isLeft = ti < frontPerSide;
+          return { rowIdx: 0, isLeft, colInSide: isLeft ? ti : ti - frontPerSide, perSide: frontPerSide };
+        }
+        const after = ti - firstRowCount;
+        const posInRow = after % perRow;
+        const isLeft = posInRow < tablesPerSide;
+        return {
+          rowIdx: 1 + Math.floor(after / perRow),
+          isLeft,
+          colInSide: isLeft ? posInRow : posInRow - tablesPerSide,
+          perSide: tablesPerSide,
+        };
+      };
+      const rowsNeeded =
+        visibleTables <= firstRowCount ? 1 : 1 + Math.ceil((visibleTables - firstRowCount) / perRow);
       const svgH = rowsNeeded * (CELL + CELL_GAP) + 8;
 
       return (
         <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: "100%", overflow: "visible" }}>
           {Array.from({ length: visibleTables }).map((_, ti) => {
-            const rowIdx = Math.floor(ti / perRow);
-            const posInRow = ti % perRow;
-            const isLeft = posInRow < tablesPerSide;
-            const colInSide = isLeft ? posInRow : posInRow - tablesPerSide;
+            const { rowIdx, isLeft, colInSide, perSide } = place(ti);
+            // Right side aligns to the OUTER (rightmost) columns using perSide,
+            // so a reduced front row leaves its gap in the centre, not the edge.
             const cx = isLeft
               ? 4 + CELL / 2 + colInSide * (CELL + CELL_GAP)
-              : svgW - 4 - CELL / 2 - (tablesPerSide - 1 - colInSide) * (CELL + CELL_GAP);
+              : svgW - 4 - CELL / 2 - (perSide - 1 - colInSide) * (CELL + CELL_GAP);
             const cy = 4 + CELL / 2 + rowIdx * (CELL + CELL_GAP);
             const seatCount = ti === tableCount - 1 ? Math.max(lastTableSeats, 1) : seatsPerTable;
             return (
