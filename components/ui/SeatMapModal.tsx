@@ -463,6 +463,30 @@ export function RunwaySeatMap({
   );
 }
 
+// Invisible placeholder that occupies EXACTLY one table-card's footprint, so
+// padding an incomplete/reduced row keeps the remaining tables column-aligned
+// with full rows and the centre aisle stays straight. Mirrors the standard
+// BanquetTableCell box model (border + padding + svg of svgSize).
+function TableCellSpacer({ svgSize }: { svgSize: number }) {
+  return (
+    <div
+      aria-hidden
+      style={{
+        flex: 1,
+        minWidth: svgSize,
+        padding: "12px 10px 10px",
+        border: "1px solid transparent",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        visibility: "hidden",
+      }}
+    >
+      <svg width={svgSize} height={svgSize} />
+    </div>
+  );
+}
+
 // ─── Banquet seat map ──────────────────────────────────────────────────────────
 
 export function BanquetSeatMap({
@@ -595,7 +619,7 @@ export function BanquetSeatMap({
                   />
                 ))}
                 {Array.from({ length: leftPad }).map((_, i) => (
-                  <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-l-${i}`} svgSize={SVG_SIZE} />
                 ))}
               </div>
 
@@ -604,7 +628,7 @@ export function BanquetSeatMap({
 
               <div className="flex items-stretch gap-2">
                 {Array.from({ length: rightInnerPad }).map((_, i) => (
-                  <div key={`pad-ri-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-ri-${i}`} svgSize={SVG_SIZE} />
                 ))}
                 {rightTables.map((tableSeats, ri2) => (
                   <BanquetTableCell
@@ -628,7 +652,7 @@ export function BanquetSeatMap({
                   />
                 ))}
                 {Array.from({ length: rightOuterPad }).map((_, i) => (
-                  <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-r-${i}`} svgSize={SVG_SIZE} />
                 ))}
               </div>
             </div>
@@ -789,7 +813,7 @@ export function BanquetRunwaySeatMap({
                 ))}
                 {/* Pad missing left tables to keep alignment (inner edge) */}
                 {Array.from({ length: leftPad }).map((_, i) => (
-                  <div key={`pad-l-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-l-${i}`} svgSize={SVG_SIZE} />
                 ))}
               </div>
 
@@ -808,7 +832,7 @@ export function BanquetRunwaySeatMap({
               {/* Right side */}
               <div className="flex items-stretch gap-2">
                 {Array.from({ length: rightInnerPad }).map((_, i) => (
-                  <div key={`pad-ri-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-ri-${i}`} svgSize={SVG_SIZE} />
                 ))}
                 {rightTables.map((tableSeats, ri2) => (
                   <BanquetTableCell
@@ -832,7 +856,7 @@ export function BanquetRunwaySeatMap({
                   />
                 ))}
                 {Array.from({ length: rightOuterPad }).map((_, i) => (
-                  <div key={`pad-r-${i}`} style={{ flex: 1, minWidth: SVG_SIZE }} />
+                  <TableCellSpacer key={`pad-r-${i}`} svgSize={SVG_SIZE} />
                 ))}
               </div>
             </div>
