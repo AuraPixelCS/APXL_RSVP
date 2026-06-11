@@ -211,6 +211,8 @@ export interface SeatEmailOpts {
   passUrl?: string;
   /** Admin-editable body paragraph. Supports {{name}} and {{event}} variables. */
   customBody?: string;
+  /** When set, a "Dress Code" row is added to the Event Details box (e.g. "Office attire"). */
+  dressCode?: string;
   /** Firebase Storage URL — replaces black header with an image */
   bannerUrl?: string;
   /** Header title text. Defaults to the event title when no bannerUrl is set. */
@@ -271,23 +273,26 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
     : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        Your ${confirmNoun.toLowerCase()} has been confirmed for <strong>${opts.eventTitle}</strong>.
+        We are pleased to welcome you to the <strong>${opts.eventTitle}</strong>${opts.venue ? ` at <strong>${opts.venue}</strong>` : ""}.
+        Your ${confirmNoun.toLowerCase()} has been confirmed.
         Please find your entry QR pass below &mdash; show this at the entrance on the day of the event.
       </p>`;
 
-  const seatTitleStrip = opts.showTitleOnBanner
-    ? `<div style="background: #111111; padding: 14px 20px; text-align: center;">
+  // Always render the dark title strip beneath the banner — so even when the
+  // banner image is blocked (junk folder) or fails to load, the event name and
+  // "… Confirmed" still appear as real text. A photo banner can't be shown
+  // without an image, but this guarantees the identity is never lost.
+  const seatTitleStrip = `<div style="background: #111111; padding: 14px 20px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${confirmNoun} Confirmed &#x2705;</p>
-      </div>`
-    : "";
+        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${confirmNoun} Confirmed</p>
+      </div>`;
 
   // Header: custom banner image OR dark header with editable title
   const header = opts.bannerUrl
-    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:560px;display:block;" /></div>${seatTitleStrip}`
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="${opts.eventTitle}" style="width:100%;max-width:560px;display:block;" /></div>${seatTitleStrip}`
     : `<div style="background: #111111; padding: 32px 40px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmNoun} Confirmed &#x2705;</p>
+        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmNoun} Confirmed</p>
       </div>`;
 
   // Address row (only if present)
@@ -295,6 +300,14 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
     ? `<tr>
         <td style="padding: 5px 0; color: #888888; vertical-align: top;">Address</td>
         <td style="padding: 5px 0; font-weight: 600;">${opts.address}</td>
+      </tr>`
+    : "";
+
+  // Dress code row (only if present)
+  const dressCodeRow = opts.dressCode
+    ? `<tr>
+        <td style="padding: 5px 0; color: #888888;">Dress Code</td>
+        <td style="padding: 5px 0; font-weight: 600;">${opts.dressCode}</td>
       </tr>`
     : "";
 
@@ -308,7 +321,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
       <!-- Body -->
       <div style="padding: 36px 40px;">
-        <p style="font-size: 15px; color: #333333; margin: 0 0 8px;">Hi <strong>${opts.name}</strong>,</p>
+        <p style="font-size: 15px; color: #333333; margin: 0 0 8px;">Dear <strong>${opts.name}</strong>,</p>
         ${bodyParagraph}
 
         <!-- Event Details -->
@@ -331,6 +344,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
               <td style="padding: 5px 0; font-weight: 600;">${opts.venue}</td>
             </tr>
             ${addressRow}
+            ${dressCodeRow}
             ${assignmentRowsHtml}
           </table>
         </div>

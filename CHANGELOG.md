@@ -1,5 +1,22 @@
 # Changelog
 
+## [2.6.0] — 2026-06-11
+
+### Seat map — configurable smaller front row + centered aisle
+
+- **Banquet / banquet-runway seat maps support a smaller FIRST row** via a new optional `seatingConfig.frontRowTablesPerSide` ([components/ui/SeatMapModal.tsx](components/ui/SeatMapModal.tsx), [types/index.ts](types/index.ts)). When set (e.g. 3), the front row drops its inner tables to widen the front aisle/dance floor while later rows stay full; table numbering stays positional. Unset = unchanged behaviour for every other event.
+- **The runway/center aisle is now always centered** regardless of guest-name length — both side-zones are equal `flex` halves and table cards have a fixed min-width so long names truncate instead of shoving the aisle off-center. Padding placeholders match a real card's footprint so columns line up row-to-row.
+
+### Entry-pass email — copy, dress code, banner fix
+
+- **Greeting changed to "Dear {name},"** and a welcome line now names the event + venue before the confirmation sentence ([lib/emailTemplates.ts](lib/emailTemplates.ts)).
+- **New "Dress Code" row** in the Event Details box, driven by a new optional `Event.dressCode` field; defaults to "Office attire" for PEOPLElogy ([pages/api/notify.ts](pages/api/notify.ts)).
+- **Banner no longer breaks when sent from a non-production origin** — the banner and `/pass` link now resolve an absolute public base URL (`resolvePublicBase`, prefers `NEXT_PUBLIC_APP_URL`, else a non-localhost request origin, else the production domain) instead of the request host. The dark title strip now **always** renders beneath the banner and the `<img alt>` is the event title, so the event name still shows when images are blocked (junk folder).
+
+### Ops
+
+- **[scripts/add-missing-guests.js](scripts/add-missing-guests.js)** — one-off helper to add guests who missed RSVP as pending/attending records (dedupes by email, normalizes phones to E.164).
+
 ## [2.5.0] — 2026-06-05
 
 ### Downloadable entry pass (image + PDF)

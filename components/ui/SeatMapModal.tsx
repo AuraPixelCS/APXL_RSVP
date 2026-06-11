@@ -581,7 +581,7 @@ export function BanquetSeatMap({
     }
 
     return (
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-3 w-full">
         {stageAndVip}
         {rows.map((row, ri) => {
           const { startTi, perSide, isFront } = row;
@@ -596,7 +596,7 @@ export function BanquetSeatMap({
           const rightOuterPad = isFront ? 0 : tablesPerSide - rightTables.length;
           return (
             <div key={ri} className="flex items-stretch gap-2 w-full justify-center">
-              <div className="flex items-stretch gap-2">
+              <div className="flex items-stretch gap-2" style={{ flex: 1, minWidth: 0 }}>
                 {leftTables.map((tableSeats, li) => (
                   <BanquetTableCell
                     key={li}
@@ -626,7 +626,7 @@ export function BanquetSeatMap({
               {/* Center gutter — banquet has no aisle, just visual space */}
               <div style={{ width: 24, flexShrink: 0 }} />
 
-              <div className="flex items-stretch gap-2">
+              <div className="flex items-stretch gap-2" style={{ flex: 1, minWidth: 0 }}>
                 {Array.from({ length: rightInnerPad }).map((_, i) => (
                   <TableCellSpacer key={`pad-ri-${i}`} svgSize={SVG_SIZE} />
                 ))}
@@ -744,7 +744,7 @@ export function BanquetRunwaySeatMap({
   }
 
   return (
-    <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col items-center gap-3 w-full">
       <StageBar />
 
       {vipTableGroups.length > 0 && (
@@ -776,7 +776,7 @@ export function BanquetRunwaySeatMap({
       )}
 
       {/* Rows of (N tables) | aisle | (N tables) */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 w-full">
         {rows.map((row, ri) => {
           const { startTi, perSide, isFront } = row;
           const leftTables  = row.tables.slice(0, perSide);
@@ -787,9 +787,9 @@ export function BanquetRunwaySeatMap({
           const rightInnerPad = isFront ? tablesPerSide - rightTables.length : 0;
           const rightOuterPad = isFront ? 0 : tablesPerSide - rightTables.length;
           return (
-            <div key={ri} className="flex items-stretch gap-2">
+            <div key={ri} className="flex items-stretch gap-2 w-full">
               {/* Left side */}
-              <div className="flex items-stretch gap-2">
+              <div className="flex items-stretch gap-2" style={{ flex: 1, minWidth: 0 }}>
                 {leftTables.map((tableSeats, li) => (
                   <BanquetTableCell
                     key={li}
@@ -830,7 +830,7 @@ export function BanquetRunwaySeatMap({
               </div>
 
               {/* Right side */}
-              <div className="flex items-stretch gap-2">
+              <div className="flex items-stretch gap-2" style={{ flex: 1, minWidth: 0 }}>
                 {Array.from({ length: rightInnerPad }).map((_, i) => (
                   <TableCellSpacer key={`pad-ri-${i}`} svgSize={SVG_SIZE} />
                 ))}
@@ -906,7 +906,7 @@ export function BanquetTableCell({
   const tableLevelClick = selectionMode && !!onTableSelect;
   const effectiveSeatAssign = tableLevelClick ? undefined : onSeatAssign;
   return (
-    <MaybeDroppableBlock id={tableDropId} style={{ flex: 1, minWidth: isVip ? svgSize * 2.4 : undefined }}>
+    <MaybeDroppableBlock id={tableDropId} style={{ flex: 1, minWidth: isVip ? svgSize * 2.4 : svgSize }}>
     <div
       onClick={tableLevelClick ? () => onTableSelect!(tableIndex, isVip ? "vip" : "standard") : undefined}
       style={{
@@ -919,7 +919,7 @@ export function BanquetTableCell({
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        minWidth: isVip ? svgSize * 2.4 : undefined,
+        minWidth: isVip ? svgSize * 2.4 : svgSize,
         cursor: tableLevelClick ? "pointer" : undefined,
         transition: "border-color 120ms, background 120ms, box-shadow 120ms",
       }}

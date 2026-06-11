@@ -13,6 +13,18 @@ import { buildSeatEmail } from "@/lib/emailTemplates";
 import { formatAssignment } from "@/lib/seatLabel";
 import QRCode from "qrcode";
 
+// Resolve a reliable, publicly-reachable base URL for email assets (banner) and
+// the online pass link. The request `origin` is used when it's a real host, but
+// when an admin sends from a local dev session it resolves to localhost — which
+// recipients can't reach (the cause of the broken banner). Prefer an explicit
+// env override, then a non-localhost request origin, then the production domain.
+function resolvePublicBase(origin: string): string {
+  const env = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (env) return env;
+  if (origin && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(origin)) return origin;
+  return "https://www.aurapixel.live/rsvp";
+}
+
 // Resend's batch endpoint sends up to 100 messages per HTTP call.
 const RESEND_BATCH_SIZE = 100;
 
@@ -39,7 +51,13 @@ async function buildEntryPassMessage(
   // Single source of truth for the seat/table label (VIP-, mode- and style-aware).
   const assignment = formatAssignment(rsvp.seatNumber, event);
 
-  // Re-generate QR data URL from stored token, embed it inline (cid:qr_code).
+  const isPeoplelogy = event.title.toLowerCase().includes("peoplelogy");
+  const publicBase = resolvePublicBase(origin);
+
+  // QR is embedded inline as a small CID PNG (cid:qr_code) — crisp in the inbox
+  // and lightweight (keeps the email under Gmail's clipping limit). When the
+  // image is blocked in junk, the prominent "View or download your entry pass"
+  // button below is the fallback.
   const qrDataUrl = await QRCode.toDataURL(rsvp.qrToken, {
     errorCorrectionLevel: "H",
     margin: 2,
@@ -54,16 +72,22 @@ async function buildEntryPassMessage(
     },
   ];
 
-  // Banner: admin-provided URL, else the bundled PEOPLElogy banner by hosted URL.
+  // Banner: admin-provided URL, else the bundled PEOPLElogy banner. Hosted by
+  // ABSOLUTE public URL (not the request origin, which is localhost in dev and
+  // unreachable by recipients — the cause of the broken banner). Not inlined:
+  // it's ~185KB and would blow the 100-message Resend batch request size.
   let bannerUrl: string | undefined = event.customEmailBanner;
-  if (!bannerUrl && event.title.toLowerCase().includes("peoplelogy") && origin) {
-    bannerUrl = `${origin}/EmailBanner.png`;
+  if (!bannerUrl && isPeoplelogy) {
+    bannerUrl = `${publicBase}/EmailBanner.png`;
   }
 
   // Online fallback pass — a plain link that survives image-blocking in junk.
-  const passUrl = origin
-    ? `${origin}/pass?t=${encodeURIComponent(rsvp.qrToken)}`
-    : undefined;
+  const passUrl = `${publicBase}/pass?t=${encodeURIComponent(rsvp.qrToken)}`;
+
+  // Dress code — per-event field; defaults to "Office attire" for PEOPLElogy so
+  // it shows without a data write while staying configurable for other events.
+  const dressCode: string | undefined =
+    event.dressCode ?? (isPeoplelogy ? "Office attire" : undefined);
 
   const html = buildSeatEmail({
     name: rsvp.name,
@@ -74,12 +98,13 @@ async function buildEntryPassMessage(
     address: event.address,
     seatNumber: rsvp.seatNumber,
     assignmentRows: assignment?.rows,
+    dressCode,
     bannerUrl,
     headerTitle: event.customEmailTitle,
     showTitleOnBanner: !!event.showEventTitleOnBanner,
     customBody,
     passUrl,
-    // No qrDataUrl — cid:qr_code is used for the actual email send.
+    // No qrDataUrl — cid:qr_code (the PNG attachment) is the inline QR for the real send.
   });
 
   const subjectLabel = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
@@ -88,7 +113,7 @@ async function buildEntryPassMessage(
     to: rsvp.email,
     subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
     html,
-    text: buildEntryPassText(rsvp, event, subjectLabel, passUrl),
+    text: buildEntryPassText(rsvp, event, subjectLabel, passUrl, dressCode),
     attachments,
   };
 }
@@ -98,18 +123,21 @@ function buildEntryPassText(
   rsvp: any,
   event: any,
   label: string,
-  passUrl?: string
+  passUrl?: string,
+  dressCode?: string
 ): string {
+  const welcome = `We are pleased to welcome you to the ${event.title}${event.venue ? ` at ${event.venue}` : ""}. Your booking is confirmed.`;
   const parts = [
-    `Hi ${rsvp.name},`,
+    `Dear ${rsvp.name},`,
     "",
-    `Your entry pass for ${event.title} is confirmed.`,
+    welcome,
     "",
     `Date: ${event.date}`,
     `Time: ${event.time}`,
   ];
   if (event.venue) parts.push(`Venue: ${event.venue}`);
   if (event.address) parts.push(`Address: ${event.address}`);
+  if (dressCode) parts.push(`Dress Code: ${dressCode}`);
   parts.push(label);
   parts.push("");
   parts.push("Your QR entry pass is attached to this email.");

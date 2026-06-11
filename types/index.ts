@@ -42,6 +42,7 @@ export interface Event {
   time: string; // "HH:MM" 24h
   venue: string;
   address?: string;
+  dressCode?: string; // shown as a "Dress Code" row in the entry-pass email (e.g. "Office attire")
   description?: string;
   maxGuests?: number;
   totalSeats: number;

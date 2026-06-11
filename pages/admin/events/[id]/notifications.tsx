@@ -52,8 +52,7 @@ function BellIcon() {
   );
 }
 
-// ─── Placeholder QR (for email preview only) ─────────────────────────────────
-
+// Placeholder QR (preview only — the real send uses the cid:qr_code PNG).
 const PREVIEW_QR =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAEALAAAAAABAAEAAAICTAEAOw==";
 
@@ -485,6 +484,7 @@ const NotificationsPage: NextPageWithLayout = () => {
         seatNumber: 1,
         assignmentRows: formatAssignment(1, event)?.rows,
         qrDataUrl: PREVIEW_QR,
+        dressCode: event.dressCode ?? (event.title.toLowerCase().includes("peoplelogy") ? "Office attire" : undefined),
         bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
         showTitleOnBanner: showTitle,
       })
