@@ -56,10 +56,10 @@ function toE164(raw) {
 
 const GUESTS = [
   {
-    name: 'Eugene Lee',
-    email: 'eugeneleejiaxin@gmail.com',
-    phone: toE164('0132272427'),
-    company: '-',
+    name: 'Henry Low',
+    email: 'Lowkaronn@gmail.com',
+    phone: toE164('019-3776777'),
+    company: 'Spectrum Outdoor Sdn Bhd',
     jobTitle: '-',
   },
 ];

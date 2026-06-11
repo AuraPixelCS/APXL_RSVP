@@ -1313,7 +1313,6 @@ const NotificationsPage: NextPageWithLayout = () => {
             style={{
               background: "var(--accent)",
               color: "#000",
-              boxShadow: "0 12px 32px rgba(61,155,245,0.35), 0 2px 6px rgba(0,0,0,0.4)",
             }}
             whileHover={{ y: -2 }}
           >
