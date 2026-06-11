@@ -490,7 +490,6 @@ const NotificationsPage: NextPageWithLayout = () => {
             ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
             : undefined,
           signOffName: isP ? "PEOPLElogy Berhad" : undefined,
-          signOffSub: isP ? "25th Anniversary Celebration Committee" : undefined,
           bannerUrl: bannerUrl || (isP ? "/EmailBanner.png" : undefined),
           showTitleOnBanner: showTitle,
         });

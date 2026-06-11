@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.2] — 2026-06-11
+
+### Entry-pass email — client-locked final format
+
+- **QR section now comes first** (above the Event Details box): greeting → welcome line → "Important: Event Registration QR Code" + QR + pass button → Event Details box → Dietary Requirements → closing → sign-off ([lib/emailTemplates.ts](lib/emailTemplates.ts)).
+- **Body trimmed to the single welcome line** "We are pleased to welcome you to the {event} at {venue}." (the countdown/commemorate paragraphs and the "PEOPLElogy journey" line removed).
+- **Sign-off is now just "Warm regards, / PEOPLElogy Berhad"** (committee sub-line removed).
+- QR "valid only for this event" wording (no longer references "the event above" now that the box is below the QR).
+- PEOPLElogy event time corrected to **17:00 (5:00 PM)** in Firestore; the email auto-formats it to 12-hour.
+
 ## [2.6.1] — 2026-06-11
 
 ### Entry-pass email — client-requested content rework

@@ -288,11 +288,8 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
-    : `<p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
-        The countdown is almost over &mdash; we look forward to welcoming you to the <strong>${opts.eventTitle}</strong> Celebration this weekend.
-      </p>
-      <p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        As we commemorate 25 years of growth, innovation, partnerships, and people, we are honoured to have you join us for this special milestone.
+    : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
+        We are pleased to welcome you to the <strong>${opts.eventTitle}</strong>${opts.venue ? ` at <strong>${opts.venue}</strong>` : ""}.
       </p>`;
 
   // Always render the dark title strip beneath the banner — so even when the
@@ -333,6 +330,22 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         <p style="font-size: 15px; color: #333333; margin: 0 0 8px;">Dear <strong>${opts.name}</strong>,</p>
         ${bodyParagraph}
 
+        <!-- QR Code -->
+        <p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Important: Event Registration QR Code</p>
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 18px;">
+          Below is your unique event QR Code. <strong>Please save it to your mobile device</strong>, as it will be required for registration upon arrival.
+        </p>
+        <div style="text-align: center; margin-bottom: 28px;">
+          <img src="${qrSrc}" alt="Entry QR Code" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
+          <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for this event. Do not share this QR code.</p>
+          ${opts.passUrl
+            ? `<div style="margin-top: 18px;">
+            <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">View or download your entry pass</a>
+            <p style="font-size: 12px; color: #888888; margin: 10px 0 0;">Can't see the QR code above? Tap the button to open your pass.</p>
+          </div>`
+            : ""}
+        </div>
+
         <!-- Event Details -->
         <div style="background: #f7f7f7; border-radius: 10px; padding: 20px 24px; margin-bottom: 28px;">
           <table style="width: 100%; border-collapse: collapse; font-size: 13px; color: #333333;">
@@ -356,32 +369,13 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
             ${assignmentRowsHtml}
           </table>
         </div>
-
-        <!-- QR Code -->
-        <p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Important: Event Registration QR Code</p>
-        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 18px;">
-          Below is your unique event QR Code. <strong>Please save it to your mobile device</strong>, as it will be required for registration upon arrival.
-        </p>
-        <div style="text-align: center; margin-bottom: 28px;">
-          <img src="${qrSrc}" alt="Entry QR Code" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
-          <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for the event above. Do not share this QR code.</p>
-          ${opts.passUrl
-            ? `<div style="margin-top: 18px;">
-            <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">View or download your entry pass</a>
-            <p style="font-size: 12px; color: #888888; margin: 10px 0 0;">Can't see the QR code above? Tap the button to open your pass.</p>
-          </div>`
-            : ""}
-        </div>
         ${opts.dietaryNote
           ? `<p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Dietary Requirements</p>
         <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.dietaryNote}</p>`
           : ""}
 
-        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 16px;">
-          We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
-        </p>
         <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">
-          Thank you for being part of the PEOPLElogy journey.
+          We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
         </p>
         ${opts.signOffName
           ? `<p style="font-size: 14px; color: #555555; margin: 0 0 4px;">Warm regards,</p>

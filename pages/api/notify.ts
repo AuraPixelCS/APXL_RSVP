@@ -95,7 +95,7 @@ async function buildEntryPassMessage(
     ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
     : undefined;
   const signOffName = isPeoplelogy ? "PEOPLElogy Berhad" : undefined;
-  const signOffSub = isPeoplelogy ? "25th Anniversary Celebration Committee" : undefined;
+  const signOffSub: string | undefined = undefined; // client locked sign-off to name only
 
   // Display title — drop a trailing " Event" so the email reads "PEOPLElogy 25th Anniversary".
   const displayTitle = event.title.replace(/\s+Event$/i, "");
@@ -168,9 +168,7 @@ function buildEntryPassText(
   const parts = [
     `Dear ${rsvp.name},`,
     "",
-    `The countdown is almost over — we look forward to welcoming you to the ${opts.displayTitle} Celebration this weekend.`,
-    "",
-    "As we commemorate 25 years of growth, innovation, partnerships, and people, we are honoured to have you join us for this special milestone.",
+    `We are pleased to welcome you to the ${opts.displayTitle}${event.venue ? ` at ${event.venue}` : ""}.`,
     "",
     `Date: ${event.date}`,
     `Time: ${opts.timeText}`,
@@ -187,8 +185,7 @@ function buildEntryPassText(
     parts.push("", `Dietary Requirements: ${opts.dietaryNote}`);
   }
   parts.push("");
-  parts.push("We are excited to celebrate this milestone with you.");
-  parts.push("Thank you for being part of the PEOPLElogy journey.");
+  parts.push("We are excited to celebrate this milestone with you and look forward to creating memorable moments together.");
   if (opts.signOffName) {
     parts.push("", "Warm regards,", opts.signOffName);
     if (opts.signOffSub) parts.push(opts.signOffSub);

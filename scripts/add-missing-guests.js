@@ -56,23 +56,9 @@ function toE164(raw) {
 
 const GUESTS = [
   {
-    name: 'Dr Md Fauzi bin Md Ismail',
-    email: 'i.fauzi@mbot.org.my',
-    phone: '+60123796410',
-    company: 'MBOT',
-    jobTitle: 'CEO/Registrar',
-  },
-  {
-    name: 'Lam May Kiow',
-    email: 'lam91734@gmail.com',
-    phone: toE164('0127433313'),
-    company: '-',
-    jobTitle: '-',
-  },
-  {
-    name: 'Tan Jing Ying',
-    email: 'mtan38615@gmail.com',
-    phone: toE164('0197282113'),
+    name: 'Eugene Lee',
+    email: 'eugeneleejiaxin@gmail.com',
+    phone: toE164('0132272427'),
     company: '-',
     jobTitle: '-',
   },
