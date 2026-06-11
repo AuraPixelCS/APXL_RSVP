@@ -170,6 +170,8 @@ function buildEntryPassText(
     "",
     `We are pleased to welcome you to the ${opts.displayTitle}${event.venue ? ` at ${event.venue}` : ""}.`,
     "",
+    "As we commemorate 25 years of growth, innovation, partnerships and people, we are honored to have you join us for this special milestone.",
+    "",
     `Date: ${event.date}`,
     `Time: ${opts.timeText}`,
   ];

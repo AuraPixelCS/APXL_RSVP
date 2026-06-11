@@ -288,8 +288,11 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
-    : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
+    : `<p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
         We are pleased to welcome you to the <strong>${opts.eventTitle}</strong>${opts.venue ? ` at <strong>${opts.venue}</strong>` : ""}.
+      </p>
+      <p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
+        As we commemorate 25 years of growth, innovation, partnerships and people, we are honored to have you join us for this special milestone.
       </p>`;
 
   // Always render the dark title strip beneath the banner — so even when the

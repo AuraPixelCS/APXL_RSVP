@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.6.3] — 2026-06-11
+
+### Entry-pass email — restore commemorate line
+
+- Re-added the **"As we commemorate 25 years of growth, innovation, partnerships and people…"** paragraph after the welcome line (HTML + plain text), per client review.
+
 ## [2.6.2] — 2026-06-11
 
 ### Entry-pass email — client-locked final format
