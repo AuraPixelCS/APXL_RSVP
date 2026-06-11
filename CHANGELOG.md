@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.6.1] — 2026-06-11
+
+### Entry-pass email — client-requested content rework
+
+Restructured the PEOPLElogy entry-pass email ([lib/emailTemplates.ts](lib/emailTemplates.ts), [pages/api/notify.ts](pages/api/notify.ts)) to the client's copy:
+
+- **New body:** "The countdown is almost over…" + "As we commemorate 25 years of growth, innovation, partnerships, and people…".
+- **Details box:** event name shows as **PEOPLElogy 25th Anniversary** (trailing "Event" dropped), **Time auto-formats to 12-hour** (`17:30` → `5:00 PM`), **Address removed**, dress-code row relabelled **Attire** and defaulted to **Formal Elegance** for PEOPLElogy.
+- **"Important: Event Registration QR Code"** heading + save-to-mobile note above the QR.
+- **New "Dietary Requirements"** section (vegetarian, reply by Friday, 12 June 2026).
+- **Sign-off:** "Warm regards, / PEOPLElogy Berhad / 25th Anniversary Celebration Committee".
+- Plain-text alternative and the admin live preview updated to match. Non-PEOPLElogy events fall back to the generic closing.
+
 ## [2.6.0] — 2026-06-11
 
 ### Seat map — configurable smaller front row + centered aisle

@@ -84,14 +84,25 @@ async function buildEntryPassMessage(
   // Online fallback pass — a plain link that survives image-blocking in junk.
   const passUrl = `${publicBase}/pass?t=${encodeURIComponent(rsvp.qrToken)}`;
 
-  // Dress code — per-event field; defaults to "Office attire" for PEOPLElogy so
+  // Attire — per-event field; defaults to "Formal Elegance" for PEOPLElogy so
   // it shows without a data write while staying configurable for other events.
   const dressCode: string | undefined =
-    event.dressCode ?? (isPeoplelogy ? "Office attire" : undefined);
+    event.dressCode ?? (isPeoplelogy ? "Formal Elegance" : undefined);
+
+  // PEOPLElogy-specific copy (dietary note + sign-off). Other events fall back
+  // to the generic closing in buildSeatEmail.
+  const dietaryNote = isPeoplelogy
+    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
+    : undefined;
+  const signOffName = isPeoplelogy ? "PEOPLElogy Berhad" : undefined;
+  const signOffSub = isPeoplelogy ? "25th Anniversary Celebration Committee" : undefined;
+
+  // Display title — drop a trailing " Event" so the email reads "PEOPLElogy 25th Anniversary".
+  const displayTitle = event.title.replace(/\s+Event$/i, "");
 
   const html = buildSeatEmail({
     name: rsvp.name,
-    eventTitle: event.title,
+    eventTitle: displayTitle,
     eventDate: event.date,
     eventTime: event.time,
     venue: event.venue ?? "",
@@ -99,6 +110,9 @@ async function buildEntryPassMessage(
     seatNumber: rsvp.seatNumber,
     assignmentRows: assignment?.rows,
     dressCode,
+    dietaryNote,
+    signOffName,
+    signOffSub,
     bannerUrl,
     headerTitle: event.customEmailTitle,
     showTitleOnBanner: !!event.showEventTitleOnBanner,
@@ -111,11 +125,29 @@ async function buildEntryPassMessage(
 
   return {
     to: rsvp.email,
-    subject: `Your Entry Pass — ${subjectLabel} | ${event.title}`,
+    subject: `Your Entry Pass — ${subjectLabel} | ${displayTitle}`,
     html,
-    text: buildEntryPassText(rsvp, event, subjectLabel, passUrl, dressCode),
+    text: buildEntryPassText(rsvp, event, subjectLabel, {
+      passUrl,
+      dressCode,
+      dietaryNote,
+      signOffName,
+      signOffSub,
+      displayTitle,
+      timeText: fmtTime12h(event.time),
+    }),
     attachments,
   };
+}
+
+// "HH:MM" 24h → 12-hour with AM/PM (e.g. "17:30" → "5:00 PM").
+function fmtTime12h(t: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t ?? "");
+  if (!m) return t;
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
 }
 
 // Plain-text alternative — improves deliverability (spam score) and a11y.
@@ -123,29 +155,44 @@ function buildEntryPassText(
   rsvp: any,
   event: any,
   label: string,
-  passUrl?: string,
-  dressCode?: string
+  opts: {
+    passUrl?: string;
+    dressCode?: string;
+    dietaryNote?: string;
+    signOffName?: string;
+    signOffSub?: string;
+    displayTitle: string;
+    timeText: string;
+  }
 ): string {
-  const welcome = `We are pleased to welcome you to the ${event.title}${event.venue ? ` at ${event.venue}` : ""}. Your booking is confirmed.`;
   const parts = [
     `Dear ${rsvp.name},`,
     "",
-    welcome,
+    `The countdown is almost over — we look forward to welcoming you to the ${opts.displayTitle} Celebration this weekend.`,
+    "",
+    "As we commemorate 25 years of growth, innovation, partnerships, and people, we are honoured to have you join us for this special milestone.",
     "",
     `Date: ${event.date}`,
-    `Time: ${event.time}`,
+    `Time: ${opts.timeText}`,
   ];
   if (event.venue) parts.push(`Venue: ${event.venue}`);
-  if (event.address) parts.push(`Address: ${event.address}`);
-  if (dressCode) parts.push(`Dress Code: ${dressCode}`);
+  if (opts.dressCode) parts.push(`Attire: ${opts.dressCode}`);
   parts.push(label);
   parts.push("");
-  parts.push("Your QR entry pass is attached to this email.");
-  if (passUrl) {
-    parts.push(`If you can't see the QR code, open your pass here: ${passUrl}`);
+  parts.push("Your QR entry pass is attached to this email and shown in the email above.");
+  if (opts.passUrl) {
+    parts.push(`If you can't see the QR code, open your pass here: ${opts.passUrl}`);
+  }
+  if (opts.dietaryNote) {
+    parts.push("", `Dietary Requirements: ${opts.dietaryNote}`);
   }
   parts.push("");
-  parts.push("See you there!");
+  parts.push("We are excited to celebrate this milestone with you.");
+  parts.push("Thank you for being part of the PEOPLElogy journey.");
+  if (opts.signOffName) {
+    parts.push("", "Warm regards,", opts.signOffName);
+    if (opts.signOffSub) parts.push(opts.signOffSub);
+  }
   return parts.join("\n");
 }
 

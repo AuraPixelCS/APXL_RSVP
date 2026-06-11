@@ -474,20 +474,27 @@ const NotificationsPage: NextPageWithLayout = () => {
   const isTableMode = event?.assignmentMode === "table";
 
   const previewHtml = event
-    ? buildSeatEmail({
-        name: "Preview Guest",
-        eventTitle: event.title,
-        eventDate: event.date,
-        eventTime: event.time,
-        venue: event.venue,
-        address: event.address,
-        seatNumber: 1,
-        assignmentRows: formatAssignment(1, event)?.rows,
-        qrDataUrl: PREVIEW_QR,
-        dressCode: event.dressCode ?? (event.title.toLowerCase().includes("peoplelogy") ? "Office attire" : undefined),
-        bannerUrl: bannerUrl || (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
-        showTitleOnBanner: showTitle,
-      })
+    ? (() => {
+        const isP = event.title.toLowerCase().includes("peoplelogy");
+        return buildSeatEmail({
+          name: "Preview Guest",
+          eventTitle: event.title.replace(/\s+Event$/i, ""),
+          eventDate: event.date,
+          eventTime: event.time,
+          venue: event.venue,
+          seatNumber: 1,
+          assignmentRows: formatAssignment(1, event)?.rows,
+          qrDataUrl: PREVIEW_QR,
+          dressCode: event.dressCode ?? (isP ? "Formal Elegance" : undefined),
+          dietaryNote: isP
+            ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
+            : undefined,
+          signOffName: isP ? "PEOPLElogy Berhad" : undefined,
+          signOffSub: isP ? "25th Anniversary Celebration Committee" : undefined,
+          bannerUrl: bannerUrl || (isP ? "/EmailBanner.png" : undefined),
+          showTitleOnBanner: showTitle,
+        });
+      })()
     : "";
 
   const blastPreviewHtml = event

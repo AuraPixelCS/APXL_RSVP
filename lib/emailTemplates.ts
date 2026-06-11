@@ -211,14 +211,30 @@ export interface SeatEmailOpts {
   passUrl?: string;
   /** Admin-editable body paragraph. Supports {{name}} and {{event}} variables. */
   customBody?: string;
-  /** When set, a "Dress Code" row is added to the Event Details box (e.g. "Office attire"). */
+  /** When set, an "Attire" row is added to the Event Details box (e.g. "Formal Elegance"). */
   dressCode?: string;
+  /** When set, a "Dietary Requirements" section renders below the QR. */
+  dietaryNote?: string;
+  /** Sign-off name shown bold above the footer (e.g. "PEOPLElogy Berhad"). */
+  signOffName?: string;
+  /** Sub-line under the sign-off name (e.g. "25th Anniversary Celebration Committee"). */
+  signOffSub?: string;
   /** Firebase Storage URL — replaces black header with an image */
   bannerUrl?: string;
   /** Header title text. Defaults to the event title when no bannerUrl is set. */
   headerTitle?: string;
   /** When true and a banner is set, render the event title in a strip below the banner */
   showTitleOnBanner?: boolean;
+}
+
+/** Format a "HH:MM" 24h string to 12-hour with AM/PM (e.g. "17:30" → "5:00 PM"). */
+function formatTime12h(t: string): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(t ?? "");
+  if (!m) return t;
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  return `${h}:${m[2]} ${ap}`;
 }
 
 export function buildSeatEmail(opts: SeatEmailOpts): string {
@@ -272,10 +288,11 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
-    : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        We are pleased to welcome you to the <strong>${opts.eventTitle}</strong>${opts.venue ? ` at <strong>${opts.venue}</strong>` : ""}.
-        Your ${confirmNoun.toLowerCase()} has been confirmed.
-        Please find your entry QR pass below &mdash; show this at the entrance on the day of the event.
+    : `<p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
+        The countdown is almost over &mdash; we look forward to welcoming you to the <strong>${opts.eventTitle}</strong> Celebration this weekend.
+      </p>
+      <p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
+        As we commemorate 25 years of growth, innovation, partnerships, and people, we are honoured to have you join us for this special milestone.
       </p>`;
 
   // Always render the dark title strip beneath the banner — so even when the
@@ -295,18 +312,10 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmNoun} Confirmed</p>
       </div>`;
 
-  // Address row (only if present)
-  const addressRow = opts.address
-    ? `<tr>
-        <td style="padding: 5px 0; color: #888888; vertical-align: top;">Address</td>
-        <td style="padding: 5px 0; font-weight: 600;">${opts.address}</td>
-      </tr>`
-    : "";
-
-  // Dress code row (only if present)
+  // Attire row (only if present)
   const dressCodeRow = opts.dressCode
     ? `<tr>
-        <td style="padding: 5px 0; color: #888888;">Dress Code</td>
+        <td style="padding: 5px 0; color: #888888;">Attire</td>
         <td style="padding: 5px 0; font-weight: 600;">${opts.dressCode}</td>
       </tr>`
     : "";
@@ -337,22 +346,24 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
             </tr>
             <tr>
               <td style="padding: 5px 0; color: #888888;">Time</td>
-              <td style="padding: 5px 0; font-weight: 600;">${opts.eventTime}</td>
+              <td style="padding: 5px 0; font-weight: 600;">${formatTime12h(opts.eventTime)}</td>
             </tr>
             <tr>
               <td style="padding: 5px 0; color: #888888;">Venue</td>
               <td style="padding: 5px 0; font-weight: 600;">${opts.venue}</td>
             </tr>
-            ${addressRow}
             ${dressCodeRow}
             ${assignmentRowsHtml}
           </table>
         </div>
 
         <!-- QR Code -->
+        <p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Important: Event Registration QR Code</p>
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 18px;">
+          Below is your unique event QR Code. <strong>Please save it to your mobile device</strong>, as it will be required for registration upon arrival.
+        </p>
         <div style="text-align: center; margin-bottom: 28px;">
-          <p style="font-size: 13px; color: #888888; margin: 0 0 16px; text-transform: uppercase; letter-spacing: 1px;">Your Entry Pass</p>
-          <img src="${qrSrc}" alt="QR Entry Pass" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
+          <img src="${qrSrc}" alt="Entry QR Code" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
           <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for the event above. Do not share this QR code.</p>
           ${opts.passUrl
             ? `<div style="margin-top: 18px;">
@@ -361,10 +372,22 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
           </div>`
             : ""}
         </div>
+        ${opts.dietaryNote
+          ? `<p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Dietary Requirements</p>
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.dietaryNote}</p>`
+          : ""}
 
-        <p style="font-size: 13px; color: #555555; line-height: 1.6; margin: 0;">
-          If you have any questions, please reply to this email. We look forward to seeing you!
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 16px;">
+          We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
         </p>
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">
+          Thank you for being part of the PEOPLElogy journey.
+        </p>
+        ${opts.signOffName
+          ? `<p style="font-size: 14px; color: #555555; margin: 0 0 4px;">Warm regards,</p>
+        <p style="font-size: 14px; font-weight: 700; color: #111111; margin: 0;">${opts.signOffName}</p>
+        ${opts.signOffSub ? `<p style="font-size: 14px; color: #555555; margin: 0;">${opts.signOffSub}</p>` : ""}`
+          : `<p style="font-size: 13px; color: #555555; line-height: 1.6; margin: 0;">If you have any questions, please reply to this email. We look forward to seeing you!</p>`}
       </div>
 
       <!-- Footer -->
