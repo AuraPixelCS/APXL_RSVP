@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.7.1] — 2026-06-13
+
+- **`/api/scanner/guests`** now also returns a `seating` block (style, totalSeats, seatsPerTable, tablesPerSide, frontRowTablesPerSide, vipTables) so the scanner app's new **Map** tab can render the interactive table map.
+
 ## [2.7.0] — 2026-06-13
 
 ### Scanner app — show table label, not raw seat number

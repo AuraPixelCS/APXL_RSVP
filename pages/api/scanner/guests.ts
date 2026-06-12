@@ -51,9 +51,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
     });
 
+    const cfg = event.seatingConfig ?? {};
     return res.status(200).json({
       success: true,
       assignmentMode: event.assignmentMode ?? "seat",
+      // Seating config so the scanner app can render the interactive table map.
+      seating: {
+        style: cfg.style ?? null,
+        totalSeats: event.totalSeats ?? 0,
+        seatsPerTable: cfg.seatsPerTable ?? 10,
+        tablesPerSide: cfg.tablesPerSide ?? null,
+        frontRowTablesPerSide: cfg.frontRowTablesPerSide ?? null,
+        vipTables: cfg.vipTables ?? [],
+      },
       guests,
     });
   } catch (err) {
