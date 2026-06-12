@@ -92,7 +92,13 @@ async function buildEntryPassMessage(
   // PEOPLElogy-specific copy (dietary note + sign-off). Other events fall back
   // to the generic closing in buildSeatEmail.
   const dietaryNote = isPeoplelogy
-    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
+    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026, 6pm."
+    : undefined;
+  const enquiriesNote = isPeoplelogy
+    ? "For any further enquiries, please contact +60102721829."
+    : undefined;
+  const thankYouLine = isPeoplelogy
+    ? "Thank you for being part of the PEOPLElogy Journey."
     : undefined;
   const signOffName = isPeoplelogy ? "PEOPLElogy Berhad" : undefined;
   const signOffSub: string | undefined = undefined; // client locked sign-off to name only
@@ -111,6 +117,8 @@ async function buildEntryPassMessage(
     assignmentRows: assignment?.rows,
     dressCode,
     dietaryNote,
+    enquiriesNote,
+    thankYouLine,
     signOffName,
     signOffSub,
     bannerUrl,
@@ -131,6 +139,8 @@ async function buildEntryPassMessage(
       passUrl,
       dressCode,
       dietaryNote,
+      enquiriesNote,
+      thankYouLine,
       signOffName,
       signOffSub,
       displayTitle,
@@ -159,6 +169,8 @@ function buildEntryPassText(
     passUrl?: string;
     dressCode?: string;
     dietaryNote?: string;
+    enquiriesNote?: string;
+    thankYouLine?: string;
     signOffName?: string;
     signOffSub?: string;
     displayTitle: string;
@@ -186,8 +198,14 @@ function buildEntryPassText(
   if (opts.dietaryNote) {
     parts.push("", `Dietary Requirements: ${opts.dietaryNote}`);
   }
+  if (opts.enquiriesNote) {
+    parts.push("", opts.enquiriesNote);
+  }
   parts.push("");
   parts.push("We are excited to celebrate this milestone with you and look forward to creating memorable moments together.");
+  if (opts.thankYouLine) {
+    parts.push("", opts.thankYouLine);
+  }
   if (opts.signOffName) {
     parts.push("", "Warm regards,", opts.signOffName);
     if (opts.signOffSub) parts.push(opts.signOffSub);

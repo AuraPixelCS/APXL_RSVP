@@ -215,6 +215,10 @@ export interface SeatEmailOpts {
   dressCode?: string;
   /** When set, a "Dietary Requirements" section renders below the QR. */
   dietaryNote?: string;
+  /** When set, an enquiries line renders after the dietary note (e.g. "For any further enquiries, please contact …"). */
+  enquiriesNote?: string;
+  /** When set, a closing thank-you line renders before the sign-off (e.g. "Thank you for being part of the PEOPLElogy Journey."). */
+  thankYouLine?: string;
   /** Sign-off name shown bold above the footer (e.g. "PEOPLElogy Berhad"). */
   signOffName?: string;
   /** Sub-line under the sign-off name (e.g. "25th Anniversary Celebration Committee"). */
@@ -374,12 +378,18 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         </div>
         ${opts.dietaryNote
           ? `<p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Dietary Requirements</p>
-        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.dietaryNote}</p>`
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 12px;">${opts.dietaryNote}</p>`
+          : ""}
+        ${opts.enquiriesNote
+          ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.enquiriesNote}</p>`
           : ""}
 
-        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">
+        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 ${opts.thankYouLine ? "16px" : "24px"};">
           We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
         </p>
+        ${opts.thankYouLine
+          ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.thankYouLine}</p>`
+          : ""}
         ${opts.signOffName
           ? `<p style="font-size: 14px; color: #555555; margin: 0 0 4px;">Warm regards,</p>
         <p style="font-size: 14px; font-weight: 700; color: #111111; margin: 0;">${opts.signOffName}</p>

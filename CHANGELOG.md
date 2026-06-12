@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.6.4] — 2026-06-12
+
+### Entry-pass email — final client copy + UI tidy
+
+- Dietary deadline updated to **"Friday, 12 June 2026, 6pm."**
+- Added enquiries line: **"For any further enquiries, please contact +60102721829."** (after the dietary note).
+- Restored closing line **"Thank you for being part of the PEOPLElogy Journey."** before the sign-off.
+- New optional template fields `enquiriesNote` / `thankYouLine` ([lib/emailTemplates.ts](lib/emailTemplates.ts)); HTML + plain-text + admin preview all updated.
+- Removed the box-shadow/glow on the floating "Notify Unnotified" button ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)).
+
 ## [2.6.3] — 2026-06-11
 
 ### Entry-pass email — restore commemorate line

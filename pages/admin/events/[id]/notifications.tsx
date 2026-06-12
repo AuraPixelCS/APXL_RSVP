@@ -487,8 +487,10 @@ const NotificationsPage: NextPageWithLayout = () => {
           qrDataUrl: PREVIEW_QR,
           dressCode: event.dressCode ?? (isP ? "Formal Elegance" : undefined),
           dietaryNote: isP
-            ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026."
+            ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026, 6pm."
             : undefined,
+          enquiriesNote: isP ? "For any further enquiries, please contact +60102721829." : undefined,
+          thankYouLine: isP ? "Thank you for being part of the PEOPLElogy Journey." : undefined,
           signOffName: isP ? "PEOPLElogy Berhad" : undefined,
           bannerUrl: bannerUrl || (isP ? "/EmailBanner.png" : undefined),
           showTitleOnBanner: showTitle,
