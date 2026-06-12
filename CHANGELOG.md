@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.6.5] — 2026-06-12
+
+- Corrected dietary-requirements deadline to **Saturday, 13 June 2026, 6pm** (was Friday, 12 June).
+
 ## [2.6.4] — 2026-06-12
 
 ### Entry-pass email — final client copy + UI tidy

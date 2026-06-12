@@ -92,7 +92,7 @@ async function buildEntryPassMessage(
   // PEOPLElogy-specific copy (dietary note + sign-off). Other events fall back
   // to the generic closing in buildSeatEmail.
   const dietaryNote = isPeoplelogy
-    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Friday, 12 June 2026, 6pm."
+    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Saturday, 13 June 2026, 6pm."
     : undefined;
   const enquiriesNote = isPeoplelogy
     ? "For any further enquiries, please contact +60102721829."
