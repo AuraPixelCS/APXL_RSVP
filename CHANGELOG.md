@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.7.0] — 2026-06-13
+
+### Scanner app — show table label, not raw seat number
+
+- **`/api/scanner/guests`** now returns a canonical `seatLabel` / `seatLabelShort` per guest (computed via `formatAssignment`, so table-mode events show "Table 4" instead of "Seat 31"; VIP-aware) plus the event `assignmentMode` ([pages/api/scanner/guests.ts](pages/api/scanner/guests.ts)). The Expo scanner app's guest list, guest detail, and recent-check-ins now display this label.
+
+### Admin — event ID chip
+
+- Added a monospace, copy-to-clipboard **event-ID chip** in the top-bar header (next to the admin email) on all `/admin/events/[id]` routes ([components/layout/Header.tsx](components/layout/Header.tsx)).
+
 ## [2.6.5] — 2026-06-12
 
 - Corrected dietary-requirements deadline to **Saturday, 13 June 2026, 6pm** (was Friday, 12 June).
