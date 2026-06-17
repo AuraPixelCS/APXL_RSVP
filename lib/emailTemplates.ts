@@ -219,6 +219,8 @@ export interface SeatEmailOpts {
   enquiriesNote?: string;
   /** When set, a closing thank-you line renders before the sign-off (e.g. "Thank you for being part of the PEOPLElogy Journey."). */
   thankYouLine?: string;
+  /** When set, a "Programme Agenda" image renders after the details box (absolute URL to a hosted graphic). */
+  agendaImageUrl?: string;
   /** Sign-off name shown bold above the footer (e.g. "PEOPLElogy Berhad"). */
   signOffName?: string;
   /** Sub-line under the sign-off name (e.g. "25th Anniversary Celebration Committee"). */
@@ -293,10 +295,19 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
     : `<p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
-        We are pleased to welcome you to the <strong>${opts.eventTitle}</strong>${opts.venue ? ` at <strong>${opts.venue}</strong>` : ""}.
+        <strong>The wait is almost over!</strong>
+      </p>
+      <p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
+        We are excited to welcome you tomorrow to the <strong>${opts.eventTitle} Celebration</strong> as we commemorate 25 years of growth, innovation, partnerships, and success.
+      </p>
+      <p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
+        We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.
+      </p>
+      <p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
+        We look forward to celebrating this special milestone together and creating memorable moments with you.
       </p>
       <p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        As we commemorate 25 years of growth, innovation, partnerships and people, we are honored to have you join us for this special milestone.
+        Safe travels, and see you tomorrow!
       </p>`;
 
   // Always render the dark title strip beneath the banner — so even when the
@@ -376,6 +387,10 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
             ${assignmentRowsHtml}
           </table>
         </div>
+        ${opts.agendaImageUrl
+          ? `<p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 12px;">Programme Agenda</p>
+        <div style="line-height:0; margin: 0 0 28px;"><img src="${opts.agendaImageUrl}" alt="Programme Agenda" style="width: 100%; max-width: 480px; display: block; margin: 0 auto; border-radius: 10px; border: 1px solid #e5e5e5;" /></div>`
+          : ""}
         ${opts.dietaryNote
           ? `<p style="font-weight: 700; color: #111111; font-size: 15px; margin: 0 0 6px;">Dietary Requirements</p>
         <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 12px;">${opts.dietaryNote}</p>`
@@ -383,10 +398,11 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         ${opts.enquiriesNote
           ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.enquiriesNote}</p>`
           : ""}
-
-        <p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 ${opts.thankYouLine ? "16px" : "24px"};">
+        ${!opts.agendaImageUrl
+          ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 ${opts.thankYouLine ? "16px" : "24px"};">
           We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
-        </p>
+        </p>`
+          : ""}
         ${opts.thankYouLine
           ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 24px;">${opts.thankYouLine}</p>`
           : ""}

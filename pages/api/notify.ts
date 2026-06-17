@@ -89,19 +89,10 @@ async function buildEntryPassMessage(
   const dressCode: string | undefined =
     event.dressCode ?? (isPeoplelogy ? "Formal Elegance" : undefined);
 
-  // PEOPLElogy-specific copy (dietary note + sign-off). Other events fall back
-  // to the generic closing in buildSeatEmail.
-  const dietaryNote = isPeoplelogy
-    ? "To help us better accommodate our guests, if you require a vegetarian meal, kindly reply to this email by Saturday, 13 June 2026, 6pm."
-    : undefined;
-  const enquiriesNote = isPeoplelogy
-    ? "For any further enquiries, please contact +60102721829."
-    : undefined;
-  const thankYouLine = isPeoplelogy
-    ? "Thank you for being part of the PEOPLElogy Journey."
-    : undefined;
   const signOffName = isPeoplelogy ? "PEOPLElogy Berhad" : undefined;
-  const signOffSub: string | undefined = undefined; // client locked sign-off to name only
+
+  // Programme agenda graphic (hosted in public/) for the day-before reminder email.
+  const agendaImageUrl = isPeoplelogy ? `${publicBase}/EventAgenda.png` : undefined;
 
   // Display title — drop a trailing " Event" so the email reads "PEOPLElogy 25th Anniversary".
   const displayTitle = event.title.replace(/\s+Event$/i, "");
@@ -116,11 +107,8 @@ async function buildEntryPassMessage(
     seatNumber: rsvp.seatNumber,
     assignmentRows: assignment?.rows,
     dressCode,
-    dietaryNote,
-    enquiriesNote,
-    thankYouLine,
+    agendaImageUrl,
     signOffName,
-    signOffSub,
     bannerUrl,
     headerTitle: event.customEmailTitle,
     showTitleOnBanner: !!event.showEventTitleOnBanner,
@@ -133,16 +121,14 @@ async function buildEntryPassMessage(
 
   return {
     to: rsvp.email,
-    subject: `Your Entry Pass — ${subjectLabel} | ${displayTitle}`,
+    subject: isPeoplelogy
+      ? "See You Tomorrow as We Celebrate 25 Years Together"
+      : `Your Entry Pass — ${subjectLabel} | ${displayTitle}`,
     html,
     text: buildEntryPassText(rsvp, event, subjectLabel, {
       passUrl,
       dressCode,
-      dietaryNote,
-      enquiriesNote,
-      thankYouLine,
       signOffName,
-      signOffSub,
       displayTitle,
       timeText: fmtTime12h(event.time),
     }),
@@ -168,11 +154,7 @@ function buildEntryPassText(
   opts: {
     passUrl?: string;
     dressCode?: string;
-    dietaryNote?: string;
-    enquiriesNote?: string;
-    thankYouLine?: string;
     signOffName?: string;
-    signOffSub?: string;
     displayTitle: string;
     timeText: string;
   }
@@ -180,9 +162,15 @@ function buildEntryPassText(
   const parts = [
     `Dear ${rsvp.name},`,
     "",
-    `We are pleased to welcome you to the ${opts.displayTitle}${event.venue ? ` at ${event.venue}` : ""}.`,
+    "The wait is almost over!",
     "",
-    "As we commemorate 25 years of growth, innovation, partnerships and people, we are honored to have you join us for this special milestone.",
+    `We are excited to welcome you tomorrow to the ${opts.displayTitle} Celebration as we commemorate 25 years of growth, innovation, partnerships, and success.`,
+    "",
+    "We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.",
+    "",
+    "We look forward to celebrating this special milestone together and creating memorable moments with you.",
+    "",
+    "Safe travels, and see you tomorrow!",
     "",
     `Date: ${event.date}`,
     `Time: ${opts.timeText}`,
@@ -195,20 +183,8 @@ function buildEntryPassText(
   if (opts.passUrl) {
     parts.push(`If you can't see the QR code, open your pass here: ${opts.passUrl}`);
   }
-  if (opts.dietaryNote) {
-    parts.push("", `Dietary Requirements: ${opts.dietaryNote}`);
-  }
-  if (opts.enquiriesNote) {
-    parts.push("", opts.enquiriesNote);
-  }
-  parts.push("");
-  parts.push("We are excited to celebrate this milestone with you and look forward to creating memorable moments together.");
-  if (opts.thankYouLine) {
-    parts.push("", opts.thankYouLine);
-  }
   if (opts.signOffName) {
     parts.push("", "Warm regards,", opts.signOffName);
-    if (opts.signOffSub) parts.push(opts.signOffSub);
   }
   return parts.join("\n");
 }

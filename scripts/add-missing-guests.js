@@ -56,11 +56,11 @@ function toE164(raw) {
 
 const GUESTS = [
   {
-    name: 'Prakash',
-    email: 'prakash@mmail.com.my',
+    name: 'Mandy',
+    email: 'mandresh2599@gmail.com',
     phone: '', // not provided
-    company: 'The Fuel',
-    jobTitle: '-',
+    company: 'AuraPixel',
+    jobTitle: 'dev',
   },
 ];
 

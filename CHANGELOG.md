@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.8.0] — 2026-06-18
+
+### Entry-pass email — day-before "See You Tomorrow" reminder format
+
+- **New subject:** "See You Tomorrow as We Celebrate 25 Years Together" (PEOPLElogy).
+- **New body copy** ([lib/emailTemplates.ts](lib/emailTemplates.ts)): "The wait is almost over!" → welcome-tomorrow / commemorate / arrive-early / look-forward / "Safe travels, and see you tomorrow!".
+- **New Programme Agenda graphic** rendered after the details box, via a new `agendaImageUrl` template field; hosted at [public/EventAgenda.png](public/EventAgenda.png) ([pages/api/notify.ts](pages/api/notify.ts) passes `${publicBase}/EventAgenda.png`).
+- **Removed** the Dietary Requirements + enquiries + "PEOPLElogy Journey" lines for this reminder version. QR section, details box, banner, and "Warm regards, / PEOPLElogy Berhad" sign-off unchanged. Plain-text + admin preview updated to match.
+
 ## [2.7.1] — 2026-06-13
 
 - **`/api/scanner/guests`** now also returns a `seating` block (style, totalSeats, seatsPerTable, tablesPerSide, frontRowTablesPerSide, vipTables) so the scanner app's new **Map** tab can render the interactive table map.
