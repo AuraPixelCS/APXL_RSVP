@@ -94,6 +94,14 @@ async function buildEntryPassMessage(
   // Programme agenda graphic (hosted in public/) for the day-before reminder email.
   const agendaImageUrl = isPeoplelogy ? `${publicBase}/EventAgenda.png` : undefined;
 
+  // Closing paragraphs rendered AFTER the agenda image.
+  const pStyle = 'font-size: 14px; color: #555555; line-height: 1.6;';
+  const afterAgendaHtml = isPeoplelogy
+    ? `<p style="${pStyle} margin: 0 0 16px;">We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.</p>
+       <p style="${pStyle} margin: 0 0 16px;">We look forward to celebrating this special milestone together and creating memorable moments with you.</p>
+       <p style="${pStyle} margin: 0 0 24px;">Safe travels, and see you tomorrow!</p>`
+    : undefined;
+
   // Display title — drop a trailing " Event" so the email reads "PEOPLElogy 25th Anniversary".
   const displayTitle = event.title.replace(/\s+Event$/i, "");
 
@@ -108,6 +116,7 @@ async function buildEntryPassMessage(
     assignmentRows: assignment?.rows,
     dressCode,
     agendaImageUrl,
+    afterAgendaHtml,
     signOffName,
     bannerUrl,
     headerTitle: event.customEmailTitle,
@@ -166,12 +175,6 @@ function buildEntryPassText(
     "",
     `We are excited to welcome you tomorrow to the ${opts.displayTitle} Celebration as we commemorate 25 years of growth, innovation, partnerships, and success.`,
     "",
-    "We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.",
-    "",
-    "We look forward to celebrating this special milestone together and creating memorable moments with you.",
-    "",
-    "Safe travels, and see you tomorrow!",
-    "",
     `Date: ${event.date}`,
     `Time: ${opts.timeText}`,
   ];
@@ -183,6 +186,12 @@ function buildEntryPassText(
   if (opts.passUrl) {
     parts.push(`If you can't see the QR code, open your pass here: ${opts.passUrl}`);
   }
+  parts.push("");
+  parts.push("We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.");
+  parts.push("");
+  parts.push("We look forward to celebrating this special milestone together and creating memorable moments with you.");
+  parts.push("");
+  parts.push("Safe travels, and see you tomorrow!");
   if (opts.signOffName) {
     parts.push("", "Warm regards,", opts.signOffName);
   }

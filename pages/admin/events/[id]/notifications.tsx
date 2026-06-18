@@ -487,6 +487,11 @@ const NotificationsPage: NextPageWithLayout = () => {
           qrDataUrl: PREVIEW_QR,
           dressCode: event.dressCode ?? (isP ? "Formal Elegance" : undefined),
           agendaImageUrl: isP ? "/EventAgenda.png" : undefined,
+          afterAgendaHtml: isP
+            ? `<p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 16px;">We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.</p>
+               <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 16px;">We look forward to celebrating this special milestone together and creating memorable moments with you.</p>
+               <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 24px;">Safe travels, and see you tomorrow!</p>`
+            : undefined,
           signOffName: isP ? "PEOPLElogy Berhad" : undefined,
           bannerUrl: bannerUrl || (isP ? "/EmailBanner.png" : undefined),
           showTitleOnBanner: showTitle,

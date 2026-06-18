@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.8.1] — 2026-06-18
+
+- Reminder email: moved the closing paragraphs ("arrive early" / "look forward" / "Safe travels, and see you tomorrow!") to **after** the Programme Agenda graphic, via a new `afterAgendaHtml` template field ([lib/emailTemplates.ts](lib/emailTemplates.ts), [pages/api/notify.ts](pages/api/notify.ts)). Plain-text + admin preview reordered to match.
+
 ## [2.8.0] — 2026-06-18
 
 ### Entry-pass email — day-before "See You Tomorrow" reminder format
