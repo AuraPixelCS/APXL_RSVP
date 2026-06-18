@@ -60,7 +60,7 @@ const PREVIEW_QR =
 
 function NotificationHero({
   eventTitle, notifiedCount, unnotifiedCount, totalAllocated, notifiedPct,
-  bulkNotifying, canBulk, onBulkNotify,
+  bulkNotifying, canBulk, onBulkNotify, onNotifyAll,
 }: {
   eventTitle: string;
   notifiedCount: number;
@@ -70,6 +70,7 @@ function NotificationHero({
   bulkNotifying: boolean;
   canBulk: boolean;
   onBulkNotify: () => void;
+  onNotifyAll: () => void;
 }) {
   const RING_SIZE = 140;
   const STROKE = 12;
@@ -139,6 +140,18 @@ function NotificationHero({
                   {unnotifiedCount > 0 ? `Notify ${unnotifiedCount} Unnotified` : "All Notified"}
                 </>
               )}
+            </button>
+
+            {/* Re-send the latest email to EVERYONE (incl. already-notified). */}
+            <button
+              onClick={onNotifyAll}
+              disabled={totalAllocated === 0 || bulkNotifying}
+              title="Re-send the QR email to all allocated guests, including those already notified"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)" }}
+            >
+              <BellIcon />
+              Notify All {totalAllocated}
             </button>
           </div>
         </div>
@@ -381,20 +394,29 @@ const NotificationsPage: NextPageWithLayout = () => {
     }
   }, [event]);
 
-  const handleBulkNotify = useCallback(async () => {
+  const handleBulkNotify = useCallback(async (all = false) => {
     if (!event?.id || bulkNotifying) return;
+    // Re-sending to everyone (incl. already-notified) is a big, irreversible
+    // blast — confirm first.
+    if (all) {
+      const count = allocatedRsvps.length;
+      const ok = window.confirm(
+        `Re-send the QR email to ALL ${count} allocated guests — including the ${notifiedCount} already notified?\n\nThis will email everyone again with the latest template.`
+      );
+      if (!ok) return;
+    }
     setBulkNotifying(true);
     try {
       const authHeaders = await getAuthHeaders();
       await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ eventId: event.id, bulk: true }),
+        body: JSON.stringify({ eventId: event.id, bulk: true, all }),
       });
     } finally {
       setBulkNotifying(false);
     }
-  }, [event, bulkNotifying]);
+  }, [event, bulkNotifying, allocatedRsvps.length, notifiedCount]);
 
   const toggleBlastSelect = useCallback((rsvpId: string) => {
     setSelectedBlastIds((prev) => {
@@ -564,7 +586,8 @@ const NotificationsPage: NextPageWithLayout = () => {
         notifiedPct={notifiedPct}
         bulkNotifying={bulkNotifying}
         canBulk={isAdmin && unnotifiedCount > 0}
-        onBulkNotify={handleBulkNotify}
+        onBulkNotify={() => handleBulkNotify(false)}
+        onNotifyAll={() => handleBulkNotify(true)}
       />
 
       {/* ── Tab pills ─────────────────────────────────────────────────────── */}
@@ -1299,38 +1322,49 @@ const NotificationsPage: NextPageWithLayout = () => {
       )}
 
       {/* ── Floating sticky Bulk Notify ─────────────────────────────────────
-           Appears on the Guests tab when there is still work to do and the
-           current filter view actually exposes the workflow (i.e. not the
-           Notified-only view). Reaches the same handler as the hero CTA. */}
+           On the Guests tab: "Notify All" re-sends the latest email to every
+           allocated guest; the secondary pill targets only the unnotified. */}
       <AnimatePresence>
-        {activeTab === "guests" && isAdmin && unnotifiedCount > 0 && guestFilter !== "notified" && (
-          <motion.button
+        {activeTab === "guests" && isAdmin && allocatedRsvps.length > 0 && guestFilter !== "notified" && (
+          <motion.div
             key="sticky-bulk"
             initial={{ opacity: 0, y: 12, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.95 }}
             transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            onClick={handleBulkNotify}
-            disabled={bulkNotifying}
-            className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-4 py-3 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
-            style={{
-              background: "var(--accent)",
-              color: "#000",
-            }}
-            whileHover={{ y: -2 }}
+            className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2"
           >
-            {bulkNotifying ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
-                Sending…
-              </>
-            ) : (
-              <>
+            <button
+              onClick={() => handleBulkNotify(true)}
+              disabled={bulkNotifying}
+              title="Re-send the QR email to all allocated guests (including already-notified)"
+              className="flex items-center gap-2 px-4 py-3 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ background: "var(--accent)", color: "#000" }}
+            >
+              {bulkNotifying ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
+                  Sending…
+                </>
+              ) : (
+                <>
+                  <BellIcon />
+                  Notify All {allocatedRsvps.length}
+                </>
+              )}
+            </button>
+            {unnotifiedCount > 0 && !bulkNotifying && (
+              <button
+                onClick={() => handleBulkNotify(false)}
+                disabled={bulkNotifying}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+                style={{ background: "var(--surface-2)", color: "var(--accent)", border: "1px solid var(--accent)" }}
+              >
                 <BellIcon />
                 Notify {unnotifiedCount} Unnotified
-              </>
+              </button>
             )}
-          </motion.button>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

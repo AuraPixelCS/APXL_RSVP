@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.9.0] — 2026-06-18
+
+### Notify All — re-send to everyone
+
+- Added a **"Notify All"** action (hero button + floating pill) that re-sends the QR email to **all** allocated guests, including those already notified — for resending an updated template ([pages/admin/events/[id]/notifications.tsx](pages/admin/events/[id]/notifications.tsx)). Guarded by a confirmation dialog.
+- `/api/notify` bulk mode accepts an `all` flag that skips the `notifiedAt` filter ([pages/api/notify.ts](pages/api/notify.ts)). The existing "Notify N Unnotified" behaviour is unchanged (default).
+
 ## [2.8.1] — 2026-06-18
 
 - Reminder email: moved the closing paragraphs ("arrive early" / "look forward" / "Safe travels, and see you tomorrow!") to **after** the Programme Agenda graphic, via a new `afterAgendaHtml` template field ([lib/emailTemplates.ts](lib/emailTemplates.ts), [pages/api/notify.ts](pages/api/notify.ts)). Plain-text + admin preview reordered to match.

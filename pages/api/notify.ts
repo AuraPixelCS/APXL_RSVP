@@ -245,7 +245,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     return res.status(500).json({ error: "RESEND_API_KEY is not configured" });
   }
 
-  const { eventId, rsvpId, bulk, htmlBody } = req.body;
+  const { eventId, rsvpId, bulk, all, htmlBody } = req.body;
 
   if (!eventId) {
     return res.status(400).json({ error: "eventId is required" });
@@ -274,10 +274,11 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
         .where("status", "in", ["allocated", "checked_in"])
         .get();
 
-      // Filter to those not yet notified (notifiedAt null or missing)
-      const targets = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((r: any) => !r.notifiedAt) as any[];
+      // Default: only those not yet notified. When `all` is true, re-notify
+      // EVERY allocated/checked-in guest (used to resend an updated email).
+      const targets = (snap.docs
+        .map((d) => ({ id: d.id, ...d.data() })) as any[])
+        .filter((r: any) => all || !r.notifiedAt);
 
       if (targets.length === 0) {
         return res.status(200).json({ success: true, notified: 0, failed: 0 });

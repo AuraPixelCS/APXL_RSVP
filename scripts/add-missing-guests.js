@@ -56,11 +56,11 @@ function toE164(raw) {
 
 const GUESTS = [
   {
-    name: 'Mandy',
-    email: 'mandresh2599@gmail.com',
-    phone: '', // not provided
-    company: 'AuraPixel',
-    jobTitle: 'dev',
+    name: 'Pang Wei Jun',
+    email: 'pangwj@kenanga.com.my',
+    phone: toE164('019-7656886'),
+    company: 'Kenanga Investment Bank',
+    jobTitle: '-',
   },
 ];
 
