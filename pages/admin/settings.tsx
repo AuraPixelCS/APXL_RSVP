@@ -66,6 +66,18 @@ function TrashIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function ReportIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="8" y1="18" x2="8" y2="14" />
+      <line x1="12" y1="18" x2="12" y2="12" />
+      <line x1="16" y1="18" x2="16" y2="16" />
+    </svg>
+  );
+}
+
 function CalendarIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -822,12 +834,70 @@ function InfoCard({ label, value, mono, emphasis }: { label: string; value: stri
   );
 }
 
+// ─── Derived event status ─────────────────────────────────────────────────────
+// The stored `isActive` flag only says whether an event is enabled — it never
+// expires on its own. So an event whose date has passed still reads "Active".
+// Derive a real status: a past-dated event is "Completed" regardless of the
+// flag; otherwise it's "Active" / "Inactive" per the flag.
+
+type DerivedStatusKey = "completed" | "active" | "inactive";
+
+interface DerivedStatus {
+  key: DerivedStatusKey;
+  label: string;
+  dot: string;        // status-dot colour
+  glow: boolean;      // soft glow on the dot (live events only)
+  badgeBg: string;
+  badgeColor: string;
+  badgeBorder: string;
+}
+
+function getEventStatus(event: Event): DerivedStatus {
+  // Treat the event as live through the end of its own calendar day (local tz),
+  // so a 7pm event isn't marked "Completed" at 9am the same morning.
+  const endOfEventDay = new Date(`${event.date}T23:59:59`).getTime();
+  const isPast = Number.isFinite(endOfEventDay) && endOfEventDay < Date.now();
+
+  if (isPast) {
+    return {
+      key: "completed",
+      label: "Completed",
+      dot: "#3d9bf5",
+      glow: false,
+      badgeBg: "rgba(61,155,245,0.08)",
+      badgeColor: "#3d9bf5",
+      badgeBorder: "rgba(61,155,245,0.22)",
+    };
+  }
+  if (event.isActive) {
+    return {
+      key: "active",
+      label: "Active",
+      dot: "#22c55e",
+      glow: true,
+      badgeBg: "rgba(34,197,94,0.08)",
+      badgeColor: "#22c55e",
+      badgeBorder: "rgba(34,197,94,0.2)",
+    };
+  }
+  return {
+    key: "inactive",
+    label: "Inactive",
+    dot: "var(--muted)",
+    glow: false,
+    badgeBg: "rgba(107,114,128,0.12)",
+    badgeColor: "var(--muted)",
+    badgeBorder: "rgba(107,114,128,0.2)",
+  };
+}
+
 // ─── Event List Panel (kept, lightly polished) ────────────────────────────────
 
 function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [reportingId, setReportingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -841,6 +911,39 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const handleReport = async (event: Event) => {
+    if (!event.id) return;
+    setReportingId(event.id);
+    setError(null);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/event-report?eventId=${encodeURIComponent(event.id)}`,
+        { headers }
+      );
+      if (!res.ok) {
+        let msg = "Failed to generate report";
+        try { const d = await res.json(); msg = d.error || msg; } catch { /* non-JSON */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const cd = res.headers.get("Content-Disposition");
+      const m = cd ? /filename="?([^"]+)"?/.exec(cd) : null;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = m ? m[1] : `${event.title}-Report.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReportingId(null);
+    }
+  };
 
   const handleDelete = async (event: Event) => {
     if (!event.id) return;
@@ -894,7 +997,9 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
       ) : (
         <div className="flex flex-col gap-2">
           <AnimatePresence initial={false}>
-            {events.map((event) => (
+            {events.map((event) => {
+              const status = getEventStatus(event);
+              return (
               <motion.div
                 key={event.id}
                 layout
@@ -910,8 +1015,8 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
               >
                 <div style={{
                   width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
-                  background: event.isActive ? "#22c55e" : "var(--muted)",
-                  boxShadow: event.isActive ? "0 0 6px rgba(34,197,94,0.5)" : "none",
+                  background: status.dot,
+                  boxShadow: status.glow ? "0 0 6px rgba(34,197,94,0.5)" : "none",
                 }} />
 
                 <div className="flex-1 min-w-0">
@@ -932,13 +1037,41 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
 
                 <div style={{
                   padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600,
-                  background: event.isActive ? "rgba(34,197,94,0.08)" : "rgba(107,114,128,0.12)",
-                  color: event.isActive ? "#22c55e" : "var(--muted)",
-                  border: `1px solid ${event.isActive ? "rgba(34,197,94,0.2)" : "rgba(107,114,128,0.2)"}`,
+                  background: status.badgeBg,
+                  color: status.badgeColor,
+                  border: `1px solid ${status.badgeBorder}`,
                   flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.05em",
                 }}>
-                  {event.isActive ? "Active" : "Inactive"}
+                  {status.label}
                 </div>
+
+                <button
+                  onClick={() => handleReport(event)}
+                  disabled={reportingId === event.id}
+                  title="Generate a branded PDF report for this event"
+                  className="cursor-pointer disabled:opacity-60 disabled:cursor-wait transition-all"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+                    padding: "6px 11px", borderRadius: 8,
+                    background: "var(--accent-subtle)",
+                    border: "1px solid rgba(61,155,245,0.3)",
+                    color: "var(--accent)",
+                    fontSize: 12, fontWeight: 600,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (reportingId !== event.id) {
+                      e.currentTarget.style.background = "rgba(61,155,245,0.18)";
+                      e.currentTarget.style.borderColor = "rgba(61,155,245,0.5)";
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "var(--accent-subtle)";
+                    e.currentTarget.style.borderColor = "rgba(61,155,245,0.3)";
+                  }}
+                >
+                  {reportingId === event.id ? <SpinnerIcon /> : <ReportIcon />}
+                  {reportingId === event.id ? "Generating…" : "Report"}
+                </button>
 
                 {isAdmin && (
                   <button
@@ -967,7 +1100,8 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
                   </button>
                 )}
               </motion.div>
-            ))}
+              );
+            })}
           </AnimatePresence>
         </div>
       )}

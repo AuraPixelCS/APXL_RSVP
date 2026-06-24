@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.10.0] — 2026-06-24
+
+### Event Reports — branded, downloadable PDF
+
+- **New "Report" button** on each event in Settings → Event List ([pages/admin/settings.tsx](pages/admin/settings.tsx)) that downloads a full, branded post-event PDF report.
+- **New `/api/admin/event-report`** endpoint streams a server-generated PDF built with `pdf-lib` from the event + all its RSVPs ([pages/api/admin/event-report.ts](pages/api/admin/event-report.ts), [lib/eventReport.ts](lib/eventReport.ts)).
+- Branded cover: full-bleed dark header band with the current AuraPixel wordmark (`aurapixel-tight.png`, same as the login screen) + a title/event-details card.
+- Report sections: **Executive Summary** two-tone KPI tiles (registered, attending, allocated, checked-in, attendance rate, no-shows, capacity used, plus-ones), **RSVP Funnel & Status** (donut chart + legend + funnel stat columns), **Attendance & Check-in Timeline**, **Guest Demographics** (top organisations, industry, job title, guest group — divider-separated), **Dietary Requirements**, **Seating & Capacity**, **Communications**, and a multi-page **Full Guest List** appendix (Name / Company / Seat-Table / colour-coded Status).
+- Text is sanitised to a WinAnsi-safe subset (guards against non-Latin guest names crashing the PDF encoder); all timestamps render in Asia/Kuala_Lumpur regardless of server timezone. Placeholder values ("NA", "N/A", "-", ".") are filtered from demographics; job titles/companies group case-insensitively.
+- Retired the outdated `ap-logo.png` / `ap-nav.png` brand assets.
+
+### Event List — real status
+
+- Event status badge now derives from the event date: a past-dated event reads **Completed** (blue) instead of staying **Active**. Upcoming events still show **Active** / **Inactive** per the `isActive` flag ([pages/admin/settings.tsx](pages/admin/settings.tsx)).
+
 ## [2.9.1] — 2026-06-24
 
 - Replaced QR entry-pass email with post-event thank-you email in `/api/notify`
