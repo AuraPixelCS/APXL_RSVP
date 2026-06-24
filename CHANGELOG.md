@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.9.1] — 2026-06-24
+
+- Replaced QR entry-pass email with post-event thank-you email in `/api/notify`
+- New subject: "Thank You for Celebrating PEOPLElogy's 25th Anniversary With Us"
+- Email includes Event Photo Gallery CTA (harimau.run/peoplelogy26) and IMAIREADY AI Readiness Assessment CTA (imaiready.asia)
+- Dropped QR code generation, inline QR PNG attachment, and WhatsApp sends from the notify flow
+- Banner, plain-text alternative, and `notifiedAt` tracking all preserved
+
 ## [2.9.0] — 2026-06-18
 
 ### Notify All — re-send to everyone
