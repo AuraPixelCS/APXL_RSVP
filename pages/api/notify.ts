@@ -6,11 +6,18 @@ import {
   sendResendEmail,
   sendResendBatch,
   type ResendMessage,
+  type ResendAttachment,
 } from "@/lib/resend";
-import { buildThankYouEmail, buildThankYouText } from "@/lib/emailTemplates";
+import {
+  buildSeatEmail,
+  buildThankYouEmail,
+  buildThankYouText,
+  type ThankYouCta,
+} from "@/lib/emailTemplates";
+import { formatAssignment } from "@/lib/seatLabel";
+import QRCode from "qrcode";
 
-const THANK_YOU_SUBJECT =
-  "Thank You for Celebrating PEOPLElogy's 25th Anniversary With Us";
+type NotifyTemplate = "pass" | "thankyou";
 
 // Resolve a reliable, publicly-reachable base URL for the banner asset.
 // The request `origin` is used when it's a real host, but when an admin
@@ -36,18 +43,181 @@ function buildThankYouMessage(
 ): ResendMessage {
   const publicBase = resolvePublicBase(origin);
 
-  // Drop trailing " Event" so the email reads "PEOPLElogy 25th Anniversary".
-  const displayTitle = event.title.replace(/\s+Event$/i, "");
+  // Drop a trailing " Event" from the title for nicer copy.
+  const displayTitle = String(event.title ?? "").replace(/\s+Event$/i, "");
 
   // Admin-provided banner URL, or fall back to the hosted EmailBanner.png.
   const bannerUrl: string = event.customEmailBanner ?? `${publicBase}/EmailBanner.png`;
 
+  // Default: a generic, event-driven thank-you with no baked-in branding or
+  // external links, so any future event gets a correct message with no code
+  // change. Per-event overrides can live on the event doc (thankYou* fields).
+  let orgName: string = event.thankYouOrgName || displayTitle;
+  let subject = `Thank You for Joining ${displayTitle}`;
+  let ctas: ThankYouCta[] = Array.isArray(event.thankYouCtas) ? event.thankYouCtas : [];
+
+  // TEMPORARY single-tenant bridge for the legacy PEOPLElogy event — preserves
+  // its exact subject/body/links until the per-event thank-you editor (Phase 2)
+  // lands. New events never enter this branch, so they never inherit this copy.
+  if (String(event.title ?? "").toLowerCase().includes("peoplelogy")) {
+    orgName = "PEOPLElogy Berhad";
+    subject = "Thank You for Celebrating PEOPLElogy's 25th Anniversary With Us";
+    ctas = [
+      {
+        label: "📸  View Event Photos Here",
+        url: "https://harimau.run/peoplelogy26",
+        blurb:
+          "We're delighted to share a special keepsake from the event. Click below and scan your face — our system will securely retrieve photos featuring you from the celebration.",
+      },
+      {
+        label: "🤖  Take the IMAIREADY AI Readiness Assessment",
+        url: "https://imaiready.asia",
+        blurb:
+          "As we look to the future, take the complimentary IMAIREADY AI Readiness Assessment for insights into your organisation's AI maturity, growth opportunities, and areas for development.",
+      },
+    ];
+  }
+
   return {
     to: rsvp.email,
-    subject: THANK_YOU_SUBJECT,
-    html: buildThankYouEmail({ name: rsvp.name, eventTitle: displayTitle, bannerUrl }),
-    text: buildThankYouText({ name: rsvp.name, eventTitle: displayTitle }),
+    subject,
+    html: buildThankYouEmail({ name: rsvp.name, eventTitle: displayTitle, bannerUrl, orgName, ctas }),
+    text: buildThankYouText({ name: rsvp.name, eventTitle: displayTitle, orgName, ctas }),
   };
+}
+
+// ─── Build the QR entry-pass email for one RSVP ─────────────────────────────
+//
+// The pre-event entry pass: the guest's inline QR (embedded as a small cid:qr_code
+// PNG so it renders without "load remote images"), seat/table label, event
+// details, and a plain-text /pass link fallback. Requires an allocated seat with
+// a qrToken (allocation mints it). This is what the "Send Entry Pass" action uses.
+
+async function buildEntryPassMessage(
+  rsvp: any,
+  event: any,
+  origin: string,
+): Promise<ResendMessage> {
+  const publicBase = resolvePublicBase(origin);
+  const displayTitle = String(event.title ?? "").replace(/\s+Event$/i, "");
+
+  if (!rsvp.qrToken) {
+    throw new Error(`RSVP ${rsvp.id ?? rsvp.email} has no qrToken — allocate a seat first`);
+  }
+
+  // Single source of truth for the seat/table label (VIP-, mode- and style-aware).
+  const assignment = formatAssignment(rsvp.seatNumber, event);
+  const subjectLabel = assignment ? assignment.long : `Seat #${rsvp.seatNumber}`;
+
+  // Inline QR as a small CID PNG (cid:qr_code) — crisp and lightweight.
+  const qrDataUrl = await QRCode.toDataURL(rsvp.qrToken, {
+    errorCorrectionLevel: "H",
+    margin: 2,
+    width: 300,
+    color: { dark: "#000000", light: "#ffffff" },
+  });
+  const attachments: ResendAttachment[] = [
+    { filename: "qr-entry-pass.png", content: qrDataUrl.split(",")[1], contentId: "qr_code" },
+  ];
+
+  // Plain-text link that survives image-blocking in a junk folder.
+  const passUrl = `${publicBase}/pass?t=${encodeURIComponent(rsvp.qrToken)}`;
+
+  // Banner: admin-provided URL, else the hosted fallback (small — referenced by URL).
+  const bannerUrl: string | undefined = event.customEmailBanner ?? `${publicBase}/EmailBanner.png`;
+
+  // Optional per-event content — used generically when present.
+  let dressCode: string | undefined = event.dressCode;
+  let signOffName: string | undefined = event.signOffName;
+  let agendaImageUrl: string | undefined = event.agendaImageUrl;
+  let afterAgendaHtml: string | undefined;
+  let subject = `Your Entry Pass — ${subjectLabel} | ${displayTitle}`;
+
+  // TEMPORARY single-tenant bridge for the legacy PEOPLElogy event (mirrors
+  // buildThankYouMessage) — preserves its exact day-before reminder copy until
+  // the per-event email editor lands (Phase 2). New events skip this branch.
+  if (String(event.title ?? "").toLowerCase().includes("peoplelogy")) {
+    dressCode = dressCode ?? "Formal Elegance";
+    signOffName = "PEOPLElogy Berhad";
+    agendaImageUrl = `${publicBase}/EventAgenda.png`;
+    const pStyle = "font-size: 14px; color: #555555; line-height: 1.6;";
+    afterAgendaHtml =
+      `<p style="${pStyle} margin: 0 0 16px;">We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.</p>` +
+      `<p style="${pStyle} margin: 0 0 16px;">We look forward to celebrating this special milestone together and creating memorable moments with you.</p>` +
+      `<p style="${pStyle} margin: 0 0 24px;">Safe travels, and see you tomorrow!</p>`;
+    subject = "See You Tomorrow as We Celebrate 25 Years Together";
+  }
+
+  const rawBody = event.customEmailBody ?? "";
+  const customBody =
+    rawBody.replace(/\{\{name\}\}/g, rsvp.name).replace(/\{\{event\}\}/g, event.title) || undefined;
+
+  const html = buildSeatEmail({
+    name: rsvp.name,
+    eventTitle: displayTitle,
+    eventDate: event.date,
+    eventTime: event.time,
+    venue: event.venue ?? "",
+    address: event.address,
+    seatNumber: rsvp.seatNumber,
+    assignmentRows: assignment?.rows,
+    dressCode,
+    agendaImageUrl,
+    afterAgendaHtml,
+    signOffName,
+    bannerUrl,
+    headerTitle: event.customEmailTitle,
+    showTitleOnBanner: !!event.showEventTitleOnBanner,
+    customBody,
+    passUrl,
+    // No qrDataUrl — the cid:qr_code PNG attachment is the real inline QR.
+  });
+
+  return {
+    to: rsvp.email,
+    subject,
+    html,
+    text: buildEntryPassText(rsvp, event, subjectLabel, { passUrl, dressCode, signOffName, displayTitle }),
+    attachments,
+  };
+}
+
+// Plain-text alternative for the entry-pass email (deliverability + a11y).
+function buildEntryPassText(
+  rsvp: any,
+  event: any,
+  label: string,
+  opts: { passUrl?: string; dressCode?: string; signOffName?: string; displayTitle: string },
+): string {
+  const parts = [
+    `Dear ${rsvp.name},`,
+    "",
+    `Here is your entry pass for ${opts.displayTitle}.`,
+    "",
+    `Date: ${event.date}`,
+  ];
+  if (event.time) parts.push(`Time: ${event.time}`);
+  if (event.venue) parts.push(`Venue: ${event.venue}`);
+  if (opts.dressCode) parts.push(`Attire: ${opts.dressCode}`);
+  parts.push(label, "");
+  parts.push("Your QR entry pass is attached to this email and shown in the email above.");
+  if (opts.passUrl) parts.push(`If you can't see the QR code, open your pass here: ${opts.passUrl}`);
+  parts.push("", "We look forward to seeing you there.");
+  if (opts.signOffName) parts.push("", "Warm regards,", opts.signOffName);
+  return parts.join("\n");
+}
+
+// Pick the builder for the requested template. Thank-you is the default so
+// existing callers are unchanged; "pass" sends the QR entry pass.
+async function buildMessage(
+  rsvp: any,
+  event: any,
+  origin: string,
+  template: NotifyTemplate,
+): Promise<ResendMessage> {
+  return template === "pass"
+    ? buildEntryPassMessage(rsvp, event, origin)
+    : buildThankYouMessage(rsvp, event, origin);
 }
 
 // ─── Mark notifiedAt for one RSVP ───────────────────────────────────────────
@@ -73,6 +243,9 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
   }
 
   const { eventId, rsvpId, bulk, all } = req.body;
+  // Which email to send. Default "thankyou" preserves existing behaviour;
+  // "pass" sends the QR entry pass (pre-event).
+  const template: NotifyTemplate = req.body?.template === "pass" ? "pass" : "thankyou";
 
   if (!eventId) {
     return res.status(400).json({ error: "eventId is required" });
@@ -113,8 +286,8 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
 
       // Build every email up front, then send via Resend's batch API in chunks
       // of 100 — one HTTP request per chunk, no rate-limit 429s.
-      const messages = targets.map((rsvp) =>
-        buildThankYouMessage(rsvp, event, origin)
+      const messages = await Promise.all(
+        targets.map((rsvp) => buildMessage(rsvp, event, origin, template))
       );
 
       let notified = 0;
@@ -157,7 +330,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
 
     const rsvp = { id: rsvpSnap.id, ...rsvpSnap.data() } as any;
 
-    const message = buildThankYouMessage(rsvp, event, origin);
+    const message = await buildMessage(rsvp, event, origin, template);
     const result = await sendResendEmail(message);
     if (result.success) {
       console.log(`✉️  Thank you email sent to ${rsvp.email}`);

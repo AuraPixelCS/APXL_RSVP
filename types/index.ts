@@ -28,7 +28,9 @@ export interface RSVP {
   allocatedBy?: { uid: string; displayName: string } | null;
   submittedAt: string; // ISO timestamp
   updatedAt: string;
-  // Future: Android scanner app (Phase 2)
+  // Check-in (scanner app). checkInTime is what the scanner has always written;
+  // checkedInAt is written alongside it now so web reads/reports stay in sync.
+  checkInTime?: string | null;
   checkedInAt?: string | null;
   scanLogs?: Array<{ scannedAt: string; deviceId: string }>;
 }

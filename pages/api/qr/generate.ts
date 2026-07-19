@@ -1,9 +1,12 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+import type { NextApiResponse } from "next";
 import QRCode from "qrcode";
 import { generateQRPayload, signQRPayload } from "@/lib/qr";
 import { adminDb } from "@/lib/firebaseAdmin";
+import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+// Admin-only: this route mints a signed QR token AND overwrites the stored
+// qrToken (which revokes any previously-issued pass), so it must never be public.
+async function handler(req: AuthedRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -73,3 +76,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ error: "Internal server error" });
   }
 }
+
+export default withAuth(handler, "admin");

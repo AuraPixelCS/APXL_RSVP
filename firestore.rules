@@ -1,0 +1,67 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AuraPixel RSVP — Firestore security rules
+//
+// The app talks to Firestore from the browser via the client Web SDK, so these
+// rules are the real access-control boundary for anything that does NOT go
+// through the Next.js API routes. (The API routes use the Admin SDK, which
+// bypasses these rules entirely — so server-side allocate / notify / checkin /
+// report / delete endpoints keep their own `withAuth` gating.)
+//
+// Model:
+//   • events            — public READ (the guest RSVP page loads event details
+//                          in the browser); only admins may create/update/delete.
+//   • events/*/rsvps     — guest PII. Never public. Signed-in staff read + write
+//                          (seat allocate/cancel run here via the client SDK).
+//   • users              — staff directory. Read by any signed-in staff member;
+//                          only admins may write.
+//   • everything else    — denied.
+//
+// Roles come from the Firebase custom claim `role` ("admin" | "client"), set by
+// pages/api/admin/create-user.ts and backfilled by scripts/sync-user-claims.js.
+//
+// ⚠️  TEST BEFORE PROD. Deploying rules is separate from the Vercel app deploy.
+//     Verify with the emulator or a non-prod project using BOTH an admin and a
+//     client account (guest RSVP page loads, admin can create/edit an event,
+//     seat map allocate/cancel works, client role can still allocate) before
+//     `firebase deploy --only firestore:rules` against production.
+// ─────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    match /events/{eventId} {
+      // Event details are shown to guests on the public RSVP page.
+      allow read: if true;
+      // Only admins may create / edit / delete events from the client.
+      allow create, update, delete: if isAdmin();
+
+      match /rsvps/{rsvpId} {
+        // Guest PII — signed-in staff only. Public submissions are written by
+        // the API (Admin SDK), which bypasses these rules, so no public create.
+        allow read: if isSignedIn();
+        allow write: if isSignedIn();
+      }
+    }
+
+    match /users/{uid} {
+      // Staff directory: readable by any signed-in staff, writable by admins.
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Deny-by-default for anything not matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

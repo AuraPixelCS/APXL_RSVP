@@ -146,7 +146,7 @@ function NotificationHero({
             <button
               onClick={onNotifyAll}
               disabled={totalAllocated === 0 || bulkNotifying}
-              title="Re-send the QR email to all allocated guests, including those already notified"
+              title="Re-send the selected email to all allocated guests, including those already notified"
               className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)" }}
             >
@@ -241,6 +241,8 @@ const NotificationsPage: NextPageWithLayout = () => {
   // Notify state
   const [notifyingId, setNotifyingId]     = useState<string | null>(null);
   const [bulkNotifying, setBulkNotifying] = useState(false);
+  // Which email the Notify actions send: the QR entry pass (default) or the thank-you.
+  const [notifyTemplate, setNotifyTemplate] = useState<"pass" | "thankyou">("pass");
 
   // Guest table filter + search
   const [guestFilter, setGuestFilter] = useState<"all" | "unnotified" | "notified">("unnotified");
@@ -387,12 +389,12 @@ const NotificationsPage: NextPageWithLayout = () => {
       await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ eventId: event.id, rsvpId }),
+        body: JSON.stringify({ eventId: event.id, rsvpId, template: notifyTemplate }),
       });
     } finally {
       setNotifyingId(null);
     }
-  }, [event]);
+  }, [event, notifyTemplate]);
 
   const handleBulkNotify = useCallback(async (all = false) => {
     if (!event?.id || bulkNotifying) return;
@@ -400,8 +402,9 @@ const NotificationsPage: NextPageWithLayout = () => {
     // blast — confirm first.
     if (all) {
       const count = allocatedRsvps.length;
+      const label = notifyTemplate === "pass" ? "entry-pass (QR) email" : "thank-you email";
       const ok = window.confirm(
-        `Re-send the QR email to ALL ${count} allocated guests — including the ${notifiedCount} already notified?\n\nThis will email everyone again with the latest template.`
+        `Re-send the ${label} to ALL ${count} allocated guests — including the ${notifiedCount} already notified?\n\nThis will email everyone again with the latest template.`
       );
       if (!ok) return;
     }
@@ -411,12 +414,12 @@ const NotificationsPage: NextPageWithLayout = () => {
       await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ eventId: event.id, bulk: true, all }),
+        body: JSON.stringify({ eventId: event.id, bulk: true, all, template: notifyTemplate }),
       });
     } finally {
       setBulkNotifying(false);
     }
-  }, [event, bulkNotifying, allocatedRsvps.length, notifiedCount]);
+  }, [event, bulkNotifying, allocatedRsvps.length, notifiedCount, notifyTemplate]);
 
   const toggleBlastSelect = useCallback((rsvpId: string) => {
     setSelectedBlastIds((prev) => {
@@ -616,6 +619,37 @@ const NotificationsPage: NextPageWithLayout = () => {
           );
         })}
       </div>
+
+      {/* ── Notify template selector (guests tab only) ────────────────────── */}
+      {activeTab === "guests" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs" style={{ color: "var(--muted)" }}>Email to send:</span>
+          <div
+            className="inline-flex rounded-lg p-1 gap-1"
+            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+          >
+            {([
+              { key: "pass", label: "Entry Pass (QR)" },
+              { key: "thankyou", label: "Thank-You" },
+            ] as const).map((t) => {
+              const active = notifyTemplate === t.key;
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => setNotifyTemplate(t.key)}
+                  className="px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-all duration-150"
+                  style={{
+                    background: active ? "var(--accent)" : "transparent",
+                    color: active ? "#000" : "var(--muted)",
+                  }}
+                >
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ── Section B: Template tab ───────────────────────────────────────── */}
       {activeTab === "template" && (

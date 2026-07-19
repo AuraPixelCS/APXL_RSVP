@@ -43,10 +43,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem("auth_login_time", now.toString());
         }
 
-        // Read role from custom claims; no claim = legacy account treated as admin
+        // Read role from custom claims; no claim defaults to least-privileged client.
+        // scripts/sync-user-claims.js backfills explicit claims for existing admins.
         const tokenResult = await firebaseUser.getIdTokenResult();
         const claimedRole = tokenResult.claims.role as AppRole | undefined;
-        setRole(claimedRole ?? "admin");
+        setRole(claimedRole ?? "client");
         setUser(firebaseUser);
       } else {
         localStorage.removeItem("auth_login_time");

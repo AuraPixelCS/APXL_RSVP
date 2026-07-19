@@ -5,15 +5,64 @@ import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 
+// Best-effort in-memory rate limiter (per IP). This is a public endpoint that
+// sends an email + WhatsApp on every call, so it must not be trivially abusable.
+// Serverless instances are ephemeral and horizontally scaled, so this throttles
+// a single hot instance rather than guaranteeing a global cap — a shared store
+// (e.g. Upstash Redis) is the durable fix (roadmap). It still blunts rapid-fire abuse.
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = 5; // submissions per IP per window
+const rlHits = new Map<string, number[]>();
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (rlHits.get(ip) ?? []).filter((t) => now - t < RL_WINDOW_MS);
+  if (recent.length >= RL_MAX) {
+    rlHits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  rlHits.set(ip, recent);
+  if (rlHits.size > 5000) {
+    for (const [k, v] of rlHits) {
+      if (v.every((t) => now - t >= RL_WINDOW_MS)) rlHits.delete(k);
+    }
+  }
+  return false;
+}
+
+// Field length caps — bound abuse and junk records on this public endpoint.
+const FIELD_MAX_LEN: Record<string, number> = {
+  name: 120, email: 200, phone: 32, plusOneName: 120,
+  dietaryRestrictions: 300, message: 1000, partOf: 120,
+  company: 160, jobTitle: 160, industry: 120,
+};
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const ip =
+    (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    "unknown";
+  if (rateLimited(ip)) {
+    return res.status(429).json({ error: "Too many submissions. Please try again in a minute." });
   }
 
   const { eventId, name, email, phone, attending, plusOne, plusOneName, dietaryRestrictions, message, partOf, company, jobTitle, industry } = req.body;
 
   if (!eventId || !name || !email || !phone) {
     return res.status(400).json({ error: "eventId, name, email, and phone are required" });
+  }
+
+  // Reject oversized fields before doing any work.
+  for (const [field, max] of Object.entries(FIELD_MAX_LEN)) {
+    const val = (req.body as Record<string, unknown>)?.[field];
+    if (typeof val === "string" && val.length > max) {
+      return res.status(400).json({ error: `${field} exceeds the maximum length` });
+    }
   }
 
   try {

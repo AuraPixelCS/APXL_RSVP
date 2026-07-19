@@ -1000,9 +1000,13 @@ export async function buildEventReportPdf(
   // ── Attendance & check-in timeline ────────────────────────────────────────────
   if (want.attendance) {
     b.sectionHeading("Attendance & Check-in Timeline");
+    // Accept either check-in field: the scanner has always written checkInTime;
+    // checkedInAt is written alongside it now. Prefer whichever is present.
+    const ciAt = (r?: RSVP): string | undefined =>
+      (r?.checkInTime ?? r?.checkedInAt) ?? undefined;
     const checkins = rsvps
-      .filter((r) => r.status === "checked_in" && r.checkedInAt)
-      .map((r) => klMinutes(r.checkedInAt as string))
+      .filter((r) => r.status === "checked_in" && ciAt(r))
+      .map((r) => klMinutes(ciAt(r) as string))
       .filter((m): m is number => m != null)
       .sort((a, z) => a - z);
 
@@ -1024,17 +1028,17 @@ export async function buildEventReportPdf(
         buckets.push({ label: `${hh}:${mm}`, value: count });
       }
       const peak = buckets.reduce((a, x) => (x.value > a.value ? x : a), buckets[0]);
+      const stamped = rsvps.filter((r) => ciAt(r));
+      const firstStamp = ciAt(
+        [...stamped].sort((a, z) => (klMinutes(ciAt(a)!) ?? 0) - (klMinutes(ciAt(z)!) ?? 0))[0],
+      );
+      const lastStamp = ciAt(
+        [...stamped].sort((a, z) => (klMinutes(ciAt(z)!) ?? 0) - (klMinutes(ciAt(a)!) ?? 0))[0],
+      );
       b.paragraph(
-        `First scan at ${klTime(rsvps.find((r) => r.checkedInAt && klMinutes(r.checkedInAt) === checkins[0])?.checkedInAt)} MYT, ` +
-          `last at ${klTime(
-            [...rsvps]
-              .filter((r) => r.checkedInAt)
-              .sort(
-                (a, z) =>
-                  (klMinutes(z.checkedInAt as string) ?? 0) -
-                  (klMinutes(a.checkedInAt as string) ?? 0),
-              )[0]?.checkedInAt,
-          )} MYT. Busiest 30-min window: ${peak.label} (${peak.value} guests).`,
+        `First scan at ${klTime(firstStamp)} MYT, ` +
+          `last at ${klTime(lastStamp)} MYT. ` +
+          `Busiest 30-min window: ${peak.label} (${peak.value} guests).`,
         9.5,
         SUB,
       );

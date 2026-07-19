@@ -448,7 +448,7 @@ function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; 
 
   const lastCheckIn = useMemo(() => {
     const stamps = rsvps
-      .map((r) => r.checkedInAt)
+      .map((r) => r.checkInTime ?? r.checkedInAt)
       .filter((s): s is string => !!s)
       .sort((a, b) => b.localeCompare(a));
     return stamps[0] ?? null;

@@ -1,3 +1,15 @@
+// Escape user-supplied values before interpolating them into email HTML.
+// Guest-provided fields (especially `name` on the public RSVP form) must never
+// render as live markup — otherwise the form becomes an HTML/phishing relay.
+export function escapeHtml(value: string): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // ─── RSVP Confirmation Email Template ────────────────────────────────────────
 
 export interface RsvpConfirmEmailOpts {
@@ -108,7 +120,7 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
       <!-- Body -->
       <div style="padding: 40px 40px 32px;">
         <p style="font-size: 15px; color: #222222; margin: 0 0 20px; line-height: 1.6;">
-          Dear <strong>${opts.name}</strong>,
+          Dear <strong>${escapeHtml(opts.name)}</strong>,
         </p>
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
@@ -291,8 +303,8 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
   // Substitute {{name}} and {{event}} variables in custom body
   const resolvedBody = (opts.customBody ?? "").trim()
-    .replace(/\{\{name\}\}/g, opts.name)
-    .replace(/\{\{event\}\}/g, opts.eventTitle);
+    .replace(/\{\{name\}\}/g, escapeHtml(opts.name))
+    .replace(/\{\{event\}\}/g, escapeHtml(opts.eventTitle));
 
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
@@ -338,7 +350,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
       <!-- Body -->
       <div style="padding: 36px 40px;">
-        <p style="font-size: 15px; color: #333333; margin: 0 0 8px;">Dear <strong>${opts.name}</strong>,</p>
+        <p style="font-size: 15px; color: #333333; margin: 0 0 8px;">Dear <strong>${escapeHtml(opts.name)}</strong>,</p>
         ${bodyParagraph}
 
         <!-- QR Code -->
@@ -423,46 +435,80 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 // after the event has taken place. No QR code, no seat details — just gratitude,
 // a photo gallery link, and the IMAIREADY AI Readiness Assessment CTA.
 
+export interface ThankYouCta {
+  label: string;
+  url: string;
+  blurb?: string;
+}
+
 export interface ThankYouEmailOpts {
   name: string;
   eventTitle: string;
   bannerUrl?: string;
+  /** Organiser name for the body greeting + sign-off. Defaults to eventTitle. */
+  orgName?: string;
+  /** Optional call-to-action buttons (photo gallery, assessment, …). Rendered only when present. */
+  ctas?: ThankYouCta[];
 }
 
 export function buildThankYouText(opts: ThankYouEmailOpts): string {
-  return [
+  const org = opts.orgName || opts.eventTitle;
+  const lines = [
     `Dear ${opts.name},`,
     "",
-    "On behalf of everyone at PEOPLElogy Berhad, thank you for joining us at our 25th Anniversary Celebration.",
+    `On behalf of everyone at ${org}, thank you for joining us at ${opts.eventTitle}.`,
     "",
-    "Your presence made this milestone truly meaningful. As we reflected on the past 25 years of growth, innovation, and partnerships, we were reminded that our journey would not have been possible without the support of individuals and organizations like yours.",
+    "Your presence made the occasion truly meaningful. We hope you enjoyed the celebrations, the conversations, and the opportunity to connect with fellow guests.",
+  ];
+  for (const cta of opts.ctas ?? []) {
+    lines.push("", cta.label);
+    if (cta.blurb) lines.push(cta.blurb);
+    lines.push(cta.url);
+  }
+  lines.push(
     "",
-    "We hope you enjoyed the evening's celebrations, conversations, and opportunities to reconnect with fellow industry leaders, partners, clients, and friends.",
-    "",
-    "── Event Photo Gallery ──",
-    "Relive the memorable moments from the celebration:",
-    "https://harimau.run/peoplelogy26",
-    "",
-    "── Discover Your AI Readiness ──",
-    "Take the complimentary IMAIREADY AI Readiness Assessment:",
-    "https://imaiready.asia",
-    "",
-    "Once again, thank you for being part of this special milestone. We look forward to continuing our journey together as we build the future of work, leadership, and workforce transformation.",
+    "Once again, thank you for being part of this special occasion.",
     "",
     "Warmest regards,",
-    "PEOPLElogy Berhad",
-  ].join("\n");
+    org,
+  );
+  return lines.join("\n");
 }
 
 export function buildThankYouEmail(opts: ThankYouEmailOpts): string {
+  const org = escapeHtml(opts.orgName || opts.eventTitle);
+  const title = escapeHtml(opts.eventTitle);
+
   const titleStrip = `<div style="background: #111111; padding: 14px 20px; text-align: center;">
-      <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px; font-weight: 700;">${opts.eventTitle}</h1>
-      <p style="color: #888888; font-size: 12px; margin: 4px 0 0; letter-spacing: 0.3px;">Thank You for Celebrating With Us</p>
+      <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px; font-weight: 700;">${title}</h1>
+      <p style="color: #888888; font-size: 12px; margin: 4px 0 0; letter-spacing: 0.3px;">Thank You for Joining Us</p>
     </div>`;
 
   const header = opts.bannerUrl
-    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="${opts.eventTitle}" style="width:100%;max-width:560px;display:block;" /></div>${titleStrip}`
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="${title}" style="width:100%;max-width:560px;display:block;" /></div>${titleStrip}`
     : titleStrip;
+
+  const ctaBlocks = (opts.ctas ?? [])
+    .map(
+      (cta) => `
+        <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 28px;" />
+        ${
+          cta.blurb
+            ? `<p style="font-size: 14px; color: #555555; margin: 0 0 20px; line-height: 1.7;">${escapeHtml(cta.blurb)}</p>`
+            : ""
+        }
+        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 32px;">
+          <tr>
+            <td align="center" style="background: #3d9bf5; border-radius: 8px;">
+              <a href="${encodeURI(cta.url)}" target="_blank"
+                 style="display: inline-block; padding: 14px 28px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; letter-spacing: 0.2px;">
+                ${escapeHtml(cta.label)}
+              </a>
+            </td>
+          </tr>
+        </table>`,
+    )
+    .join("");
 
   return `
     <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e5;">
@@ -471,66 +517,27 @@ export function buildThankYouEmail(opts: ThankYouEmailOpts): string {
 
       <div style="padding: 36px 40px;">
         <p style="font-size: 15px; color: #333333; margin: 0 0 20px; line-height: 1.6;">
-          Dear <strong>${opts.name}</strong>,
+          Dear <strong>${escapeHtml(opts.name)}</strong>,
         </p>
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
-          On behalf of everyone at <strong>PEOPLElogy Berhad</strong>, thank you for joining us at our 25th Anniversary Celebration.
-        </p>
-
-        <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
-          Your presence made this milestone truly meaningful. As we reflected on the past 25 years of growth, innovation, and partnerships, we were reminded that our journey would not have been possible without the support of individuals and organizations like yours.
+          On behalf of everyone at <strong>${org}</strong>, thank you for joining us at <strong>${title}</strong>.
         </p>
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 32px; line-height: 1.7;">
-          We hope you enjoyed the evening's celebrations, conversations, and opportunities to reconnect with fellow industry leaders, partners, clients, and friends.
+          Your presence made the occasion truly meaningful. We hope you enjoyed the celebrations, the conversations, and the opportunity to connect with fellow guests.
         </p>
 
-        <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 28px;" />
-
-        <p style="font-size: 16px; font-weight: 700; color: #111111; margin: 0 0 10px; letter-spacing: -0.2px;">Event Photo Gallery</p>
-        <p style="font-size: 14px; color: #555555; margin: 0 0 20px; line-height: 1.7;">
-          We're delighted to share a special keepsake from the event. To receive your event photo, please click the link below and scan your face. Our system will securely identify and retrieve photos featuring you from the celebration. Relive the memorable moments through our event photo gallery:
-        </p>
-        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 32px;">
-          <tr>
-            <td align="center" style="background: #111111; border-radius: 8px;">
-              <a href="https://harimau.run/peoplelogy26" target="_blank"
-                 style="display: inline-block; padding: 14px 28px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; letter-spacing: 0.2px;">
-                📸&nbsp; View Event Photos Here
-              </a>
-            </td>
-          </tr>
-        </table>
-
-        <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 28px;" />
-
-        <p style="font-size: 16px; font-weight: 700; color: #111111; margin: 0 0 10px; letter-spacing: -0.2px;">Discover Your AI Readiness</p>
-        <p style="font-size: 14px; color: #555555; margin: 0 0 12px; line-height: 1.7;">
-          As we look towards the future, we invite you to take the next step in understanding your organisation's preparedness for the age of AI.
-        </p>
-        <p style="font-size: 14px; color: #555555; margin: 0 0 20px; line-height: 1.7;">
-          Our complimentary <strong>IMAIREADY AI Readiness Assessment</strong> provides valuable insights into your organisation's current AI maturity, opportunities for growth, and areas for development.
-        </p>
-        <table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" style="margin: 0 auto 36px;">
-          <tr>
-            <td align="center" style="background: #3d9bf5; border-radius: 8px;">
-              <a href="https://imaiready.asia" target="_blank"
-                 style="display: inline-block; padding: 14px 28px; font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 14px; font-weight: 700; color: #ffffff; text-decoration: none; border-radius: 8px; letter-spacing: 0.2px;">
-                🤖&nbsp; Take the IMAIREADY AI Readiness Assessment
-              </a>
-            </td>
-          </tr>
-        </table>
+        ${ctaBlocks}
 
         <hr style="border: none; border-top: 1px solid #eeeeee; margin: 0 0 28px;" />
 
         <p style="font-size: 15px; color: #333333; margin: 0 0 24px; line-height: 1.7;">
-          Once again, thank you for being part of this special milestone. We look forward to continuing our journey together as we build the future of work, leadership, and workforce transformation.
+          Once again, thank you for being part of this special occasion.
         </p>
 
         <p style="font-size: 14px; color: #555555; margin: 0 0 4px;">Warmest regards,</p>
-        <p style="font-size: 15px; font-weight: 700; color: #111111; margin: 0;">PEOPLElogy Berhad</p>
+        <p style="font-size: 15px; font-weight: 700; color: #111111; margin: 0;">${org}</p>
       </div>
 
       <div style="background: #f7f7f7; padding: 20px 40px; text-align: center; border-top: 1px solid #e5e5e5;">
@@ -600,9 +607,9 @@ export function buildBlastEmail(opts: BlastEmailOpts): string {
     .split(/\n\s*\n/)
     .map(
       (para) =>
-        `<p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">${para
-          .trim()
-          .replace(/\n/g, "<br/>")}</p>`
+        `<p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">${escapeHtml(
+          para.trim(),
+        ).replace(/\n/g, "<br/>")}</p>`
     )
     .join("");
 
@@ -632,7 +639,7 @@ export function buildBlastEmail(opts: BlastEmailOpts): string {
       <!-- Body -->
       <div style="padding: 40px 40px 32px;">
         <p style="font-size: 15px; color: #222222; margin: 0 0 20px; line-height: 1.6;">
-          Dear <strong>${opts.name}</strong>,
+          Dear <strong>${escapeHtml(opts.name)}</strong>,
         </p>
 
         ${bodyHtml}
