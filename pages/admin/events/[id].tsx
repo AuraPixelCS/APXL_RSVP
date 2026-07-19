@@ -14,6 +14,7 @@ import ImportCsvModal from "@/components/ui/ImportCsvModal";
 import SeatMapModal from "@/components/ui/SeatMapModal";
 import EventFormModal from "@/components/ui/EventFormModal";
 import GuestFormModal from "@/components/ui/GuestFormModal";
+import GuestFieldsModal from "@/components/ui/GuestFieldsModal";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { getAuthHeaders } from "@/lib/auth";
 import { getTotalSeatCount } from "@/lib/seating";
@@ -111,6 +112,15 @@ function UserPlusIcon() {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
       <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
+    </svg>
+  );
+}
+
+function FormFieldsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="4" rx="1" /><rect x="3" y="12" width="18" height="4" rx="1" />
+      <line x1="7" y1="20" x2="11" y2="20" />
     </svg>
   );
 }
@@ -643,6 +653,7 @@ const EventDetailPage: NextPageWithLayout = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddGuest, setShowAddGuest] = useState(false);
   const [editGuest, setEditGuest] = useState<RSVP | null>(null);
+  const [showFieldsModal, setShowFieldsModal] = useState(false);
   // Seat-picker selection state
   const [seatSelectingRsvp, setSeatSelectingRsvp] = useState<{ rsvpId: string; name: string } | null>(null);
   const [seatAssigning, setSeatAssigning] = useState(false);
@@ -902,6 +913,12 @@ const EventDetailPage: NextPageWithLayout = () => {
       hidden: !isAdmin,
     },
     {
+      label: "Registration Form",
+      icon: <FormFieldsIcon />,
+      onClick: () => setShowFieldsModal(true),
+      hidden: !isAdmin,
+    },
+    {
       label: "Import CSV",
       icon: <UploadIcon />,
       onClick: () => setShowImportCsvModal(true),
@@ -1051,6 +1068,18 @@ const EventDetailPage: NextPageWithLayout = () => {
           existingEmails={new Set(rsvps.map((r) => r.email.toLowerCase()))}
           onClose={() => { setShowAddGuest(false); setEditGuest(null); }}
           onSaved={() => { setShowAddGuest(false); setEditGuest(null); }}
+        />
+      )}
+
+      {/* Registration Form (public form option lists) */}
+      {event && showFieldsModal && (
+        <GuestFieldsModal
+          event={event}
+          onClose={() => setShowFieldsModal(false)}
+          onSaved={(patch) => {
+            setShowFieldsModal(false);
+            setEvent((prev) => (prev ? { ...prev, ...patch } : prev));
+          }}
         />
       )}
     </div>

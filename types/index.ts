@@ -50,6 +50,13 @@ export interface Event {
   totalSeats: number;
   seatingConfig?: SeatingConfig;
   assignmentMode?: "seat" | "table"; // how seatNumber is labeled to guests; default "seat"
+
+  // ── Public RSVP form config (Phase 2) ─────────────────────────────────────
+  // Drive the public form's dropdowns per-event. Empty/unset → built-in defaults
+  // (see lib/guestFields.ts), so existing events keep working unchanged.
+  guestCategories?: string[]; // options for the "I am part of this event as a" dropdown
+  industries?: string[];      // options for the "Industry" dropdown
+
   rsvpDeadline?: string; // "YYYY-MM-DD"
   isActive: boolean;
   pinned?: boolean; // admin-pinned events float to the top of the upcoming list

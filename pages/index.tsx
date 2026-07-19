@@ -4,6 +4,7 @@ import Head from "next/head";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { getEvent } from "@/lib/firestore";
+import { guestCategoriesFor, industriesFor } from "@/lib/guestFields";
 import { format } from "date-fns";
 import type { Event } from "@/types";
 
@@ -364,11 +365,9 @@ export default function PublicRSVPPage() {
                         onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                       >
                         <option value="">Select…</option>
-                        <option value="Guest">Guest</option>
-                        <option value="Business Partner (Corporate Client)">Business Partner</option>
-                        <option value="Impact Partner (Sponsor / Enabler)">Impact Partner (Sponsor / Enabler)</option>
-                        <option value="Skill Partner (Technology Partner)">Skill Partner (Technology Partner)</option>
-                        <option value="Other">Other</option>
+                        {(event ? guestCategoriesFor(event) : []).map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
                       </select>
                     </div>
 
@@ -420,15 +419,9 @@ export default function PublicRSVPPage() {
                         onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
                       >
                         <option value="">Select…</option>
-                        <option value="Technology & Digital">Technology &amp; Digital</option>
-                        <option value="Healthcare & Pharma">Healthcare &amp; Pharma</option>
-                        <option value="Education & Training">Education &amp; Training</option>
-                        <option value="Retail & Consumer">Retail &amp; Consumer</option>
-                        <option value="Banking & Finance">Banking &amp; Finance</option>
-                        <option value="Professional Services">Professional Services</option>
-                        <option value="Property & Construction">Property &amp; Construction</option>
-                        <option value="Government & GLC">Government &amp; GLC</option>
-                        <option value="Others">Others</option>
+                        {(event ? industriesFor(event) : []).map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
                       </select>
                     </div>
 
