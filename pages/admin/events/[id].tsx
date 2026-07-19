@@ -12,6 +12,7 @@ import { exportRSVPsToCSV } from "@/lib/csvExport";
 import GoogleFormsModal, { DEFAULT_MAPPINGS, DEFAULT_API_URL } from "@/components/ui/GoogleFormsModal";
 import ImportCsvModal from "@/components/ui/ImportCsvModal";
 import SeatMapModal from "@/components/ui/SeatMapModal";
+import EventFormModal from "@/components/ui/EventFormModal";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { getAuthHeaders } from "@/lib/auth";
 import { getTotalSeatCount } from "@/lib/seating";
@@ -92,6 +93,14 @@ function CalendarIcon() {
       <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
       <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
       <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  );
+}
+
+function EditIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
     </svg>
   );
 }
@@ -621,6 +630,7 @@ const EventDetailPage: NextPageWithLayout = () => {
   const [deletingRsvpId, setDeletingRsvpId] = useState<string | null>(null);
   const [showSeatMap, setShowSeatMap] = useState(false);
   const [showImportCsvModal, setShowImportCsvModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   // Seat-picker selection state
   const [seatSelectingRsvp, setSeatSelectingRsvp] = useState<{ rsvpId: string; name: string } | null>(null);
   const [seatAssigning, setSeatAssigning] = useState(false);
@@ -868,6 +878,12 @@ const EventDetailPage: NextPageWithLayout = () => {
 
   const moreItems: MoreMenuItem[] = [
     {
+      label: "Edit Event",
+      icon: <EditIcon />,
+      onClick: () => setShowEditModal(true),
+      hidden: !isAdmin,
+    },
+    {
       label: "Import CSV",
       icon: <UploadIcon />,
       onClick: () => setShowImportCsvModal(true),
@@ -991,6 +1007,19 @@ const EventDetailPage: NextPageWithLayout = () => {
             setTimeout(() => {
               setShowImportCsvModal(false);
             }, 3000);
+          }}
+        />
+      )}
+
+      {/* Edit Event Modal */}
+      {event && showEditModal && (
+        <EventFormModal
+          event={event}
+          allocatedCount={stats.allocated}
+          onClose={() => setShowEditModal(false)}
+          onSaved={(savedId) => {
+            setShowEditModal(false);
+            getEvent(savedId).then((ev) => { if (ev) setEvent(ev); });
           }}
         />
       )}
