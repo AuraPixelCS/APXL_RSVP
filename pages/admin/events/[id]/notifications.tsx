@@ -1,16 +1,16 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/router";
 import type { ReactElement } from "react";
 import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
-import { getEvent, subscribeToRSVPs, updateEvent } from "@/lib/firestore";
-import { buildSeatEmail, buildBlastEmail } from "@/lib/emailTemplates";
+import EmailEditor from "@/components/ui/EmailEditor";
+import { getEvent, subscribeToRSVPs } from "@/lib/firestore";
+import { buildBlastEmail } from "@/lib/emailTemplates";
 import { formatAssignment } from "@/lib/seatLabel";
 import type { Event, RSVP } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
-import { storage } from "@/lib/firebase";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { getAuthHeaders } from "@/lib/auth";
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
@@ -34,15 +34,6 @@ function RefreshIcon() {
   );
 }
 
-function EyeIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
 function BellIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -51,10 +42,6 @@ function BellIcon() {
     </svg>
   );
 }
-
-// Placeholder QR (preview only — the real send uses the cid:qr_code PNG).
-const PREVIEW_QR =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAEALAAAAAABAAEAAAICTAEAOw==";
 
 // ─── Notification Hero ───────────────────────────────────────────────────────
 
@@ -214,6 +201,7 @@ function HeroStat({ label, value, color }: { label: string; value: number; color
 const NotificationsPage: NextPageWithLayout = () => {
   const router = useRouter();
   const { role } = useAuthContext();
+  const toast = useToast();
   const isAdmin = role === "admin";
   const { id } = router.query as { id: string };
 
@@ -223,20 +211,6 @@ const NotificationsPage: NextPageWithLayout = () => {
 
   // Tab
   const [activeTab, setActiveTab] = useState<"template" | "guests" | "blast">("guests");
-
-  // Banners
-  const [bannerUrl, setBannerUrl]                       = useState("");
-  const [savedBanner, setSavedBanner]                   = useState("");
-  const [rsvpBannerUrl, setRsvpBannerUrl]               = useState("");
-  const [savedRsvpBanner, setSavedRsvpBanner]           = useState("");
-  const [showTitle, setShowTitle]                       = useState(false);
-  const [savedShowTitle, setSavedShowTitle]             = useState(false);
-  const [entryBannerUploading, setEntryBannerUploading] = useState(false);
-  const [rsvpBannerUploading, setRsvpBannerUploading]   = useState(false);
-  const [savingSettings, setSavingSettings]             = useState(false);
-  const [showPreview, setShowPreview]                   = useState(false);
-  const entryBannerInputRef = useRef<HTMLInputElement>(null);
-  const rsvpBannerInputRef  = useRef<HTMLInputElement>(null);
 
   // Notify state
   const [notifyingId, setNotifyingId]     = useState<string | null>(null);
@@ -264,12 +238,6 @@ const NotificationsPage: NextPageWithLayout = () => {
     if (!id) return;
     getEvent(id).then((ev) => {
       setEvent(ev);
-      const banner     = ev?.customEmailBanner       ?? "";
-      const rsvpBanner = ev?.customRsvpConfirmBanner ?? "";
-      const showT      = !!ev?.showEventTitleOnBanner;
-      setBannerUrl(banner);         setSavedBanner(banner);
-      setRsvpBannerUrl(rsvpBanner); setSavedRsvpBanner(rsvpBanner);
-      setShowTitle(showT);          setSavedShowTitle(showT);
       setLoading(false);
     });
   }, [id]);
@@ -306,10 +274,6 @@ const NotificationsPage: NextPageWithLayout = () => {
       r.phone.toLowerCase().includes(q)
     );
   })();
-  const settingsDirty =
-    bannerUrl !== savedBanner ||
-    rsvpBannerUrl !== savedRsvpBanner ||
-    showTitle !== savedShowTitle;
 
   // ── Email blast recipients ───────────────────────────────────────────────────
   // Everyone who RSVP'd and didn't decline — pending, allocated, or checked_in.
@@ -341,85 +305,65 @@ const NotificationsPage: NextPageWithLayout = () => {
 
   // ── Handlers ────────────────────────────────────────────────────────────────
 
-  const uploadBanner = useCallback(
-    async (file: File, kind: "entry" | "rsvp") => {
-      if (!event?.id) return;
-      const setUploading = kind === "entry" ? setEntryBannerUploading : setRsvpBannerUploading;
-      const setUrl       = kind === "entry" ? setBannerUrl            : setRsvpBannerUrl;
-      const filename     = kind === "entry" ? "email-banner"          : "rsvp-confirm-banner";
-      setUploading(true);
-      try {
-        const ext = file.name.split(".").pop() ?? "png";
-        const fileRef = storageRef(storage, `events/${event.id}/${filename}.${ext}`);
-        await uploadBytes(fileRef, file);
-        const url = await getDownloadURL(fileRef);
-        setUrl(url);
-      } catch (e) {
-        console.error("Banner upload failed:", e);
-        alert("Banner upload failed: " + (e instanceof Error ? e.message : String(e)));
-      } finally {
-        setUploading(false);
-      }
-    },
-    [event],
-  );
-
-  const handleSaveSettings = useCallback(async () => {
-    if (!event?.id || !settingsDirty || savingSettings) return;
-    setSavingSettings(true);
-    try {
-      await updateEvent(event.id, {
-        customEmailBanner:       bannerUrl,
-        customRsvpConfirmBanner: rsvpBannerUrl,
-        showEventTitleOnBanner:  showTitle,
-      });
-      setSavedBanner(bannerUrl);
-      setSavedRsvpBanner(rsvpBannerUrl);
-      setSavedShowTitle(showTitle);
-    } finally {
-      setSavingSettings(false);
-    }
-  }, [event, bannerUrl, rsvpBannerUrl, showTitle, settingsDirty, savingSettings]);
-
   const handleNotifyOne = useCallback(async (rsvpId: string) => {
     if (!event?.id) return;
     setNotifyingId(rsvpId);
+    const label = notifyTemplate === "pass" ? "Entry pass" : "Thank-you email";
     try {
       const authHeaders = await getAuthHeaders();
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ eventId: event.id, rsvpId, template: notifyTemplate }),
       });
+      if (res.ok) toast.success(`${label} sent`);
+      else toast.error(`${label} failed`, `Server responded ${res.status}.`);
+    } catch (e) {
+      toast.error(`${label} failed`, e instanceof Error ? e.message : "Request failed");
     } finally {
       setNotifyingId(null);
     }
-  }, [event, notifyTemplate]);
+  }, [event, notifyTemplate, toast]);
 
   const handleBulkNotify = useCallback(async (all = false) => {
     if (!event?.id || bulkNotifying) return;
+    const emailLabel = notifyTemplate === "pass" ? "entry-pass (QR) email" : "thank-you email";
     // Re-sending to everyone (incl. already-notified) is a big, irreversible
     // blast — confirm first.
     if (all) {
       const count = allocatedRsvps.length;
-      const label = notifyTemplate === "pass" ? "entry-pass (QR) email" : "thank-you email";
-      const ok = window.confirm(
-        `Re-send the ${label} to ALL ${count} allocated guests — including the ${notifiedCount} already notified?\n\nThis will email everyone again with the latest template.`
-      );
+      const ok = await toast.confirm({
+        title: `Re-send to all ${count} guests?`,
+        message: `The ${emailLabel} will be sent to every allocated guest — including the ${notifiedCount} already notified. This emails everyone again with the latest template.`,
+        confirmLabel: `Send to ${count}`,
+        tone: "danger",
+      });
       if (!ok) return;
     }
     setBulkNotifying(true);
     try {
       const authHeaders = await getAuthHeaders();
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/notify`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ eventId: event.id, bulk: true, all, template: notifyTemplate }),
       });
+      if (res.ok) {
+        const data = await res.json().catch(() => ({}));
+        const sent = data?.notified ?? 0;
+        const failed = data?.failed ?? 0;
+        if (failed > 0) toast.warning(`Sent ${sent}, ${failed} failed`, "Some emails didn't go through — try again.");
+        else if (sent > 0) toast.success(`Notified ${sent} guest${sent === 1 ? "" : "s"}`);
+        else toast.info("Nothing to send", "Everyone in this view is already notified.");
+      } else {
+        toast.error("Bulk notify failed", `Server responded ${res.status}.`);
+      }
+    } catch (e) {
+      toast.error("Bulk notify failed", e instanceof Error ? e.message : "Request failed");
     } finally {
       setBulkNotifying(false);
     }
-  }, [event, bulkNotifying, allocatedRsvps.length, notifiedCount, notifyTemplate]);
+  }, [event, bulkNotifying, allocatedRsvps.length, notifiedCount, notifyTemplate, toast]);
 
   const toggleBlastSelect = useCallback((rsvpId: string) => {
     setSelectedBlastIds((prev) => {
@@ -498,32 +442,6 @@ const NotificationsPage: NextPageWithLayout = () => {
 
   const isTableMode = event?.assignmentMode === "table";
 
-  const previewHtml = event
-    ? (() => {
-        const isP = event.title.toLowerCase().includes("peoplelogy");
-        return buildSeatEmail({
-          name: "Preview Guest",
-          eventTitle: event.title.replace(/\s+Event$/i, ""),
-          eventDate: event.date,
-          eventTime: event.time,
-          venue: event.venue,
-          seatNumber: 1,
-          assignmentRows: formatAssignment(1, event)?.rows,
-          qrDataUrl: PREVIEW_QR,
-          dressCode: event.dressCode ?? (isP ? "Formal Elegance" : undefined),
-          agendaImageUrl: isP ? "/EventAgenda.png" : undefined,
-          afterAgendaHtml: isP
-            ? `<p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 16px;">We encourage you to arrive early to enjoy the networking session and cool experiences we have in store for you.</p>
-               <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 16px;">We look forward to celebrating this special milestone together and creating memorable moments with you.</p>
-               <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 24px;">Safe travels, and see you tomorrow!</p>`
-            : undefined,
-          signOffName: isP ? "PEOPLElogy Berhad" : undefined,
-          bannerUrl: bannerUrl || (isP ? "/EmailBanner.png" : undefined),
-          showTitleOnBanner: showTitle,
-        });
-      })()
-    : "";
-
   const blastPreviewHtml = event
     ? buildBlastEmail({
         name: "Preview Guest",
@@ -535,10 +453,8 @@ const NotificationsPage: NextPageWithLayout = () => {
         eventTime: event.time,
         venue: event.venue,
         address: event.address,
-        bannerUrl:
-          rsvpBannerUrl ||
-          (event.title.toLowerCase().includes("peoplelogy") ? "/EmailBanner.png" : undefined),
-        showTitleOnBanner: showTitle,
+        bannerUrl: event.customRsvpConfirmBanner || undefined,
+        showTitleOnBanner: !!event.showEventTitleOnBanner,
       })
     : "";
 
@@ -651,241 +567,12 @@ const NotificationsPage: NextPageWithLayout = () => {
         </div>
       )}
 
-      {/* ── Section B: Template tab ───────────────────────────────────────── */}
-      {activeTab === "template" && (
-      <div
-        className="rounded-xl p-5 space-y-5"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-      >
-        {/* Editor header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-              Email Banners
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Upload a header banner for each event email. The body and footer copy are shared across all events.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowPreview((v) => !v)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-            style={{
-              background: showPreview ? "rgba(61,155,245,0.12)" : "var(--surface-2)",
-              color: showPreview ? "var(--accent)" : "var(--muted)",
-              border: `1px solid ${showPreview ? "rgba(61,155,245,0.3)" : "var(--border)"}`,
-            }}
-          >
-            <EyeIcon />
-            {showPreview ? "Hide Preview" : "Preview Entry Pass"}
-          </button>
-        </div>
-
-        {/* ── Entry Pass Banner ── */}
-        <div className="space-y-2">
-          <div>
-            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              Entry Pass Email Banner
-            </label>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Recommended: <strong>600 × 200 px</strong>, PNG or JPG. Replaces the dark header on the seat/table confirmation email.
-            </p>
-          </div>
-
-          {bannerUrl ? (
-            <div className="flex items-start gap-3">
-              <img
-                src={bannerUrl}
-                alt="Entry Pass banner preview"
-                className="rounded-lg object-cover"
-                style={{ width: 180, height: 60, border: "1px solid var(--border)" }}
-              />
-              <div className="flex flex-col gap-1.5">
-                <button
-                  onClick={() => entryBannerInputRef.current?.click()}
-                  disabled={entryBannerUploading}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
-                  style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-                >
-                  {entryBannerUploading ? "Uploading…" : "Change"}
-                </button>
-                <button
-                  onClick={() => setBannerUrl("")}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-                  style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => entryBannerInputRef.current?.click()}
-              disabled={entryBannerUploading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
-              style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px dashed var(--border)" }}
-            >
-              {entryBannerUploading ? "Uploading…" : "↑  Upload Banner"}
-            </button>
-          )}
-
-          <input
-            ref={entryBannerInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) uploadBanner(file, "entry");
-              e.target.value = "";
-            }}
-          />
-        </div>
-
-        {/* ── RSVP Confirmation Banner ── */}
-        <div className="space-y-2">
-          <div>
-            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              RSVP Confirmation Email Banner
-            </label>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Recommended: <strong>600 × 200 px</strong>. Shown at the top of the email guests receive immediately after submitting their RSVP.
-            </p>
-          </div>
-
-          {rsvpBannerUrl ? (
-            <div className="flex items-start gap-3">
-              <img
-                src={rsvpBannerUrl}
-                alt="RSVP Confirmation banner preview"
-                className="rounded-lg object-cover"
-                style={{ width: 180, height: 60, border: "1px solid var(--border)" }}
-              />
-              <div className="flex flex-col gap-1.5">
-                <button
-                  onClick={() => rsvpBannerInputRef.current?.click()}
-                  disabled={rsvpBannerUploading}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
-                  style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
-                >
-                  {rsvpBannerUploading ? "Uploading…" : "Change"}
-                </button>
-                <button
-                  onClick={() => setRsvpBannerUrl("")}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
-                  style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => rsvpBannerInputRef.current?.click()}
-              disabled={rsvpBannerUploading}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40"
-              style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px dashed var(--border)" }}
-            >
-              {rsvpBannerUploading ? "Uploading…" : "↑  Upload Banner"}
-            </button>
-          )}
-
-          <input
-            ref={rsvpBannerInputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) uploadBanner(file, "rsvp");
-              e.target.value = "";
-            }}
-          />
-        </div>
-
-        {/* ── Show Title On Banner Toggle ── */}
-        <div
-          className="flex items-center justify-between rounded-lg p-3"
-          style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
-        >
-          <div className="pr-4">
-            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              Show event title under banner
-            </label>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              When on, the event title appears in a thin dark strip beneath the banner image. Turn off for a clean banner-only look. Applies to both emails.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={showTitle}
-            onClick={() => setShowTitle((v) => !v)}
-            className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer"
-            style={{ background: showTitle ? "var(--accent)" : "var(--border)" }}
-          >
-            <span
-              className="inline-block h-5 w-5 rounded-full bg-white transition-transform"
-              style={{ transform: showTitle ? "translateX(22px)" : "translateX(2px)" }}
-            />
-          </button>
-        </div>
-
-        {/* Save row */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs" style={{ color: "var(--muted)" }}>
-            {settingsDirty ? "Unsaved changes" : "All changes saved"}
-          </span>
-          <button
-            onClick={handleSaveSettings}
-            disabled={!settingsDirty || savingSettings}
-            className="px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{
-              background: settingsDirty ? "var(--accent)" : "var(--surface-2)",
-              color: settingsDirty ? "#000" : "var(--muted)",
-              border: "1px solid var(--border)",
-            }}
-          >
-            {savingSettings ? "Saving…" : "Save Email Settings"}
-          </button>
-        </div>
-
-        {/* Preview pane */}
-        <AnimatePresence>
-          {showPreview && (
-            <motion.div
-              key="preview"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-              style={{ overflow: "hidden" }}
-            >
-              <div
-                className="rounded-lg overflow-hidden mt-2"
-                style={{ border: "1px solid var(--border)" }}
-              >
-                <div
-                  className="px-4 py-2 text-xs font-medium"
-                  style={{
-                    background: "var(--surface-2)",
-                    color: "var(--muted)",
-                    borderBottom: "1px solid var(--border)",
-                  }}
-                >
-                  Email Preview &mdash; QR code is a placeholder
-                </div>
-                <iframe
-                  srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="margin:0;padding:24px;background:#f5f5f5;">${previewHtml}</body></html>`}
-                  style={{ width: "100%", height: 600, border: "none", display: "block", background: "#f5f5f5" }}
-                  title="Email Preview"
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
+      {/* ── Section B: Template tab — per-event Email Editor ──────────────── */}
+      {activeTab === "template" && event && (
+        <EmailEditor
+          event={event}
+          onSaved={(patch) => setEvent((prev) => (prev ? { ...prev, ...patch } : prev))}
+        />
       )}
 
       {/* ── Section C: Allocated Guests tab ──────────────────────────────── */}

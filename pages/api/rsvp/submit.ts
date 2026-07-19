@@ -149,7 +149,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       };
       const emailResult = await sendResendEmail({
         to: rsvpData.email,
-        subject: `RSVP Confirmation – ${event.title}`,
+        subject:
+          (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
+          `RSVP Confirmation – ${event.title}`,
         html: buildRsvpConfirmEmail(confirmOpts),
         text: buildRsvpConfirmText(confirmOpts),
         attachments,

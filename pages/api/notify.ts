@@ -78,6 +78,11 @@ function buildThankYouMessage(
     ];
   }
 
+  // A per-event subject override (set in the Email Editor) wins over everything.
+  if (typeof event.thankYouSubject === "string" && event.thankYouSubject.trim()) {
+    subject = event.thankYouSubject.trim();
+  }
+
   return {
     to: rsvp.email,
     subject,
@@ -146,6 +151,11 @@ async function buildEntryPassMessage(
       `<p style="${pStyle} margin: 0 0 16px;">We look forward to celebrating this special milestone together and creating memorable moments with you.</p>` +
       `<p style="${pStyle} margin: 0 0 24px;">Safe travels, and see you tomorrow!</p>`;
     subject = "See You Tomorrow as We Celebrate 25 Years Together";
+  }
+
+  // A per-event subject override (set in the Email Editor) wins over everything.
+  if (typeof event.entryPassSubject === "string" && event.entryPassSubject.trim()) {
+    subject = event.entryPassSubject.trim();
   }
 
   const rawBody = event.customEmailBody ?? "";

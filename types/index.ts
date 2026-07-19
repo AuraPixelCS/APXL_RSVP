@@ -59,8 +59,28 @@ export interface Event {
   customEmailBanner?: string; // Firebase Storage URL — entry pass email header banner
   customRsvpConfirmBanner?: string; // Firebase Storage URL — RSVP confirmation email header banner
   showEventTitleOnBanner?: boolean; // when true, render event title in a strip beneath both banners
+
+  // ── Per-event email editor (Phase 2) ──────────────────────────────────────
+  // Read by pages/api/notify.ts + rsvp/submit.ts. When set, these override the
+  // computed defaults so a new event's emails are correct without any code change.
+  entryPassSubject?: string;   // subject line for the QR entry-pass email
+  rsvpConfirmSubject?: string; // subject line for the post-RSVP confirmation email
+  thankYouSubject?: string;    // subject line for the post-event thank-you email
+  // dressCode is declared above (used as the "Attire" row on the entry pass)
+  signOffName?: string;        // bold sign-off name on the entry-pass + thank-you emails
+  agendaImageUrl?: string;     // hosted programme-agenda image shown on the entry pass
+  thankYouOrgName?: string;    // organiser name in the thank-you greeting + sign-off
+  thankYouCtas?: EmailCta[];   // thank-you call-to-action buttons
+
   createdAt?: string;
   updatedAt?: string;
+}
+
+/** A call-to-action button in an email (thank-you gallery link, assessment, …). */
+export interface EmailCta {
+  label: string;
+  url: string;
+  blurb?: string;
 }
 
 // ─── ADMIN USER ─────────────────────────────────────────────────────────────
