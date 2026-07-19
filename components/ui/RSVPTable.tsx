@@ -17,6 +17,7 @@ interface RSVPTableProps {
   deallocatingId?: string | null;
   onDeleteRsvp?: (rsvpId: string) => void;
   deletingRsvpId?: string | null;
+  onEditRsvp?: (rsvp: RSVP) => void;
   assignmentMode?: "seat" | "table";
   // Event seating context — needed to format the seat/table label consistently.
   seatingConfig?: SeatingConfig;
@@ -170,6 +171,7 @@ export default function RSVPTable({
   deallocatingId,
   onDeleteRsvp,
   deletingRsvpId,
+  onEditRsvp,
   assignmentMode,
   seatingConfig,
   totalSeats,
@@ -437,6 +439,25 @@ export default function RSVPTable({
                             >
                               <InfoIcon /> Info
                             </button>
+
+                            {onEditRsvp && (
+                              <button
+                                onClick={() => onEditRsvp(rsvp)}
+                                title="Edit guest details"
+                                className="flex items-center justify-center rounded-lg transition-all duration-150 cursor-pointer"
+                                style={{
+                                  width: 28, height: 28,
+                                  background: "rgba(255,255,255,0.04)",
+                                  color: "var(--muted)",
+                                  border: "1px solid var(--border)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                </svg>
+                              </button>
+                            )}
 
                             {rsvp.status === "pending" && rsvp.attending && onAllocate && (
                               <button

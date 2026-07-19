@@ -13,6 +13,7 @@ import GoogleFormsModal, { DEFAULT_MAPPINGS, DEFAULT_API_URL } from "@/component
 import ImportCsvModal from "@/components/ui/ImportCsvModal";
 import SeatMapModal from "@/components/ui/SeatMapModal";
 import EventFormModal from "@/components/ui/EventFormModal";
+import GuestFormModal from "@/components/ui/GuestFormModal";
 import { useAuthContext } from "@/contexts/AuthContext";
 import { getAuthHeaders } from "@/lib/auth";
 import { getTotalSeatCount } from "@/lib/seating";
@@ -101,6 +102,15 @@ function EditIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  );
+}
+
+function UserPlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
     </svg>
   );
 }
@@ -631,6 +641,8 @@ const EventDetailPage: NextPageWithLayout = () => {
   const [showSeatMap, setShowSeatMap] = useState(false);
   const [showImportCsvModal, setShowImportCsvModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAddGuest, setShowAddGuest] = useState(false);
+  const [editGuest, setEditGuest] = useState<RSVP | null>(null);
   // Seat-picker selection state
   const [seatSelectingRsvp, setSeatSelectingRsvp] = useState<{ rsvpId: string; name: string } | null>(null);
   const [seatAssigning, setSeatAssigning] = useState(false);
@@ -878,6 +890,12 @@ const EventDetailPage: NextPageWithLayout = () => {
 
   const moreItems: MoreMenuItem[] = [
     {
+      label: "Add Guest",
+      icon: <UserPlusIcon />,
+      onClick: () => setShowAddGuest(true),
+      hidden: !isAdmin,
+    },
+    {
       label: "Edit Event",
       icon: <EditIcon />,
       onClick: () => setShowEditModal(true),
@@ -948,6 +966,7 @@ const EventDetailPage: NextPageWithLayout = () => {
         deallocatingId={deallocatingId}
         onDeleteRsvp={isAdmin ? handleDeleteRsvp : undefined}
         deletingRsvpId={deletingRsvpId}
+        onEditRsvp={isAdmin ? setEditGuest : undefined}
         assignmentMode={event?.assignmentMode}
         seatingConfig={event?.seatingConfig}
         totalSeats={event?.totalSeats}
@@ -1021,6 +1040,17 @@ const EventDetailPage: NextPageWithLayout = () => {
             setShowEditModal(false);
             getEvent(savedId).then((ev) => { if (ev) setEvent(ev); });
           }}
+        />
+      )}
+
+      {/* Add / Edit Guest Modal (live rsvps subscription refreshes the table) */}
+      {event && (showAddGuest || editGuest) && (
+        <GuestFormModal
+          event={event}
+          guest={editGuest ?? undefined}
+          existingEmails={new Set(rsvps.map((r) => r.email.toLowerCase()))}
+          onClose={() => { setShowAddGuest(false); setEditGuest(null); }}
+          onSaved={() => { setShowAddGuest(false); setEditGuest(null); }}
         />
       )}
     </div>
