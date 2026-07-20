@@ -9,6 +9,7 @@ import { getEvents } from "@/lib/firestore";
 import { db, auth } from "@/lib/firebase";
 import { getAuthHeaders } from "@/lib/auth";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import type { Event, AdminUser } from "@/types";
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -328,6 +329,7 @@ function AddUserInlineForm({ onCreated, onCancel }: { onCreated: () => void; onC
 
 function UsersPanel() {
   const { user: currentUser } = useAuthContext();
+  const toast = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingUid, setDeletingUid] = useState<string | null>(null);
@@ -348,7 +350,12 @@ function UsersPanel() {
   useEffect(() => { load(); }, [load]);
 
   const handleDelete = async (u: AdminUser) => {
-    const confirmed = confirm(`Remove "${u.displayName || u.email}"?\n\nThis will permanently delete their account.`);
+    const confirmed = await toast.confirm({
+      title: `Remove ${u.displayName || u.email}?`,
+      message: "This permanently deletes their account and revokes access. This cannot be undone.",
+      confirmLabel: "Remove user",
+      tone: "danger",
+    });
     if (!confirmed) return;
     setDeletingUid(u.uid);
     setError(null);
@@ -894,6 +901,7 @@ function getEventStatus(event: Event): DerivedStatus {
 // ─── Event List Panel (kept, lightly polished) ────────────────────────────────
 
 function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
+  const toast = useToast();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -947,9 +955,12 @@ function EventListPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const handleDelete = async (event: Event) => {
     if (!event.id) return;
-    const confirmed = confirm(
-      `Delete "${event.title}"?\n\nThis will permanently remove the event and ALL its RSVPs. This cannot be undone.`
-    );
+    const confirmed = await toast.confirm({
+      title: `Delete ${event.title}?`,
+      message: "This permanently removes the event and ALL of its RSVPs. This cannot be undone.",
+      confirmLabel: "Delete event",
+      tone: "danger",
+    });
     if (!confirmed) return;
 
     setDeletingId(event.id);

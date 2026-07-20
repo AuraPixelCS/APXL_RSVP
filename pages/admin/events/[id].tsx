@@ -16,6 +16,7 @@ import EventFormModal from "@/components/ui/EventFormModal";
 import GuestFormModal from "@/components/ui/GuestFormModal";
 import GuestFieldsModal from "@/components/ui/GuestFieldsModal";
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { getAuthHeaders } from "@/lib/auth";
 import { getTotalSeatCount } from "@/lib/seating";
 import type { Event, RSVP, EventStats, FieldMapping, SeatingConfig } from "@/types";
@@ -639,6 +640,7 @@ const EventDetailPage: NextPageWithLayout = () => {
   const router = useRouter();
   const { id } = router.query;
   const { role } = useAuthContext();
+  const toast = useToast();
   const isAdmin = role === "admin";
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -713,7 +715,7 @@ const EventDetailPage: NextPageWithLayout = () => {
         });
         const data = await res.json();
         if (!res.ok) {
-          alert(data.error || "Allocation failed");
+          toast.error("Allocation failed", data.error || undefined);
         } else {
           // Success. First-time allocation → close so admin returns to the list.
           // Reassignment → keep open so admin can visually verify the move,
@@ -724,14 +726,15 @@ const EventDetailPage: NextPageWithLayout = () => {
           if (!wasReassigning) {
             setShowSeatMap(false);
           }
+          toast.success(wasReassigning ? "Seat reassigned" : "Seat allocated");
         }
       } catch {
-        alert("Network error");
+        toast.error("Network error", "Could not reach the server.");
       } finally {
         setSeatAssigning(false);
       }
     },
-    [event, seatSelectingRsvp, isReassigning]
+    [event, seatSelectingRsvp, isReassigning, toast]
   );
 
   // Bulk allocate
@@ -739,10 +742,15 @@ const EventDetailPage: NextPageWithLayout = () => {
     if (!event?.id) return;
     const pending = rsvps.filter((r) => r.status === "pending" && r.attending);
     if (pending.length === 0) {
-      alert("No pending RSVPs to allocate.");
+      toast.info("Nothing to allocate", "There are no pending RSVPs.");
       return;
     }
-    if (!confirm(`Allocate seats to ${pending.length} pending RSVPs?`)) return;
+    const ok = await toast.confirm({
+      title: `Allocate ${pending.length} pending guest${pending.length === 1 ? "" : "s"}?`,
+      message: "Seats will be assigned automatically to everyone who is pending and attending.",
+      confirmLabel: "Allocate",
+    });
+    if (!ok) return;
 
     setBulkAllocating(true);
     try {
@@ -754,34 +762,44 @@ const EventDetailPage: NextPageWithLayout = () => {
       });
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Bulk allocation failed");
+        toast.error("Bulk allocation failed", data.error || undefined);
+      } else {
+        toast.success(`Allocated ${pending.length} guest${pending.length === 1 ? "" : "s"}`);
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error", "Could not reach the server.");
     } finally {
       setBulkAllocating(false);
     }
-  }, [event, rsvps]);
+  }, [event, rsvps, toast]);
 
   // Deallocate (cancel seat reservation) — row-level Cancel button keeps its
   // native confirm dialog so the list-view UX is unchanged.
   const handleDeallocate = useCallback(
     async (rsvpId: string) => {
       if (!event?.id) return;
-      if (!confirm("Cancel this seat reservation? The guest will be moved back to pending.")) return;
+      const ok = await toast.confirm({
+        title: "Cancel this seat reservation?",
+        message: "The guest will be moved back to pending.",
+        confirmLabel: "Cancel reservation",
+        cancelLabel: "Keep seat",
+        tone: "danger",
+      });
+      if (!ok) return;
       setDeallocatingId(rsvpId);
       try {
         await updateRSVP(event.id, rsvpId, {
           status: "pending",
           seatNumber: null,
         });
+        toast.success("Reservation cancelled");
       } catch {
-        alert("Failed to cancel reservation");
+        toast.error("Failed to cancel reservation");
       } finally {
         setDeallocatingId(null);
       }
     },
-    [event]
+    [event, toast]
   );
 
   // Inline cancel used by the seat map's SeatDetailPanel — no native confirm
@@ -796,11 +814,11 @@ const EventDetailPage: NextPageWithLayout = () => {
           seatNumber: null,
         });
       } catch (err) {
-        alert("Failed to cancel reservation");
+        toast.error("Failed to cancel reservation");
         throw err;
       }
     },
-    [event]
+    [event, toast]
   );
 
   const handleLayoutChange = useCallback(
@@ -814,13 +832,14 @@ const EventDetailPage: NextPageWithLayout = () => {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || "Failed to update layout");
+        toast.error("Failed to update layout", data.error || undefined);
         throw new Error(data.error);
       }
       // Update local event state so seat map reflects new layout immediately
       setEvent((prev) => prev ? { ...prev, seatingConfig, assignmentMode } : prev);
+      toast.success("Layout updated");
     },
-    [event]
+    [event, toast]
   );
 
   const handleReassign = useCallback(
@@ -836,7 +855,13 @@ const EventDetailPage: NextPageWithLayout = () => {
     async (rsvpId: string) => {
       if (!event?.id) return;
       const rsvp = rsvps.find((r) => r.id === rsvpId);
-      if (!confirm(`Delete "${rsvp?.name ?? "this guest"}"? This cannot be undone.`)) return;
+      const ok = await toast.confirm({
+        title: `Delete ${rsvp?.name ?? "this guest"}?`,
+        message: "This permanently removes the RSVP and cannot be undone.",
+        confirmLabel: "Delete",
+        tone: "danger",
+      });
+      if (!ok) return;
       setDeletingRsvpId(rsvpId);
       try {
         const headers = await getAuthHeaders();
@@ -847,15 +872,17 @@ const EventDetailPage: NextPageWithLayout = () => {
         });
         if (!res.ok) {
           const data = await res.json();
-          alert(data.error || "Failed to delete RSVP");
+          toast.error("Failed to delete RSVP", data.error || undefined);
+        } else {
+          toast.success("Guest deleted");
         }
       } catch {
-        alert("Network error");
+        toast.error("Network error", "Could not reach the server.");
       } finally {
         setDeletingRsvpId(null);
       }
     },
-    [event, rsvps]
+    [event, rsvps, toast]
   );
 
   const handleExport = () => {

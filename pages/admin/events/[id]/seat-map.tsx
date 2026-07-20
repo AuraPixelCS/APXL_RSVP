@@ -16,6 +16,7 @@ import {
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 
 import { useAuthContext } from "@/contexts/AuthContext";
+import { useToast } from "@/contexts/ToastContext";
 import { subscribeToRSVPs, getEvent, updateRSVP } from "@/lib/firestore";
 import { getAuthHeaders } from "@/lib/auth";
 import { formatAssignment } from "@/lib/seatLabel";
@@ -42,6 +43,7 @@ function SeatMapPage() {
   const router = useRouter();
   const { id } = router.query;
   const { user, loading: authLoading } = useAuthContext();
+  const toast = useToast();
   const reduceMotion = useReducedMotion();
 
   const [event, setEvent] = useState<Event | null>(null);
@@ -162,16 +164,18 @@ function SeatMapPage() {
         );
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          alert(data.error || "Allocation failed");
+          toast.error("Allocation failed", data.error || undefined);
+        } else {
+          toast.success("Seat allocated");
         }
       } catch {
-        alert("Network error");
+        toast.error("Network error", "Could not reach the server.");
       } finally {
         setAssigning(false);
         setSelectedGuestId(null);
       }
     },
-    [event]
+    [event, toast]
   );
 
   // ── Drop handlers ──────────────────────────────────────────────────────────
@@ -251,17 +255,18 @@ function SeatMapPage() {
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        alert(data.error || "Failed to update layout");
+        toast.error("Failed to update layout", data.error || undefined);
         return;
       }
       setEvent({ ...event, seatingConfig: editLayoutPendingConfig });
       // Layout regenerates seat ids — drop any active group state.
       setGroupBy([]);
       setEditLayoutOpen(false);
+      toast.success("Layout updated");
     } finally {
       setEditLayoutSaving(false);
     }
-  }, [event, editLayoutPendingConfig]);
+  }, [event, editLayoutPendingConfig, toast]);
 
   // ── SeatDetailPanel actions ────────────────────────────────────────────────
   // Change [Seat/Table/VIP] — flips into selection mode for that guest. From
@@ -281,12 +286,13 @@ function SeatMapPage() {
       if (!event?.id) return;
       try {
         await updateRSVP(event.id, rsvpId, { status: "pending", seatNumber: null });
+        toast.success("Reservation cancelled");
       } catch (err) {
-        alert("Failed to cancel reservation");
+        toast.error("Failed to cancel reservation");
         throw err;
       }
     },
-    [event]
+    [event, toast]
   );
 
   // Click-on-table in selection mode (banquet layouts) — opens the picker
@@ -332,12 +338,13 @@ function SeatMapPage() {
       // Flatten plan into ordered (rsvpId, seatNumber) pairs.
       const seatNumbers = plan.flatMap((s) => s.seatNumbers);
       if (seatNumbers.length !== rsvpIds.length) {
-        alert("Allocation plan does not match group size — aborted.");
+        toast.error("Allocation aborted", "The plan does not match the group size.");
         return;
       }
       setAssigning(true);
       try {
         const authHeaders = await getAuthHeaders();
+        let failed = false;
         for (let i = 0; i < rsvpIds.length; i++) {
           const rsvpId = rsvpIds[i];
           const seatNumber = seatNumbers[i];
@@ -357,18 +364,20 @@ function SeatMapPage() {
           );
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
-            alert(`Stopped at guest ${i + 1}/${rsvpIds.length}: ${data.error ?? "allocation failed"}`);
+            toast.error(`Stopped at guest ${i + 1}/${rsvpIds.length}`, data.error ?? "allocation failed");
+            failed = true;
             break;
           }
         }
+        if (!failed) toast.success(`Group of ${rsvpIds.length} allocated`);
       } catch {
-        alert("Network error during group allocation");
+        toast.error("Network error", "Group allocation could not complete.");
       } finally {
         setAssigning(false);
         setSelectedGuestId(null);
       }
     },
-    [event, rsvps]
+    [event, rsvps, toast]
   );
 
   // Common dispatch for a group drop (resolved seat or table start). Handles
@@ -390,8 +399,9 @@ function SeatMapPage() {
         start,
       });
       if (!result.ok) {
-        alert(
-          `Only ${result.available} free seat${result.available === 1 ? "" : "s"} available — need ${rsvpIds.length}. Allocation cancelled.`
+        toast.warning(
+          "Not enough free seats",
+          `Only ${result.available} free seat${result.available === 1 ? "" : "s"} available — this group needs ${rsvpIds.length}.`
         );
         return;
       }
@@ -401,7 +411,7 @@ function SeatMapPage() {
         setPendingGroupPlan({ plan: result.steps, rsvpIds, groupLabel });
       }
     },
-    [event, rsvps, executePlan]
+    [event, rsvps, executePlan, toast]
   );
 
   const handleDragStart = (e: DragStartEvent) => {
