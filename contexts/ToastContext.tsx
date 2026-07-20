@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -138,6 +139,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  // Escape cancels the confirm dialog — keyboard parity with clicking the scrim.
+  useEffect(() => {
+    if (!confirmState) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeConfirm(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmState, closeConfirm]);
 
   const api = useMemo<ToastApi>(
     () => ({

@@ -12,8 +12,11 @@
   --surface-3: #1a1a1a;
   --border: #1f1f1f;
   --border-subtle: #181818;
-  --muted: #6b7280;
-  --muted-2: #4b5563;
+  /* Muted text sits on #0d0d0d–#1a1a1a surfaces at 11–13px. The previous
+     #6b7280 measured ~4.0:1 against --surface, under the 4.5:1 AA floor;
+     #868e9e measures ~5.9:1 while staying visually subdued. */
+  --muted: #868e9e;
+  --muted-2: #6b7280;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
@@ -91,9 +94,13 @@ kbd,
   background: var(--muted-2);
 }
 
-/* Focus ring — accent blue */
+/* Focus ring — accent blue.
+   !important is deliberate: inputs across the app set `outline: none` as an
+   inline style (to keep the mouse-focus look clean), and an inline style would
+   otherwise beat this rule and leave keyboard users with no visible focus.
+   :focus-visible only matches keyboard focus, so the mouse look is unchanged. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--accent) !important;
   outline-offset: 2px;
 }
 

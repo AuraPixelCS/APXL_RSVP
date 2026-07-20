@@ -6,6 +6,7 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  TouchSensor,
   KeyboardSensor,
   useSensor,
   useSensors,
@@ -45,6 +46,9 @@ function SeatMapPage() {
   const { user, loading: authLoading } = useAuthContext();
   const toast = useToast();
   const reduceMotion = useReducedMotion();
+  // Below lg the guest list becomes a slide-over drawer — on a phone/tablet the
+  // flow is: open drawer → tap a guest (selects) → drawer closes → tap a seat.
+  const [guestPanelOpen, setGuestPanelOpen] = useState(false);
 
   const [event, setEvent] = useState<Event | null>(null);
   const [rsvps, setRsvps] = useState<RSVP[]>([]);
@@ -519,6 +523,9 @@ function SeatMapPage() {
   // ── DnD sensors ────────────────────────────────────────────────────────────
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    // Touch: require a short press before dragging, so a normal swipe still
+    // scrolls the board instead of picking a guest up.
+    useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }),
     useSensor(KeyboardSensor)
   );
 
@@ -614,6 +621,18 @@ function SeatMapPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {/* Guest drawer toggle — small screens only */}
+              <button
+                onClick={() => setGuestPanelOpen(true)}
+                aria-label="Open guest list"
+                className="lg:hidden flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors"
+                style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                </svg>
+                Guests
+              </button>
               <EditLayoutButton onOpen={handleEditLayoutOpen} />
               <StatusChip rsvps={rsvps} totalSeats={totalSeats} />
             </div>
@@ -621,20 +640,69 @@ function SeatMapPage() {
 
           {/* Body: guest list + seat map */}
           <div className="flex flex-1 min-h-0">
-            <GuestListColumn
-              rsvps={rsvps}
-              selectedGuestId={selectedGuestId}
-              onSelectGuest={setSelectedGuestId}
-              renderSeatLabel={renderSeatLabel}
-              groupBy={groupBy}
-              setGroupBy={setGroupBy}
-              groupMap={groupMap}
-              draggingRsvpIds={
-                activeDragGuest && activeDragGuest.rsvpIds.length > 1
-                  ? new Set(activeDragGuest.rsvpIds)
-                  : null
-              }
-            />
+            {/* Desktop: inline column */}
+            <div className="hidden lg:flex shrink-0 h-full">
+              <GuestListColumn
+                rsvps={rsvps}
+                selectedGuestId={selectedGuestId}
+                onSelectGuest={setSelectedGuestId}
+                renderSeatLabel={renderSeatLabel}
+                groupBy={groupBy}
+                setGroupBy={setGroupBy}
+                groupMap={groupMap}
+                draggingRsvpIds={
+                  activeDragGuest && activeDragGuest.rsvpIds.length > 1
+                    ? new Set(activeDragGuest.rsvpIds)
+                    : null
+                }
+              />
+            </div>
+
+            {/* Small screens: slide-over drawer */}
+            <AnimatePresence>
+              {guestPanelOpen && (
+                <>
+                  <motion.div
+                    key="guest-scrim"
+                    className="lg:hidden fixed inset-0 z-40"
+                    style={{ background: "rgba(0,0,0,0.6)" }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.15 }}
+                    onClick={() => setGuestPanelOpen(false)}
+                  />
+                  <motion.div
+                    key="guest-drawer"
+                    className="lg:hidden fixed left-0 top-0 bottom-0 z-50 flex"
+                    style={{ background: SIDEBAR_BG, borderRight: "1px solid var(--border)", maxWidth: "88vw" }}
+                    initial={{ x: -340 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: -340 }}
+                    transition={{ duration: reduceMotion ? 0 : 0.22, ease: [0.16, 1, 0.3, 1] }}
+                    role="dialog"
+                    aria-label="Guest list"
+                  >
+                    <GuestListColumn
+                      rsvps={rsvps}
+                      selectedGuestId={selectedGuestId}
+                      // Selecting a guest on touch closes the drawer so the next
+                      // tap lands on a seat.
+                      onSelectGuest={(gid) => { setSelectedGuestId(gid); setGuestPanelOpen(false); }}
+                      renderSeatLabel={renderSeatLabel}
+                      groupBy={groupBy}
+                      setGroupBy={setGroupBy}
+                      groupMap={groupMap}
+                      draggingRsvpIds={
+                        activeDragGuest && activeDragGuest.rsvpIds.length > 1
+                          ? new Set(activeDragGuest.rsvpIds)
+                          : null
+                      }
+                    />
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
 
             <div className="flex flex-col flex-1 min-w-0 min-h-0">
               {/* In-flight banner mirrors the modal's pattern. */}
