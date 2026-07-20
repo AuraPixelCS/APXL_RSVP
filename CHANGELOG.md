@@ -1,5 +1,29 @@
 # Changelog
 
+## [3.0.0] — 2026-07-20
+
+Major release: end-to-end revamp (Phase 1 hardening + Phase 2 self-serve + Phase 3 UX) and migration to the `aurapixel-rsvp` Firebase project.
+
+### Phase 1 — security & correctness hardening
+- Locked down previously open scanner/QR endpoints; `qr/generate` now requires admin auth; scanner endpoints gated behind an optional `SCANNER_API_KEY` (staged rollout — allows all while unset).
+- Default role for a user with no claim flipped from **admin → client** (`lib/apiAuth.ts`, `contexts/AuthContext.tsx`). Run `scripts/sync-user-claims.js` before/with this deploy so existing admins keep access.
+- Fixed the check-in field mismatch: the scanner's `checkInTime` and the web's `checkedInAt` are now written together and read with a fallback, so reports/timelines populate.
+- XSS-hardened all email builders (`escapeHtml` on guest-supplied fields); rate-limited + field-capped the public `rsvp/submit` relay.
+- Added `firestore.rules` (deny-by-default) + `firebase.json`.
+
+### Phase 2 — run a new event without a developer
+- **Per-event Email Editor** (`components/ui/EmailEditor.tsx`): compose Entry Pass / RSVP Confirmation / Thank-You copy, subjects, sign-off, agenda image, and thank-you CTA buttons per event, with a live preview. Removes the hardcoded single-tenant email copy.
+- **Edit Event** (`components/ui/EventFormModal.tsx`, now create + edit) and **Add / Edit Guest** (`components/ui/GuestFormModal.tsx`) — retires the CLI fix scripts.
+- **Registration Form config**: per-event guest-category + industry lists drive the public form (`lib/guestFields.ts`), replacing hardcoded dropdowns.
+
+### Phase 3 — UX quality & new surfaces
+- App-wide **toast + confirm system** (`contexts/ToastContext.tsx`); no native `alert()`/`confirm()` remain.
+- **Live web check-in dashboard** at `/admin/events/[id]/check-in` (arrivals, progress, search, one-tap check-in, live feed) — mobile-first.
+- **Responsive seat map** (guest-list drawer + touch drag) and an **accessibility pass** (visible keyboard focus over inline `outline:none`, AA-contrast `--muted`, Escape-to-cancel dialogs).
+
+### Infrastructure
+- Migrated Firestore + Auth to the `aurapixel-rsvp` Firebase project with document IDs and Auth UIDs preserved (QR passes and `WEBHOOK_EVENT_ID` remain valid). Migration tooling: `scripts/migrate-firestore.js`, `scripts/migrate-auth.js`.
+
 ## [2.10.0] — 2026-06-24
 
 ### Event Reports — branded, downloadable PDF
