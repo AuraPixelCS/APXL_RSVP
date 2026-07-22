@@ -1,6 +1,7 @@
 import type { NextApiResponse } from "next";
 import QRCode from "qrcode";
 import { generateQRPayload, signQRPayload } from "@/lib/qr";
+import { eventTimezone } from "@/lib/eventTime";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 
@@ -47,7 +48,8 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       eventId,
       rsvp.seatNumber,
       event.date,
-      event.time
+      event.time,
+      eventTimezone(event)
     );
     const token = signQRPayload(payload);
 

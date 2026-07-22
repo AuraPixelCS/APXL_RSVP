@@ -1,6 +1,7 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
+import { resolveEventSender } from "@/lib/eventSender";
 import {
   isResendConfigured,
   sendResendEmail,
@@ -225,9 +226,15 @@ async function buildMessage(
   origin: string,
   template: NotifyTemplate,
 ): Promise<ResendMessage> {
-  return template === "pass"
-    ? buildEntryPassMessage(rsvp, event, origin)
-    : buildThankYouMessage(rsvp, event, origin);
+  const message =
+    template === "pass"
+      ? await buildEntryPassMessage(rsvp, event, origin)
+      : await buildThankYouMessage(rsvp, event, origin);
+
+  // Stamp this event's own sender identity onto every outbound message, so two
+  // clients' events don't both mail as whatever RESEND_FROM happens to be.
+  const sender = resolveEventSender(event);
+  return { ...message, from: sender.from, replyTo: sender.replyTo };
 }
 
 // ─── Mark notifiedAt for one RSVP ───────────────────────────────────────────

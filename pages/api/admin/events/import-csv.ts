@@ -1,6 +1,7 @@
 import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { sendResendEmail } from "@/lib/resend";
+import { resolveEventSender } from "@/lib/eventSender";
 import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
@@ -108,12 +109,17 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           bannerUrl,
           showTitleOnBanner: !!event.showEventTitleOnBanner,
         };
+        const sender = resolveEventSender(event);
         await sendResendEmail({
           to: rsvpData.email,
-          subject: `RSVP Confirmation – ${event.title}`,
+          subject:
+            (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
+            `RSVP Confirmation – ${event.title}`,
           html: buildRsvpConfirmEmail(confirmOpts),
           text: buildRsvpConfirmText(confirmOpts),
           attachments,
+          from: sender.from,
+          replyTo: sender.replyTo,
         });
       } catch (e) {
         console.error("Email throw for imported RSVP:", e);

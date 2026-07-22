@@ -12,16 +12,21 @@ import { formatAssignment } from "@/lib/seatLabel";
 import { useToast } from "@/contexts/ToastContext";
 import type { Event, EmailCta } from "@/types";
 
+// Mirrors lib/eventSender.ts's plausibility check. Deliberately loose — the
+// authoritative validation (including the verified-domain rule) is server-side.
+const EMAIL_RE = /^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]{2,}$/;
+
 // Placeholder QR (preview only — the real send embeds the cid:qr_code PNG).
 const PREVIEW_QR =
   "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAEALAAAAAABAAEAAAICTAEAOw==";
 
-type TemplateKey = "pass" | "confirm" | "thankyou";
+type TemplateKey = "pass" | "confirm" | "thankyou" | "sender";
 
 const TEMPLATES: { key: TemplateKey; label: string; blurb: string }[] = [
   { key: "pass", label: "Entry Pass (QR)", blurb: "Sent before the event — the guest's QR pass, seat, and details." },
   { key: "confirm", label: "RSVP Confirmation", blurb: "Sent automatically the moment a guest submits their RSVP." },
   { key: "thankyou", label: "Thank-You", blurb: "Sent after the event — gratitude and follow-up links. No QR or seat." },
+  { key: "sender", label: "Sender", blurb: "Who every email from this event appears to come from, and where replies go." },
 ];
 
 // The shape the editor edits — a subset of Event.
@@ -39,6 +44,9 @@ interface EmailForm {
   thankYouOrgName: string;
   thankYouCtas: EmailCta[];
   showEventTitleOnBanner: boolean;
+  senderName: string;
+  senderEmail: string;
+  replyToEmail: string;
 }
 
 function toForm(ev: Event): EmailForm {
@@ -56,6 +64,9 @@ function toForm(ev: Event): EmailForm {
     thankYouOrgName: ev.thankYouOrgName ?? "",
     thankYouCtas: Array.isArray(ev.thankYouCtas) ? ev.thankYouCtas.map((c) => ({ ...c })) : [],
     showEventTitleOnBanner: !!ev.showEventTitleOnBanner,
+    senderName: ev.senderName ?? "",
+    senderEmail: ev.senderEmail ?? "",
+    replyToEmail: ev.replyToEmail ?? "",
   };
 }
 
@@ -128,6 +139,9 @@ export default function EmailEditor({
         .map((c) => ({ label: c.label.trim(), url: c.url.trim(), blurb: (c.blurb ?? "").trim() }))
         .filter((c) => c.label && c.url),
       showEventTitleOnBanner: form.showEventTitleOnBanner,
+      senderName: form.senderName.trim(),
+      senderEmail: form.senderEmail.trim(),
+      replyToEmail: form.replyToEmail.trim(),
     };
     try {
       await updateEvent(event.id, patch);
@@ -191,6 +205,29 @@ export default function EmailEditor({
     if (active === "thankyou") return form.thankYouSubject.trim() || `Thank You for Joining ${displayTitle}`;
     return form.entryPassSubject.trim() || `Your Entry Pass — Seat #1 | ${displayTitle}`;
   }, [active, form, event.title, displayTitle]);
+
+  // From line shown above the preview. The real default lives in a server-only
+  // env var, so an unset sender is described rather than guessed at.
+  const previewFrom = useMemo(() => {
+    const name = form.senderName.trim();
+    const address = form.senderEmail.trim();
+    if (address) return name ? `${name} <${address}>` : address;
+    return name ? `${name} <platform default address>` : "Platform default sender";
+  }, [form.senderName, form.senderEmail]);
+
+  // Client-side sanity check only. The server independently verifies the domain
+  // is one Resend will send for, and falls back if it isn't.
+  const senderIssue = useMemo(() => {
+    const address = form.senderEmail.trim();
+    const replyTo = form.replyToEmail.trim();
+    if (address && !EMAIL_RE.test(address)) {
+      return `“${address}” doesn't look like an email address — the default sender will be used.`;
+    }
+    if (replyTo && !EMAIL_RE.test(replyTo)) {
+      return `“${replyTo}” doesn't look like an email address — the default reply-to will be used.`;
+    }
+    return null;
+  }, [form.senderEmail, form.replyToEmail]);
 
   const activeMeta = TEMPLATES.find((t) => t.key === active)!;
 
@@ -300,13 +337,44 @@ export default function EmailEditor({
               </p>
             </>
           )}
+
+          {active === "sender" && (
+            <>
+              <TextField label="Sender name" hint="The display name in the inbox. Blank uses the platform default."
+                value={form.senderName} placeholder="e.g. PEOPLElogy Anniversary"
+                onChange={(v) => set("senderName", v)} />
+              <TextField label="Sender address" hint="Must be on a domain verified in Resend, otherwise the default sender is used."
+                value={form.senderEmail} placeholder="events@aurapixel.live"
+                onChange={(v) => set("senderEmail", v)} />
+              <TextField label="Reply-to address" hint="Where guest replies land. Blank uses the platform default."
+                value={form.replyToEmail} placeholder="hello@yourcompany.com"
+                onChange={(v) => set("replyToEmail", v)} />
+              {senderIssue && (
+                <p className="text-xs rounded-lg p-3" style={{ background: "rgba(245,158,11,0.1)", color: "var(--warning)", border: "1px solid rgba(245,158,11,0.3)" }}>
+                  {senderIssue}
+                </p>
+              )}
+              <p className="text-xs rounded-lg p-3" style={{ background: "var(--surface)", color: "var(--muted)", border: "1px solid var(--border)" }}>
+                Applies to every email this event sends — RSVP confirmation, entry pass,
+                thank-you, and blasts. A sending domain has to be verified in Resend before
+                mail from it will deliver; an unverified address silently falls back to the
+                default sender rather than failing to send.
+              </p>
+            </>
+          )}
         </motion.div>
 
         {/* Live preview */}
         <div className="rounded-xl overflow-hidden lg:sticky lg:top-4" style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}>
-          <div className="px-4 py-2.5" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Subject</p>
-            <p className="text-xs font-medium truncate" style={{ color: "var(--foreground)" }} title={previewSubject}>{previewSubject}</p>
+          <div className="px-4 py-2.5 space-y-1" style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>From</p>
+              <p className="text-xs font-medium truncate" style={{ color: "var(--foreground)" }} title={previewFrom}>{previewFrom}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Subject</p>
+              <p className="text-xs font-medium truncate" style={{ color: "var(--foreground)" }} title={previewSubject}>{previewSubject}</p>
+            </div>
           </div>
           <iframe
             srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/></head><body style="margin:0;padding:20px;background:#f1f1f1;">${previewHtml}</body></html>`}

@@ -1,12 +1,13 @@
 {
   "name": "rsvp",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "for f in scripts/test-*.ts; do node --experimental-strip-types \"$f\" || exit 1; done"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

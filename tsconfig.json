@@ -25,5 +25,6 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "//exclude": "scripts/ holds standalone Node utilities and tests run via `node --experimental-strip-types`. They use .ts import specifiers, which Node requires and the bundler resolver rejects — and they are never part of the Next build.",
+  "exclude": ["node_modules", "scripts"]
 }

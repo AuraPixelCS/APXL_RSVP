@@ -4,6 +4,14 @@ import { sendResendEmail } from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
+import { isRsvpDeadlinePassed } from "@/lib/eventTime";
+import { resolveEventSender } from "@/lib/eventSender";
+import {
+  normalizeEmail,
+  rsvpDocId,
+  rsvpEmailAlreadyExists,
+  isAlreadyExistsError,
+} from "@/lib/rsvpIdentity";
 
 function setCorsHeaders(res: NextApiResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -108,12 +116,14 @@ export default async function handler(
     const event = eventDoc.data();
     if (!event?.isActive) return res.status(400).json({ error: "RSVP is closed for this event" });
 
-    const existing = await adminDb
-      .collection("events").doc(eventId)
-      .collection("rsvps")
-      .where("email", "==", email.toLowerCase().trim())
-      .limit(1).get();
-    if (!existing.empty) {
+    if (isRsvpDeadlinePassed(event)) {
+      return res.status(400).json({ error: "RSVP deadline has passed" });
+    }
+
+    const rsvpsRef = adminDb.collection("events").doc(eventId).collection("rsvps");
+    const normalizedEmail = normalizeEmail(email);
+
+    if (await rsvpEmailAlreadyExists(rsvpsRef, eventId, normalizedEmail)) {
       return res.status(409).json({ error: "This email has already RSVPed for this event" });
     }
 
@@ -121,7 +131,7 @@ export default async function handler(
     const rsvpData = {
       eventId,
       name,
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       phone: normalizedPhone,
       attending: true,
       plusOne: false,
@@ -143,9 +153,17 @@ export default async function handler(
       updatedAt: now,
     };
 
-    const docRef = await adminDb
-      .collection("events").doc(eventId)
-      .collection("rsvps").add(rsvpData);
+    // Same atomic guard as the public form: deterministic id + create(), so a
+    // retried or duplicated webhook delivery can't create a second record.
+    const docRef = rsvpsRef.doc(rsvpDocId(eventId, normalizedEmail));
+    try {
+      await docRef.create(rsvpData);
+    } catch (e) {
+      if (isAlreadyExistsError(e)) {
+        return res.status(409).json({ error: "This email has already RSVPed for this event" });
+      }
+      throw e;
+    }
 
     // Send confirmation email — must be awaited before response so Vercel doesn't freeze the function
     try {
@@ -166,12 +184,18 @@ export default async function handler(
         bannerUrl,
         showTitleOnBanner: !!event.showEventTitleOnBanner,
       };
+      const sender = resolveEventSender(event);
+      if (sender.warning) console.warn("[webhook] sender:", sender.warning);
       const emailResult = await sendResendEmail({
         to: rsvpData.email,
-        subject: `RSVP Confirmation – ${event.title}`,
+        subject:
+          (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
+          `RSVP Confirmation – ${event.title}`,
         html: buildRsvpConfirmEmail(confirmOpts),
         text: buildRsvpConfirmText(confirmOpts),
         attachments,
+        from: sender.from,
+        replyTo: sender.replyTo,
       });
       console.log("[webhook] ✉️ EMAIL LOG:", emailResult);
     } catch (e) {

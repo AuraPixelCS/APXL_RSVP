@@ -4,6 +4,14 @@ import { sendResendEmail } from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
 import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
+import { isRsvpDeadlinePassed } from "@/lib/eventTime";
+import { resolveEventSender } from "@/lib/eventSender";
+import {
+  normalizeEmail,
+  rsvpDocId,
+  rsvpEmailAlreadyExists,
+  isAlreadyExistsError,
+} from "@/lib/rsvpIdentity";
 
 // Best-effort in-memory rate limiter (per IP). This is a public endpoint that
 // sends an email + WhatsApp on every call, so it must not be trivially abusable.
@@ -76,24 +84,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "This event is no longer accepting RSVPs" });
     }
 
-    // Check deadline
-    if (event.rsvpDeadline) {
-      const deadline = new Date(event.rsvpDeadline);
-      deadline.setHours(23, 59, 59, 999);
-      if (new Date() > deadline) {
-        return res.status(400).json({ error: "RSVP deadline has passed" });
-      }
+    // Deadline — evaluated in the EVENT's timezone, not the server's. See
+    // lib/eventTime.ts: `setHours` here meant UTC on Vercel, which let guests
+    // RSVP roughly 8 hours past a Malaysian cut-off.
+    if (isRsvpDeadlinePassed(event)) {
+      return res.status(400).json({ error: "RSVP deadline has passed" });
     }
 
-    // Check for duplicate (same email for same event)
-    const existing = await adminDb
-      .collection("events")
-      .doc(eventId)
-      .collection("rsvps")
-      .where("email", "==", email)
-      .get();
+    const rsvpsRef = adminDb.collection("events").doc(eventId).collection("rsvps");
+    const normalizedEmail = normalizeEmail(email);
 
-    if (!existing.empty) {
+    // Fast path: a clear message for the common "I already RSVPed" case. This
+    // now queries the NORMALISED address — the old code compared the raw input
+    // against the lower-cased stored value, so it missed anyone who typed a
+    // capital letter. The real guard is the atomic `.create()` below.
+    if (await rsvpEmailAlreadyExists(rsvpsRef, eventId, normalizedEmail)) {
       return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
     }
 
@@ -101,7 +106,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rsvpData = {
       eventId,
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
       phone: phone.trim(),
       attending: attending !== false,
       plusOne: plusOne === true,
@@ -122,11 +127,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       updatedAt: now,
     };
 
-    const ref = await adminDb
-      .collection("events")
-      .doc(eventId)
-      .collection("rsvps")
-      .add(rsvpData);
+    // Atomic duplicate guard: the id is derived from (eventId, email), and
+    // `.create()` fails when that document already exists. Two simultaneous
+    // submissions race to create the SAME id, so exactly one wins — the old
+    // check-then-add left a window where both could pass the check.
+    const ref = rsvpsRef.doc(rsvpDocId(eventId, normalizedEmail));
+    try {
+      await ref.create(rsvpData);
+    } catch (e) {
+      if (isAlreadyExistsError(e)) {
+        return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
+      }
+      throw e;
+    }
 
     // Send confirmation email — must be awaited before response so Vercel doesn't freeze the function
     try {
@@ -147,6 +160,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         bannerUrl,
         showTitleOnBanner: !!event.showEventTitleOnBanner,
       };
+      const sender = resolveEventSender(event);
+      if (sender.warning) console.warn("[submit] sender:", sender.warning);
       const emailResult = await sendResendEmail({
         to: rsvpData.email,
         subject:
@@ -155,6 +170,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         html: buildRsvpConfirmEmail(confirmOpts),
         text: buildRsvpConfirmText(confirmOpts),
         attachments,
+        from: sender.from,
+        replyTo: sender.replyTo,
       });
       console.log("✉️ EMAIL LOG:", emailResult);
     } catch (e) {

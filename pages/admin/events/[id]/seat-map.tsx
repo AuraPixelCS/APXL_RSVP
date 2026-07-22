@@ -348,32 +348,32 @@ function SeatMapPage() {
       setAssigning(true);
       try {
         const authHeaders = await getAuthHeaders();
-        let failed = false;
-        for (let i = 0; i < rsvpIds.length; i++) {
-          const rsvpId = rsvpIds[i];
-          const seatNumber = seatNumbers[i];
-          const wasAllocated = rsvps.find((r) => r.id === rsvpId)?.seatNumber != null;
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/allocate`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json", ...authHeaders },
-              body: JSON.stringify({
-                eventId: event.id,
+        // One request, one Firestore transaction. This used to be a loop of
+        // per-guest calls, so a conflict on guest 4 of 6 left the first three
+        // seated and the group split across the room with no way back.
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/allocate`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authHeaders },
+            body: JSON.stringify({
+              eventId: event.id,
+              assignments: rsvpIds.map((rsvpId, i) => ({
                 rsvpId,
-                seatNumber,
-                force: wasAllocated,
-              }),
-            }
-          );
-          if (!res.ok) {
-            const data = await res.json().catch(() => ({}));
-            toast.error(`Stopped at guest ${i + 1}/${rsvpIds.length}`, data.error ?? "allocation failed");
-            failed = true;
-            break;
+                seatNumber: seatNumbers[i],
+              })),
+            }),
           }
+        );
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          toast.error(
+            "Group not seated",
+            data.error ?? "Allocation failed — nobody in the group was moved."
+          );
+          return;
         }
-        if (!failed) toast.success(`Group of ${rsvpIds.length} allocated`);
+        toast.success(`Group of ${rsvpIds.length} allocated`);
       } catch {
         toast.error("Network error", "Group allocation could not complete.");
       } finally {
@@ -381,7 +381,7 @@ function SeatMapPage() {
         setSelectedGuestId(null);
       }
     },
-    [event, rsvps, toast]
+    [event, toast]
   );
 
   // Common dispatch for a group drop (resolved seat or table start). Handles

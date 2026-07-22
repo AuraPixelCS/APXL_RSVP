@@ -1,5 +1,43 @@
 # Changelog
 
+## [3.1.0] — 2026-07-22
+
+Completes **Phase 2** of the audit roadmap. v3.0.0 shipped Phase 2's *features*; this release closes the *correctness* half that was still outstanding — the three bugs that fail silently during a live event — plus per-event sender identity and Storage provisioning.
+
+### Event timezone — fixes the RSVP deadline (was live)
+- New `Event.timezone` (IANA) with a picker in the event form; unset events default to `Asia/Kuala_Lumpur`, so existing behaviour is preserved.
+- New `lib/eventTime.ts` resolves an event's wall-clock date/time to a real instant. Previously `submit.ts` used `setHours()` — the *server's* zone, which is UTC on Vercel — so a Malaysian 23:59 deadline actually expired at 07:59 the next morning and accepted RSVPs ~8h late.
+- The same root cause is fixed in `lib/qr.ts`, which used `setUTCHours()` and read a local wall clock as UTC, sliding the QR validity window by the same margin. `generateQRPayload` now takes a timezone; an unresolvable date yields an unbounded window rather than an invalid pass.
+- The deadline is now enforced on the webhook intake path too, which never checked it.
+
+### Seat allocation — fixes the false-full lockout and the group race
+- Auto-allocation now assigns the **lowest free seat** instead of `highest + 1`. VIP seats are numbered *above* `totalSeats` by design, so a single seated VIP guest used to push the counter past capacity and make every subsequent allocation fail — bulk allocate seated **zero** guests and reported success. Freed seats are now reused instead of being abandoned.
+- Every seat decision runs inside a **Firestore transaction**, so two admins seating guests simultaneously can no longer both claim the same seat.
+- **Group allocation is atomic.** The seat map used to loop one HTTP request per guest; a conflict midway left the group split across the room with no rollback. It is now one request, one transaction — all seats or none (`assignments: [{rsvpId, seatNumber}]`).
+- Bulk allocate returns the **real** allocated count and a `seatsExhausted` flag, and the UI reports the server's number rather than its own expectation. A zero-allocation run is now a 409, not a 200.
+
+### Duplicate RSVPs — closes the race and the casing bug
+- New `lib/rsvpIdentity.ts`: the RSVP document id is derived from `(eventId, normalised email)` and written with `.create()`, so uniqueness is enforced by Firestore at write time. The old check-then-`add()` left a window where a double-click created two records.
+- The duplicate lookup now queries the **normalised** address. It previously compared raw input against a lower-cased stored value, so the guard never fired for anyone who capitalised their email.
+- Applied to both the public form and the webhook intake. Existing random-id RSVPs are still matched by email, so no migration is needed and existing QR passes stay valid.
+
+### Per-event sender identity
+- New `Event.senderName` / `senderEmail` / `replyToEmail`, edited in a new **Sender** tab in the Email Editor. Applies to RSVP confirmations, entry passes, thank-yous, blasts, and CSV-import confirmations.
+- `lib/eventSender.ts` validates the address and checks its domain against `RESEND_ALLOWED_DOMAINS` (defaults to the global sender's own domain). An unverified domain falls back to the working global identity instead of silently failing to deliver.
+- `ResendMessage` gained a per-message `replyTo`, so guest replies reach the right organiser.
+
+### Storage
+- Applied explicit-origin CORS to the `aurapixel-rsvp` bucket, which had **none** — browser banner uploads would have failed.
+- Deleted the root `set-cors.js`, which applied `origin: ['*']`. `scripts/set-storage-cors.js` (explicit origins, `--show` to inspect) is the supported path.
+
+### Tests
+- Added `npm test` — 83 assertions across four suites run by Node directly, no test framework:
+  - `scripts/test-event-time.ts` — timezone conversion, DST boundaries, half-hour zones, end-of-day millisecond precision. Passes identically under three different server timezones, which is the property that matters.
+  - `scripts/test-seat-allocation.ts` — includes a reproduction of the VIP false-full lockout, asserting the old rule fails and the new one doesn't.
+  - `scripts/test-rsvp-identity.ts` — deterministic ids, the casing bug, `ALREADY_EXISTS` detection.
+  - `scripts/test-event-sender.ts` — sender fallback rules.
+- `tsconfig.json` now excludes `scripts/`, which is run by Node rather than compiled by Next.
+
 ## [3.0.0] — 2026-07-20
 
 Major release: end-to-end revamp (Phase 1 hardening + Phase 2 self-serve + Phase 3 UX) and migration to the `aurapixel-rsvp` Firebase project.

@@ -2,6 +2,7 @@ import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { sendResendBatch } from "@/lib/resend";
+import { resolveEventSender } from "@/lib/eventSender";
 import { buildBlastEmail, buildBlastText } from "@/lib/emailTemplates";
 
 // Unsubscribe contact for the List-Unsubscribe header (deliverability signal —
@@ -81,6 +82,9 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
       return res.status(200).json({ success: true, sent: 0, failed: 0 });
     }
 
+    const sender = resolveEventSender(event);
+    if (sender.warning) console.warn("[blast] sender:", sender.warning);
+
     // Build one personalized message per recipient…
     const messages = targets.map((rsvp) => {
       const subbedSubject = subject
@@ -106,6 +110,8 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
         subject: subbedSubject,
         html: buildBlastEmail(blastOpts),
         text: buildBlastText(blastOpts),
+        from: sender.from,
+        replyTo: sender.replyTo,
         headers: {
           "List-Unsubscribe": `<mailto:${UNSUB_MAILTO}?subject=Unsubscribe>`,
         },

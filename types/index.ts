@@ -42,6 +42,13 @@ export interface Event {
   title: string;
   date: string; // "YYYY-MM-DD"
   time: string; // "HH:MM" 24h
+  /**
+   * IANA zone the `date`/`time` wall clock is read in (e.g. "Asia/Kuala_Lumpur").
+   * Unset → DEFAULT_EVENT_TIMEZONE. Without this, "23:59" means whatever zone the
+   * server happens to run in (UTC on Vercel), which shifted the RSVP deadline ~8h.
+   * Always resolve via lib/eventTime.ts rather than reading this field directly.
+   */
+  timezone?: string;
   venue: string;
   address?: string;
   dressCode?: string; // shown as a "Dress Code" row in the entry-pass email (e.g. "Office attire")
@@ -78,6 +85,15 @@ export interface Event {
   agendaImageUrl?: string;     // hosted programme-agenda image shown on the entry pass
   thankYouOrgName?: string;    // organiser name in the thank-you greeting + sign-off
   thankYouCtas?: EmailCta[];   // thank-you call-to-action buttons
+
+  // ── Per-event sender identity (Phase 2) ───────────────────────────────────
+  // Overrides the global RESEND_FROM / RESEND_REPLY_TO env defaults so two
+  // concurrent clients don't both mail as the same brand. Resolve via
+  // lib/eventSender.ts. senderEmail's DOMAIN must be verified in Resend —
+  // an unverified domain is rejected at send time, so the resolver falls back.
+  senderName?: string;   // display name, e.g. "PEOPLElogy Anniversary"
+  senderEmail?: string;  // address on a Resend-verified domain, e.g. events@aurapixel.live
+  replyToEmail?: string; // where guest replies land; blank → global default
 
   createdAt?: string;
   updatedAt?: string;

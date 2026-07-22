@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createEvent, updateEvent } from "@/lib/firestore";
 import SeatingConfigurator from "@/components/ui/SeatingConfigurator";
 import { useToast } from "@/contexts/ToastContext";
+import { COMMON_TIMEZONES, DEFAULT_EVENT_TIMEZONE, timezoneShortLabel } from "@/lib/eventTime";
 import type { Event, SeatingConfig } from "@/types";
 
 // Create OR edit an event. When `event` is provided the form runs in edit mode:
@@ -33,6 +34,9 @@ export default function EventFormModal({
     totalSeats: event?.totalSeats ?? 100,
     maxGuests: event?.maxGuests ?? 0,
     rsvpDeadline: event?.rsvpDeadline ?? "",
+    // Existing events have no timezone; they were always meant to be Malaysian,
+    // so the default preserves their behaviour rather than changing it.
+    timezone: event?.timezone ?? DEFAULT_EVENT_TIMEZONE,
     isActive: event?.isActive ?? true,
   });
   const [seatingConfig, setSeatingConfig] = useState<SeatingConfig>(
@@ -66,6 +70,7 @@ export default function EventFormModal({
           totalSeats: form.totalSeats,
           maxGuests: form.maxGuests || 0,
           rsvpDeadline: form.rsvpDeadline,
+          timezone: form.timezone,
           isActive: form.isActive,
           seatingConfig,
           assignmentMode,
@@ -83,6 +88,7 @@ export default function EventFormModal({
           totalSeats: form.totalSeats,
           ...(form.maxGuests && { maxGuests: form.maxGuests }),
           ...(form.rsvpDeadline && { rsvpDeadline: form.rsvpDeadline }),
+          timezone: form.timezone,
           isActive: form.isActive,
           coverImageUrl: null,
           seatingConfig,
@@ -181,6 +187,34 @@ export default function EventFormModal({
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Total Seats *" type="number" value={String(form.totalSeats)} onChange={(v) => update("totalSeats", parseInt(v) || 0)} required />
                   <FormField label="RSVP Deadline" type="date" value={form.rsvpDeadline} onChange={(v) => update("rsvpDeadline", v)} />
+                </div>
+
+                <div>
+                  <label htmlFor="event-timezone" className="text-xs font-medium block mb-1.5" style={{ color: "var(--muted)" }}>
+                    Event Timezone
+                  </label>
+                  <select
+                    id="event-timezone"
+                    value={form.timezone}
+                    onChange={(e) => update("timezone", e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm cursor-pointer"
+                    style={{
+                      background: "var(--surface-3)",
+                      border: "1px solid var(--border)",
+                      color: "var(--foreground)",
+                      outline: "none",
+                    }}
+                  >
+                    {COMMON_TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value}>{tz.label}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] mt-1.5" style={{ color: "var(--muted)" }}>
+                    The zone the time above is read in. Also decides when the RSVP deadline
+                    actually closes — {form.rsvpDeadline
+                      ? `end of ${form.rsvpDeadline} in ${timezoneShortLabel(form.timezone)}`
+                      : `23:59 ${timezoneShortLabel(form.timezone)}`}.
+                  </p>
                 </div>
 
                 {isEdit && (

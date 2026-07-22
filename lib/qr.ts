@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import type { QRPayload } from "@/types";
+import { DEFAULT_EVENT_TIMEZONE, zonedWallClockToUtc } from "@/lib/eventTime";
 
 const QR_SECRET = process.env.QR_SECRET ?? "dev-secret-change-in-production";
 
@@ -55,6 +56,10 @@ const VALID_BEFORE_SECONDS = 12 * 60 * 60; // 12 hours before event
 const VALID_AFTER_SECONDS = 4 * 60 * 60; // 4 hours after event (grace period)
 
 export function isQRValid(payload: QRPayload): boolean {
+  // eventTime 0 means the event's date/time couldn't be resolved when the pass
+  // was issued. Refusing entry on that basis would punish the guest for a
+  // config error, so treat it as an unbounded window.
+  if (!payload.eventTime) return true;
   const nowSec = Math.floor(Date.now() / 1000);
   const windowStart = payload.eventTime - VALID_BEFORE_SECONDS;
   const windowEnd = payload.eventTime + VALID_AFTER_SECONDS;
@@ -66,17 +71,21 @@ export function generateQRPayload(
   eventId: string,
   seatNumber: number,
   eventDateISO: string, // "YYYY-MM-DD"
-  eventTime: string // "HH:MM"
+  eventTime: string, // "HH:MM"
+  timeZone: string = DEFAULT_EVENT_TIMEZONE // IANA zone the wall clock is read in
 ): QRPayload {
-  const [hours, minutes] = eventTime.split(":").map(Number);
-  const eventDate = new Date(eventDateISO);
-  eventDate.setUTCHours(hours, minutes, 0, 0);
+  // The event's date/time is a wall clock at the venue. `setUTCHours` treated
+  // that local reading as if it were already UTC, putting `eventTime` ~8h off
+  // for a Malaysian event and sliding the whole validity window with it.
+  const startMs = zonedWallClockToUtc(eventDateISO, eventTime, timeZone);
 
   return {
     rsvpId,
     eventId,
     seatNumber,
-    eventTime: Math.floor(eventDate.getTime() / 1000),
+    // Unparseable date/time → 0. isQRValid() treats that as "no window", so a
+    // malformed event can't silently invalidate every pass it issues.
+    eventTime: startMs == null ? 0 : Math.floor(startMs / 1000),
     issuedAt: Math.floor(Date.now() / 1000),
   };
 }

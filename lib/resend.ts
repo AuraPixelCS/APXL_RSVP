@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { defaultFrom } from "@/lib/eventSender";
 
 // Lazily instantiate so the API key is only required at runtime (not build).
 let _resend: Resend | null = null;
@@ -11,9 +12,13 @@ export function isResendConfigured(): boolean {
   return !!process.env.RESEND_API_KEY;
 }
 
-/** From header for all outbound email. Verified domain is aurapixel.live. */
+/**
+ * From header for outbound email that carries no per-event sender.
+ * The value lives in lib/eventSender.ts so the resolver there stays free of
+ * this module (and of the Resend SDK); this is a re-export for callers.
+ */
 export function blastFrom(): string {
-  return process.env.RESEND_FROM ?? "PEOPLElogy Anniversary RSVP <events@aurapixel.live>";
+  return defaultFrom();
 }
 
 function replyTo(): string | undefined {
@@ -43,6 +48,9 @@ export interface ResendMessage {
   attachments?: ResendAttachment[];
   /** Overrides the default `blastFrom()` sender. */
   from?: string;
+  /** Overrides the global RESEND_REPLY_TO — set per event so guest replies
+   *  reach that event's organiser rather than one shared inbox. */
+  replyTo?: string;
   /** Extra SMTP headers (e.g. List-Unsubscribe) — improves deliverability. */
   headers?: Record<string, string>;
 }
@@ -59,7 +67,7 @@ export async function sendResendEmail(
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const rt = replyTo();
+  const rt = msg.replyTo ?? replyTo();
 
   try {
     const { data, error } = await client().emails.send({
@@ -95,20 +103,23 @@ export async function sendResendBatch(
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
 
-  const rt = replyTo();
+  const fallbackRt = replyTo();
 
   try {
     const { error } = await client().batch.send(
-      messages.map((m) => ({
-        from: m.from ?? blastFrom(),
-        to: m.to,
-        subject: m.subject,
-        html: m.html,
-        ...(m.text ? { text: m.text } : {}),
-        ...(m.attachments ? { attachments: m.attachments } : {}),
-        ...(m.headers ? { headers: m.headers } : {}),
-        ...(rt ? { replyTo: rt } : {}),
-      }))
+      messages.map((m) => {
+        const rt = m.replyTo ?? fallbackRt;
+        return {
+          from: m.from ?? blastFrom(),
+          to: m.to,
+          subject: m.subject,
+          html: m.html,
+          ...(m.text ? { text: m.text } : {}),
+          ...(m.attachments ? { attachments: m.attachments } : {}),
+          ...(m.headers ? { headers: m.headers } : {}),
+          ...(rt ? { replyTo: rt } : {}),
+        };
+      })
     );
     if (error) return { success: false, error: error.message };
     return { success: true };

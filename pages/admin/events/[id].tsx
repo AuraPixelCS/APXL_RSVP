@@ -769,11 +769,22 @@ const EventDetailPage: NextPageWithLayout = () => {
         headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ eventId: event.id, bulk: true }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json();
         toast.error("Bulk allocation failed", data.error || undefined);
       } else {
-        toast.success(`Allocated ${pending.length} guest${pending.length === 1 ? "" : "s"}`);
+        // Report the SERVER's count, not the client's expectation — they differ
+        // whenever the room fills partway through, and claiming a number that
+        // didn't happen is how the original allocation bug stayed invisible.
+        const n = typeof data.allocated === "number" ? data.allocated : pending.length;
+        if (data.seatsExhausted) {
+          toast.warning(
+            `Allocated ${n} of ${pending.length}`,
+            "The room filled up — the remaining guests still need seats.",
+          );
+        } else {
+          toast.success(`Allocated ${n} guest${n === 1 ? "" : "s"}`);
+        }
       }
     } catch {
       toast.error("Network error", "Could not reach the server.");
