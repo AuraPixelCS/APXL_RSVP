@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# staging integration key (scripts/setup-preview-env.sh)
+.integration-test-key

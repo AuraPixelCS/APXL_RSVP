@@ -381,7 +381,7 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
           <div className="mt-1">
             <div className="flex items-baseline justify-between mb-2">
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>
-                Seats Allocated
+                {event.assignmentMode === "free" ? "Passes Issued" : "Seats Allocated"}
               </span>
               <span className="text-sm font-mono font-semibold" style={{ color: "var(--foreground)" }}>
                 {allocated} <span style={{ color: "var(--muted)" }}>/ {totalSeats}</span>
@@ -458,7 +458,7 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
             )}
           </button>
 
-          {actions.pendingCount > 0 && (
+          {actions.pendingCount > 0 && event.assignmentMode !== "free" && (
             <button
               onClick={actions.onAllocatePending}
               disabled={actions.bulkAllocating}
@@ -851,7 +851,7 @@ const EventDetailPage: NextPageWithLayout = () => {
   );
 
   const handleLayoutChange = useCallback(
-    async (seatingConfig: SeatingConfig, assignmentMode: "seat" | "table") => {
+    async (seatingConfig: SeatingConfig, assignmentMode: "seat" | "table" | "free") => {
       if (!event?.id) return;
       const authHeaders = await getAuthHeaders();
       const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/change-layout`, {

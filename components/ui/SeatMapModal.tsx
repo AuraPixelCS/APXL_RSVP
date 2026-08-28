@@ -23,7 +23,7 @@ interface Props {
   assigning?: boolean;
   onReassign?: (rsvpId: string, guestName: string) => void;
   onCancel?: (rsvpId: string) => Promise<void>;
-  onLayoutChange?: (config: SeatingConfig, assignmentMode: "seat" | "table") => Promise<void>;
+  onLayoutChange?: (config: SeatingConfig, assignmentMode: "seat" | "table" | "free") => Promise<void>;
 }
 
 // ─── Status config ─────────────────────────────────────────────────────────────
@@ -1304,7 +1304,7 @@ export default function SeatMapModal({
   const [selectedSeat, setSelectedSeat] = useState<SeatInfo | null>(null);
   const [editingLayout, setEditingLayout] = useState(false);
   const [pendingConfig, setPendingConfig] = useState<SeatingConfig | null>(null);
-  const [pendingAssignmentMode, setPendingAssignmentMode] = useState<"seat" | "table">("seat");
+  const [pendingAssignmentMode, setPendingAssignmentMode] = useState<"seat" | "table" | "free">("seat");
   const [confirmingClear, setConfirmingClear] = useState(false);
   const [savingLayout, setSavingLayout] = useState(false);
   // Seat number that was just cancelled inline — rendered with a red highlight

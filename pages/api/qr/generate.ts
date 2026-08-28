@@ -38,15 +38,16 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
     }
 
     const rsvp = rsvpSnap.data()!;
-    if (rsvp.seatNumber == null) {
+    const freeSeating = event.assignmentMode === "free";
+    if (rsvp.seatNumber == null && !freeSeating) {
       return res.status(400).json({ error: "RSVP must be allocated a seat first" });
     }
 
-    // Generate signed QR payload
+    // Generate signed QR payload (seat is null on a free-seating event)
     const payload = generateQRPayload(
       rsvpId,
       eventId,
-      rsvp.seatNumber,
+      freeSeating ? null : rsvp.seatNumber,
       event.date,
       event.time,
       eventTimezone(event)

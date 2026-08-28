@@ -163,7 +163,7 @@ export default function PassPage(props: PassProps) {
               }}
             >
               <Row label="Name" value={props.name} />
-              {props.label ? <Row label="Seat" value={props.label} /> : null}
+              {props.label ? <Row label={props.label === "Free seating" ? "Seating" : "Seat"} value={props.label} /> : null}
               {props.venue ? <Row label="Venue" value={props.venue} /> : null}
               {props.address ? <Row label="Address" value={props.address} /> : null}
             </div>
@@ -200,6 +200,7 @@ export const getServerSideProps: GetServerSideProps<PassProps> = async (ctx) => 
     const { adminDb } = await import("@/lib/firebaseAdmin");
     const QRCode = (await import("qrcode")).default;
     const { formatAssignment } = await import("@/lib/seatLabel");
+    const { formatEventDayRange } = await import("@/lib/eventDays");
 
     const eventSnap = await adminDb.collection("events").doc(payload.eventId).get();
     if (!eventSnap.exists) return invalid;
@@ -232,11 +233,11 @@ export const getServerSideProps: GetServerSideProps<PassProps> = async (ctx) => 
         token,
         name: rsvp.name ?? "",
         eventTitle: event.title ?? "",
-        eventDate: event.date ?? "",
+        eventDate: event.date ? formatEventDayRange(event) : "",
         eventTime: event.time ?? "",
         venue: event.venue ?? "",
         address: event.address ?? "",
-        label: assignment ? assignment.long : `Seat #${rsvp.seatNumber}`,
+        label: assignment ? assignment.long : rsvp.seatNumber != null ? `Seat #${rsvp.seatNumber}` : "",
         qrDataUrl,
       },
     };

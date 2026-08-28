@@ -43,3 +43,34 @@ export function loadPeoplelogyEmailBanner(eventTitle: string, cid: string): Bann
     },
   };
 }
+
+/**
+ * Banner for the entry-pass email, in priority order:
+ *
+ *   1. `customEmailBanner` set by the admin on the event (hosted URL).
+ *   2. `public/banners/<event.code>.png` — drop the client's artwork there
+ *      (e.g. `E3.png`) and it is served from the app with no Storage needed.
+ *   3. The legacy hosted `EmailBanner.png`, but ONLY for the PEOPLElogy
+ *      anniversary event it was made for. Every other event without artwork
+ *      gets `undefined`, which renders the dark text header — a wrong banner
+ *      is worse than no banner.
+ *
+ * `publicBase` is the reachable app origin including basePath.
+ */
+export function resolveEntryPassBanner(
+  event: { code?: string; title?: string; customEmailBanner?: string | null },
+  publicBase: string,
+): string | undefined {
+  if (event.customEmailBanner) return event.customEmailBanner;
+
+  const code = String(event.code ?? "").trim();
+  if (/^[A-Za-z0-9_-]+$/.test(code)) {
+    const file = path.join(process.cwd(), "public", "banners", `${code}.png`);
+    if (fs.existsSync(file)) return `${publicBase}/banners/${code}.png`;
+  }
+
+  if (String(event.title ?? "").toLowerCase().includes("peoplelogy")) {
+    return `${publicBase}/EmailBanner.png`;
+  }
+  return undefined;
+}

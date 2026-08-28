@@ -27,7 +27,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
   const { eventId, seatingConfig, assignmentMode } = req.body as {
     eventId: string;
     seatingConfig?: SeatingConfig;
-    assignmentMode?: "seat" | "table";
+    assignmentMode?: "seat" | "table" | "free";
   };
 
   if (!eventId) {

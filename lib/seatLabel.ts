@@ -35,6 +35,14 @@ export interface AssignmentLabel {
   rows: { label: string; value: string; vip?: boolean }[];
 }
 
+/** The one label a free-seating event ever shows. */
+export const FREE_SEATING_LABEL: AssignmentLabel = {
+  short: "Free",
+  long: "Free seating",
+  isVip: false,
+  rows: [{ label: "Seating", value: "Free seating" }],
+};
+
 /**
  * Single source of truth for turning a global `seatNumber` into a human label.
  *
@@ -48,6 +56,9 @@ export function formatAssignment(
   seatNumber: number | null,
   event: Pick<Event, "assignmentMode" | "totalSeats" | "seatingConfig">
 ): AssignmentLabel | null {
+  // Free seating: there is no number to derive anything from, and a stray
+  // seatNumber left over from a mode switch must not resurrect "Row A · Seat 3".
+  if (event.assignmentMode === "free") return FREE_SEATING_LABEL;
   if (seatNumber == null) return null;
 
   const cfg = event.seatingConfig;

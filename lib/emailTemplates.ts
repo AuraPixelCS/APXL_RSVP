@@ -378,6 +378,17 @@ export interface SeatEmailOpts {
   headerTitle?: string;
   /** When true and a banner is set, render the event title in a strip below the banner */
   showTitleOnBanner?: boolean;
+  /**
+   * Sub-line under the header title ("Seat Confirmed"). Defaults to
+   * "<Seat|Table> Confirmed" from the assignment rows; a free-seating pass
+   * passes "Registration Confirmed" because nothing was seated.
+   */
+  confirmLabel?: string;
+  /**
+   * Replaces the fixed "Valid only for this event" caption under the QR — a
+   * multi-day pass says which days it opens.
+   */
+  qrCaption?: string;
 }
 
 /** Format a "HH:MM" 24h string to 12-hour with AM/PM (e.g. "17:30" → "5:00 PM"). */
@@ -398,6 +409,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   const confirmNoun = useRows
     ? (opts.assignmentRows![0].label.toLowerCase().includes("table") ? "Table" : "Seat")
     : (opts.tableNumber != null ? "Table" : "Seat");
+  const confirmLabel = opts.confirmLabel ?? `${confirmNoun} Confirmed`;
 
   const assignLabel = isVip
     ? "VIP Seat"
@@ -441,11 +453,8 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
 
   const bodyParagraph = resolvedBody
     ? `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">${resolvedBody}</p>`
-    : `<p style="font-size: 14px; color: #555555; margin: 0 0 16px; line-height: 1.6;">
-        <strong>The wait is almost over!</strong>
-      </p>
-      <p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
-        We are excited to welcome you tomorrow to the <strong>${opts.eventTitle} Celebration</strong> as we commemorate 25 years of growth, innovation, partnerships, and success.
+    : `<p style="font-size: 14px; color: #555555; margin: 0 0 28px; line-height: 1.6;">
+        Your registration for <strong>${escapeHtml(opts.eventTitle)}</strong> is confirmed. Here is your entry pass — please have it ready when you arrive.
       </p>`;
 
   // Always render the dark title strip beneath the banner — so even when the
@@ -454,7 +463,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
   // without an image, but this guarantees the identity is never lost.
   const seatTitleStrip = `<div style="background: #111111; padding: 14px 20px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 18px; margin: 0; letter-spacing: -0.3px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${confirmNoun} Confirmed</p>
+        <p style="color: #888888; font-size: 12px; margin: 4px 0 0;">${confirmLabel}</p>
       </div>`;
 
   // Header: custom banner image OR dark header with editable title
@@ -462,7 +471,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
     ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="${opts.eventTitle}" style="width:100%;max-width:560px;display:block;" /></div>${seatTitleStrip}`
     : `<div style="background: #111111; padding: 32px 40px; text-align: center;">
         <h1 style="color: #ffffff; font-size: 22px; margin: 0; letter-spacing: -0.5px;">${opts.headerTitle ?? opts.eventTitle}</h1>
-        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmNoun} Confirmed</p>
+        <p style="color: #888888; font-size: 13px; margin: 6px 0 0;">${confirmLabel}</p>
       </div>`;
 
   // Attire row (only if present)
@@ -493,7 +502,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
         </p>
         <div style="text-align: center; margin-bottom: 28px;">
           <img src="${qrSrc}" alt="Entry QR Code" style="width: 200px; height: 200px; border-radius: 8px; border: 1px solid #e5e5e5;" />
-          <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">Valid only for this event. Do not share this QR code.</p>
+          <p style="font-size: 11px; color: #aaaaaa; margin: 12px 0 0;">${opts.qrCaption ?? "Valid only for this event. Do not share this QR code."}</p>
           ${opts.passUrl
             ? `<div style="margin-top: 18px;">
             <a href="${opts.passUrl}" style="display: inline-block; background: #3d9bf5; color: #ffffff; text-decoration: none; font-size: 14px; font-weight: 700; padding: 12px 24px; border-radius: 8px;">View or download your entry pass</a>
@@ -539,7 +548,7 @@ export function buildSeatEmail(opts: SeatEmailOpts): string {
           : ""}
         ${!opts.agendaImageUrl
           ? `<p style="font-size: 14px; color: #555555; line-height: 1.6; margin: 0 0 ${opts.thankYouLine ? "16px" : "24px"};">
-          We are excited to celebrate this milestone with you and look forward to creating memorable moments together.
+          We look forward to seeing you there.
         </p>`
           : ""}
         ${opts.thankYouLine

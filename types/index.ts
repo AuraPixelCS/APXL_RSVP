@@ -84,7 +84,23 @@ export interface RSVP {
   emailStatus?: EmailDeliveryStatus | null;
   emailStatusAt?: string | null;
   emailEvents?: EmailDeliveryEvent[];
+
+  // ── Intake provenance (Phase 4 — form integration) ────────────────────────
+  // Registrations can now arrive from a partner's form via
+  // /api/integrations/register, not only from this app's public page.
+  /** Where the record came from. Absent on every RSVP created before Phase 4 → treat as "form". */
+  source?: "form" | "integration" | "admin" | "csv";
+  /** The partner's own order / submission reference. Idempotency key for integration retries. */
+  externalRef?: string | null;
+  /** Ticket / pass code the registration was made under (e.g. "complimentary", "P1"). */
+  ticketType?: string | null;
+  /** Days the registrant asked for on a multi-day event, as the partner sent them. Informational until scanner v2. */
+  days?: string[] | null;
+  /** PDPA consent as captured on the partner's form. */
+  consent?: boolean | null;
 }
+
+export type AssignmentMode = "seat" | "table" | "free";
 
 // ─── EVENT ──────────────────────────────────────────────────────────────────
 
@@ -140,7 +156,13 @@ export interface Event {
   maxGuests?: number;
   totalSeats: number;
   seatingConfig?: SeatingConfig;
-  assignmentMode?: "seat" | "table"; // how seatNumber is labeled to guests; default "seat"
+  /**
+   * How a guest's place is labelled. "seat" / "table" allocate a numbered
+   * position. "free" (Phase 4) means free seating: nobody is allocated, the QR
+   * pass is minted at registration time, and the pass reads "Free seating".
+   * Default "seat".
+   */
+  assignmentMode?: AssignmentMode;
 
   // ── Public RSVP form config (Phase 2) ─────────────────────────────────────
   // Drive the public form's dropdowns per-event. Empty/unset → built-in defaults
@@ -219,7 +241,8 @@ export interface AdminUser {
 export interface QRPayload {
   rsvpId: string;
   eventId: string;
-  seatNumber: number;
+  /** null on a free-seating event — the pass admits, it doesn't place. */
+  seatNumber: number | null;
   eventTime: number; // Unix timestamp (seconds) of event start
   issuedAt: number; // Unix timestamp (seconds) of QR generation
   /**

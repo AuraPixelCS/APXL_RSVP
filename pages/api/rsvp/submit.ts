@@ -1,27 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { sendResendEmail } from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
-import {
-  buildRsvpConfirmEmail,
-  buildRsvpConfirmText,
-  buildWaitlistEmail,
-  buildWaitlistText,
-} from "@/lib/emailTemplates";
-import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { isRsvpDeadlinePassed } from "@/lib/eventTime";
-import { getTotalSeatCount } from "@/lib/seating";
-import { capacityOf, checkCapacity, decideIntake, type IntakeDecision } from "@/lib/capacity";
-import { buildManageUrl } from "@/lib/manageToken";
 import { publicBaseFor } from "@/lib/publicUrl";
-import { deliveryTags } from "@/lib/emailDelivery";
-import { resolveEventSender } from "@/lib/eventSender";
-import {
-  normalizeEmail,
-  rsvpDocId,
-  rsvpEmailAlreadyExists,
-  isAlreadyExistsError,
-} from "@/lib/rsvpIdentity";
+import { normalizeEmail, rsvpEmailAlreadyExists } from "@/lib/rsvpIdentity";
+import { createRsvp, sendIntakeEmail, IntakeError } from "@/lib/intake";
+import { sendEntryPass } from "@/lib/entryPass";
 
 // Best-effort in-memory rate limiter (per IP). This is a public endpoint that
 // sends an email + WhatsApp on every call, so it must not be trivially abusable.
@@ -112,160 +96,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
     }
 
-    const isAttending = attending !== false;
-    const wantsPlusOne = plusOne === true;
-    const capacity = capacityOf(
-      event,
-      getTotalSeatCount(event.seatingConfig, Number(event.totalSeats) || 0),
-    );
-
-    const now = new Date().toISOString();
-    const rsvpData = {
-      eventId,
-      name: name.trim(),
-      email: normalizedEmail,
-      phone: phone.trim(),
-      attending: isAttending,
-      plusOne: wantsPlusOne,
-      plusOneName: plusOneName?.trim() || null,
-      dietaryRestrictions: dietaryRestrictions?.trim() || null,
-      message: message?.trim() || null,
-      partOf: partOf?.trim() || null,
-      company: company?.trim() || null,
-      jobTitle: jobTitle?.trim() || null,
-      industry: industry?.trim() || null,
-      // status/waitlistedAt are decided inside the transaction below, where the
-      // capacity count and the write happen together.
-      status: "pending" as string,
-      waitlistedAt: null as string | null,
-      promotedAt: null,
-      seatNumber: null,
-      plusOneSeatNumber: null,
-      qrToken: null,
-      plusOneQrToken: null,
-      qrIssuedAt: null,
-      whatsappConfirmSent: false,
-      whatsappQRSent: false,
-      // Explicit null rather than absent: the field is declared required, and
-      // its absence breaks the natural server-side "not yet notified" query.
-      notifiedAt: null,
-      submittedAt: now,
-      updatedAt: now,
-    };
-
-    // One transaction covers BOTH guards, because both are check-then-write:
-    //
-    //   - Duplicate: the id is derived from (eventId, email) and written with
-    //     create(), so two simultaneous submissions race for the same id and
-    //     exactly one wins.
-    //   - Capacity: counting seats and then writing in a separate step would
-    //     let two guests both claim the last chair. The count is taken inside
-    //     the transaction, so a concurrent write forces a retry.
-    const ref = rsvpsRef.doc(rsvpDocId(eventId, normalizedEmail));
-    let decision: IntakeDecision = "accept";
-
+    // Duplicate + capacity guards, and the free-seating pass mint, all live in
+    // lib/intake.ts now — shared with the partner-form Register endpoint.
+    let result;
     try {
-      decision = await adminDb.runTransaction(async (tx) => {
-        const snap = await tx.get(rsvpsRef);
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as {
-          id: string; email?: string; status?: string; attending?: boolean; plusOne?: boolean;
-        });
-
-        if (rows.some((r) => r.id === ref.id || normalizeEmail(r.email ?? "") === normalizedEmail)) {
-          throw Object.assign(new Error("DUPLICATE"), { duplicate: true });
-        }
-
-        let outcome: IntakeDecision = "accept";
-        if (isAttending) {
-          const check = checkCapacity(rows, { attending: true, plusOne: wantsPlusOne }, capacity);
-          outcome = decideIntake(check, event.waitlistEnabled);
-          if (outcome === "reject") {
-            throw Object.assign(new Error("FULL"), { full: true, remaining: check.remaining });
-          }
-        }
-
-        tx.create(ref, {
-          ...rsvpData,
-          status: !isAttending ? "not_attending" : outcome === "waitlist" ? "waitlisted" : "pending",
-          waitlistedAt: outcome === "waitlist" ? now : null,
-        });
-        return outcome;
+      result = await createRsvp(eventId, event, {
+        name, email: normalizedEmail, phone, attending, plusOne, plusOneName,
+        dietaryRestrictions, message, partOf, company, jobTitle, industry,
+        source: "form",
       });
     } catch (e) {
-      const err = e as { duplicate?: boolean; full?: boolean; remaining?: number };
-      if (err.duplicate || isAlreadyExistsError(e)) {
-        return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
-      }
-      if (err.full) {
+      if (e instanceof IntakeError) {
+        if (e.code === "duplicate") {
+          return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
+        }
         return res.status(409).json({
           full: true,
           error:
-            wantsPlusOne && err.remaining === 1
+            plusOne === true && e.remaining === 1
               ? "Only one seat is left, so we can't seat you and your guest together. Please contact the organiser."
               : "This event is fully booked.",
         });
       }
       throw e;
     }
+    const { decision, rsvp: rsvpData } = result;
 
-    // Send confirmation email — must be awaited before response so Vercel doesn't freeze the function
-    try {
-      let bannerUrl: string | undefined = event.customRsvpConfirmBanner;
-      let attachments;
-      if (!bannerUrl) {
-        const fallback = loadPeoplelogyEmailBanner(event.title, "rsvp_banner");
-        bannerUrl = fallback.bannerUrl;
-        if (fallback.attachment) attachments = [fallback.attachment];
-      }
-      const origin = publicBaseFor(req);
-      const manageUrl = buildManageUrl(origin, ref.id, eventId);
-
-      const sender = resolveEventSender(event);
-      if (sender.warning) console.warn("[submit] sender:", sender.warning);
-
-      // A waitlisted guest must NOT get the confirmation email — it says a seat
-      // is reserved, which is exactly what hasn't happened.
-      const isWaitlisted = decision === "waitlist";
-
-      const waitlistOpts = {
-        name: rsvpData.name,
-        eventTitle: event.title,
-        eventDate: event.date,
-        venue: event.venue ?? "",
-        address: event.address,
-        bannerUrl,
-        showTitleOnBanner: !!event.showEventTitleOnBanner,
-        manageUrl,
-      };
-      const confirmOpts = {
-        name: rsvpData.name,
-        eventTitle: event.title,
-        eventDate: event.date,
-        eventTime: event.time,
-        venue: event.venue ?? "",
-        address: event.address,
-        bannerUrl,
-        showTitleOnBanner: !!event.showEventTitleOnBanner,
-        manageUrl,
-      };
-
-      const emailResult = await sendResendEmail({
-        to: rsvpData.email,
-        subject: isWaitlisted
-          ? (typeof event.waitlistSubject === "string" && event.waitlistSubject.trim()) ||
-            `You're on the waitlist – ${event.title}`
-          : (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
-            `RSVP Confirmation – ${event.title}`,
-        html: isWaitlisted ? buildWaitlistEmail(waitlistOpts) : buildRsvpConfirmEmail(confirmOpts),
-        text: isWaitlisted ? buildWaitlistText(waitlistOpts) : buildRsvpConfirmText(confirmOpts),
-        attachments,
-        from: sender.from,
-        replyTo: sender.replyTo,
-        tags: deliveryTags(eventId, ref.id, isWaitlisted ? "waitlist" : "confirm"),
-      });
-      console.log("✉️ EMAIL LOG:", emailResult);
-    } catch (e) {
-      console.error("Email throw:", e);
+    // Email — must be awaited before responding so Vercel doesn't freeze the
+    // function. Free seating: the pass itself. Seated: "RSVP received" (a seat
+    // follows once allocated). Waitlisted guests get the waitlist email, never
+    // the confirmation — it says a seat is reserved, which hasn't happened.
+    const origin = publicBaseFor(req);
+    if (result.status === "allocated") {
+      await sendEntryPass(rsvpData, event, origin);
+    } else if (result.status === "waitlisted") {
+      await sendIntakeEmail(rsvpData, event, origin, "waitlist");
+    } else if (result.status === "pending") {
+      await sendIntakeEmail(rsvpData, event, origin, "confirm");
     }
 
     // Send WhatsApp confirmation — awaited for same reason
@@ -287,7 +154,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return res.status(201).json({
       success: true,
-      rsvpId: ref.id,
+      rsvpId: result.id,
       // The form renders a different confirmation for a waitlisted guest —
       // telling them their RSVP succeeded without saying they have no seat is
       // how someone turns up to a full room.

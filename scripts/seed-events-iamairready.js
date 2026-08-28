@@ -81,7 +81,9 @@ const EVENTS = [
       { date: '2026-11-21', label: 'Day 3', theme: 'Uni & Youth / Public', startTime: '09:00' },
     ],
     description: 'Free access, themed by day. Opened in full by P1, P2 and F3; single days by F19, F20 and F21. Whether the day themes gate entry or only label it is brief open question 06.',
-    assignmentMode: 'seat',
+    // Free seating (2026-08-28): nobody is allocated; the pass is minted at
+    // registration. See scripts/seed-free-seating.js for the staging twin.
+    assignmentMode: 'free',
   },
 ];
 

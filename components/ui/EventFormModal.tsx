@@ -44,7 +44,7 @@ export default function EventFormModal({
   const [seatingConfig, setSeatingConfig] = useState<SeatingConfig>(
     event?.seatingConfig ?? { style: "theater", seatsPerRow: 10 },
   );
-  const [assignmentMode, setAssignmentMode] = useState<"seat" | "table">(event?.assignmentMode ?? "seat");
+  const [assignmentMode, setAssignmentMode] = useState<"seat" | "table" | "free">(event?.assignmentMode ?? "seat");
 
   const update = (field: string, value: string | number | boolean) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -306,7 +306,7 @@ export default function EventFormModal({
                     Assignment Type
                   </p>
                   <div className="flex gap-2">
-                    {(["seat", "table"] as const).map((mode) => (
+                    {(["seat", "table", "free"] as const).map((mode) => (
                       <button key={mode} type="button" onClick={() => setAssignmentMode(mode)}
                         className="flex-1 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
                         style={{
@@ -314,14 +314,16 @@ export default function EventFormModal({
                           color: assignmentMode === mode ? "#000" : "var(--muted)",
                           border: `1.5px solid ${assignmentMode === mode ? "var(--accent)" : "var(--border)"}`,
                         }}>
-                        {mode === "seat" ? "Seat Numbers" : "Table Numbers"}
+                        {mode === "seat" ? "Seat Numbers" : mode === "table" ? "Table Numbers" : "Free Seating"}
                       </button>
                     ))}
                   </div>
                   <p className="text-[10px] mt-1.5" style={{ color: "var(--muted)" }}>
                     {assignmentMode === "seat"
                       ? "Guests receive individual seat numbers in their confirmation."
-                      : "Guests receive table numbers — best used with Banquet layout."}
+                      : assignmentMode === "table"
+                        ? "Guests receive table numbers — best used with Banquet layout."
+                        : "No allocation. Every accepted registration gets its QR pass immediately; capacity still applies."}
                   </p>
                 </div>
 

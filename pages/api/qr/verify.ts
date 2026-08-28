@@ -1,8 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { verifyQRToken, isQRValid } from "@/lib/qr";
+import { verifyQRToken, isQRValidForEvent } from "@/lib/qr";
+import { formatAssignment } from "@/lib/seatLabel";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { scannerKeyValid } from "@/lib/apiAuth";
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // CORS check, handle preflight
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -33,17 +35,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: "Not valid" });
     }
 
-    // 2. Initial time-based validity check
-    const timeValid = isQRValid(payload);
-
     const { eventId, rsvpId } = payload;
 
-    // 3. Fetch Event and RSVP from Firebase
+    // 2. Fetch Event and RSVP from Firebase
     const eventSnap = await adminDb.collection("events").doc(eventId).get();
     if (!eventSnap.exists) {
       return res.status(404).json({ error: "Event not found" });
     }
     const event = eventSnap.data()!;
+
+    // 3. Time-based validity — event-aware so a three-day pass is still "in
+    // time" on day two (the payload only carries the first day's start).
+    const timeValid = isQRValidForEvent(payload, event as any);
 
     const rsvpSnap = await adminDb
       .collection("events")
@@ -83,7 +86,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         id: rsvpId,
         name: rsvp.name,
         email: rsvp.email,
-        seatNumber: rsvp.seatNumber || payload.seatNumber,
+        // null on a free-seating event — scanners should show `seatLabel`.
+        seatNumber: rsvp.seatNumber ?? payload.seatNumber ?? null,
+        seatLabel: formatAssignment(rsvp.seatNumber ?? payload.seatNumber ?? null, event as any)?.long ?? null,
+        freeSeating: event.assignmentMode === "free",
+        ticketType: rsvp.ticketType ?? null,
+        days: rsvp.days ?? null,
         company: rsvp.company || "",
         dietary: rsvp.dietaryRequirements || "None",
       }

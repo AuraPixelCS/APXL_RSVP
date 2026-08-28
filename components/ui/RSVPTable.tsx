@@ -19,7 +19,7 @@ interface RSVPTableProps {
   onDeleteRsvp?: (rsvpId: string) => void;
   deletingRsvpId?: string | null;
   onEditRsvp?: (rsvp: RSVP) => void;
-  assignmentMode?: "seat" | "table";
+  assignmentMode?: "seat" | "table" | "free";
   // Event seating context — needed to format the seat/table label consistently.
   seatingConfig?: SeatingConfig;
   totalSeats?: number;
@@ -111,8 +111,8 @@ function InfoRow({ label, value }: { label: string; value: string | null | undef
   );
 }
 
-function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeats }: { rsvp: RSVP; onClose: () => void; assignmentMode?: "seat" | "table"; seatingConfig?: SeatingConfig; totalSeats?: number }) {
-  const seatLabel = assignmentMode === "table" ? "Table" : "Seat";
+function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeats }: { rsvp: RSVP; onClose: () => void; assignmentMode?: "seat" | "table" | "free"; seatingConfig?: SeatingConfig; totalSeats?: number }) {
+  const seatLabel = assignmentMode === "table" ? "Table" : assignmentMode === "free" ? "Seating" : "Seat";
   const assignment = formatAssignment(rsvp.seatNumber, { assignmentMode, totalSeats: totalSeats ?? 0, seatingConfig });
   return (
     <motion.div
@@ -240,7 +240,9 @@ export default function RSVPTable({
   const emailLabel    = googleFormMode ? (emailMap?.formHeader ?? "Email") : "Email";
   const phoneLabel    = googleFormMode ? (phoneMap?.formHeader ?? "Phone") : "Phone";
   const starredLabel  = starredMap ? (starredMap.extraLabel || starredMap.formHeader) : null;
-  const seatLabel     = assignmentMode === "table" ? "Table" : "Seat";
+  const seatLabel     = assignmentMode === "table" ? "Table" : assignmentMode === "free" ? "Seating" : "Seat";
+  // Free seating: nothing to allocate or cancel — a registrant is admitted or not.
+  const freeSeating   = assignmentMode === "free";
 
   const colCount =
     1 + // #
@@ -497,7 +499,7 @@ export default function RSVPTable({
                               </button>
                             )}
 
-                            {rsvp.status === "pending" && rsvp.attending && onAllocate && (
+                            {!freeSeating && rsvp.status === "pending" && rsvp.attending && onAllocate && (
                               <button
                                 onClick={() => onAllocate(rsvp.id!)}
                                 disabled={allocatingId === rsvp.id}
@@ -512,7 +514,7 @@ export default function RSVPTable({
                               </button>
                             )}
 
-                            {rsvp.status === "allocated" && onDeallocate && (
+                            {!freeSeating && rsvp.status === "allocated" && onDeallocate && (
                               <button
                                 onClick={() => onDeallocate(rsvp.id!)}
                                 disabled={deallocatingId === rsvp.id}
