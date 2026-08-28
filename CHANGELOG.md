@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.2.1] — 2026-08-28
+
+**Free seating + partner form integration (Summit complimentary pass).** Branch `phase2-lock`; preview/staging build. Versioning now bumps on every push.
+
+### Free seating
+- New `assignmentMode: "free"`: no seat allocation. An accepted registration has its QR minted inside the intake transaction and lands as `allocated` with `seatNumber: null`, so scanner, notify and stats work unchanged. E3 (Summit) set to this mode.
+- Entry-pass email in free mode: "Registration Confirmed" header, a *Free seating* row, the full date range for multi-day events, and a QR caption naming the days it opens. Default body copy is now generic (the anniversary text survives only inside the PEOPLElogy branch).
+- QR validity window is event-aware (`isQRValidForEvent`): a three-day pass no longer reads "out of time" from day two.
+- Admin: Free Seating option in the event form / seat-map layout editor; Allocate/Cancel controls hidden in free mode; hero counter reads "Passes Issued".
+
+### Partner form integration
+- `POST /api/integrations/register` — `X-API-Key` (`INTEGRATION_API_KEY`), the partner's field names accepted as-is, idempotent on their `submission_id`, ticket→event rules in `lib/integration.ts`. Complimentary/F3/F19–21 → E3; BAFT keys recognised but `422 ticket_not_enabled` until the payment step is agreed.
+- `INTEGRATION_EVENT_SUFFIX` (staging: `-TEST`) redirects writes into an `E3-TEST` twin so UAT submissions never reach the real guest list. `scripts/seed-free-seating.js` creates the twin; `scripts/setup-preview-env.sh` populates the Vercel preview environment from `.env.local` (Vercel's sensitive vars can't be pulled).
+- `lib/intake.ts` is now the single RSVP writer (public form + Register); `lib/entryPass.ts` holds the pass builder so intake can email it immediately.
+- Per-event banner slot: `public/banners/<code>.png`; no artwork → dark text header, never a wrong banner.
+- Docs: `docs/complimentary-pass-integration.md` (one page for the partner's dev); status note in the contract.
+
+### Also in this push (Phase 3 snapshot, previously uncommitted)
+- Capacity/waitlist, Resend delivery tracking, guest self-service manage links, multi-day event model, integration contract draft — see the 3.2.0 notes; these are the same features, now committed.
+- Tests: `test-integration`, `test-free-seating`; `npm test` uses a resolver (`scripts/test-register.mjs`) so libs importing via `@/` can be tested.
+
 ## [3.2.0] — 2026-07-22
 
 **Phase 3 — operational resilience & guest experience.** The web half is complete. The offline scanner is not included; see the note at the end.
