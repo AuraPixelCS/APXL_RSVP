@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.2.2] — 2026-08-28
+
+**Notifications page revamp.** Full-width layout that fills the viewport; no more centred card with dead space.
+
+- Header row: event title + seating-mode chip left, *Entry Pass / Thank-You* picker and bulk actions (**Notify N unnotified**, **Re-send to all**) right. Floating bottom-right buttons removed.
+- KPI strip — Pass holders / Notified / Unnotified / **Delivery issues** (bounces + spam reports, previously not surfaced here) — with a slim full-width progress bar replacing the ring.
+- Underline tabs: Pass Holders · Email Blast · Template.
+- Guest table gains company under the name, a **Delivery** status chip, and the ticket type on free-seating events; row actions read *Notify* / *Re-send*.
+- Email Blast: 5/7 compose-to-preview split with a taller preview; SVG checkboxes; recipients show a "sent" marker.
+- Free-seating events no longer say "Allocate seats before sending notifications" — copy and empty states explain that passes go out at registration.
+
 ## [3.2.1] — 2026-08-28
 
 **Free seating + partner form integration (Summit complimentary pass).** Branch `phase2-lock`; preview/staging build. Versioning now bumps on every push.

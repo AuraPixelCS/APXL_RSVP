@@ -7,6 +7,8 @@ import EmailEditor from "@/components/ui/EmailEditor";
 import { getEvent, subscribeToRSVPs } from "@/lib/firestore";
 import { buildBlastEmail } from "@/lib/emailTemplates";
 import { formatAssignment } from "@/lib/seatLabel";
+import { DELIVERY_LABEL, isDeliveryFailure } from "@/lib/emailDelivery";
+import { formatEventDayRange } from "@/lib/eventDays";
 import type { Event, RSVP } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthContext } from "@/contexts/AuthContext";
@@ -43,158 +45,216 @@ function BellIcon() {
   );
 }
 
-// ─── Notification Hero ───────────────────────────────────────────────────────
-
-function NotificationHero({
-  eventTitle, notifiedCount, unnotifiedCount, totalAllocated, notifiedPct,
-  bulkNotifying, canBulk, onBulkNotify, onNotifyAll,
-}: {
-  eventTitle: string;
-  notifiedCount: number;
-  unnotifiedCount: number;
-  totalAllocated: number;
-  notifiedPct: number;
-  bulkNotifying: boolean;
-  canBulk: boolean;
-  onBulkNotify: () => void;
-  onNotifyAll: () => void;
-}) {
-  const RING_SIZE = 140;
-  const STROKE = 12;
-  const radius = (RING_SIZE - STROKE) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference - (notifiedPct / 100) * circumference;
-
-  const allDone = totalAllocated > 0 && unnotifiedCount === 0;
-  const accentColor = allDone ? "#22c55e" : "var(--accent)";
-  const noGuests = totalAllocated === 0;
-
+function SendIcon() {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-      className="rounded-2xl overflow-hidden"
-      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
-    >
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-0">
-        {/* Left: title + stats + CTA */}
-        <div className="p-6 flex flex-col gap-4">
-          <div>
-            <span
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase mb-3"
-              style={{
-                background: "rgba(61,155,245,0.08)",
-                color: "var(--accent)",
-                border: "1px solid rgba(61,155,245,0.25)",
-                letterSpacing: "0.08em",
-              }}
-            >
-              <BellIcon />
-              Notifications
-            </span>
-            <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">{eventTitle}</h1>
-            <p className="text-xs mt-1.5" style={{ color: "var(--muted)" }}>
-              {noGuests
-                ? "Allocate seats before sending notifications."
-                : allDone
-                  ? `All ${totalAllocated} allocated guests have been notified.`
-                  : `${unnotifiedCount} of ${totalAllocated} allocated guests still need to be notified.`}
-            </p>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3">
-            <HeroStat label="Notified" value={notifiedCount} color="#22c55e" />
-            <HeroStat label="Unnotified" value={unnotifiedCount} color={unnotifiedCount > 0 ? "#f59e0b" : "var(--muted)"} />
-            <HeroStat label="Allocated" value={totalAllocated} color="var(--accent)" />
-          </div>
-
-          <div className="flex flex-wrap gap-2 mt-1">
-            <button
-              onClick={onBulkNotify}
-              disabled={!canBulk || bulkNotifying}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: "var(--accent)", color: "#000" }}
-            >
-              {bulkNotifying ? (
-                <>
-                  <span className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
-                  Sending…
-                </>
-              ) : (
-                <>
-                  <BellIcon />
-                  {unnotifiedCount > 0 ? `Notify ${unnotifiedCount} Unnotified` : "All Notified"}
-                </>
-              )}
-            </button>
-
-            {/* Re-send the latest email to EVERYONE (incl. already-notified). */}
-            <button
-              onClick={onNotifyAll}
-              disabled={totalAllocated === 0 || bulkNotifying}
-              title="Re-send the selected email to all allocated guests, including those already notified"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)" }}
-            >
-              <BellIcon />
-              Notify All {totalAllocated}
-            </button>
-          </div>
-        </div>
-
-        {/* Right: progress ring */}
-        <div
-          className="p-6 flex flex-col items-center justify-center gap-2"
-          style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)", minWidth: 200 }}
-        >
-          <div style={{ position: "relative", width: RING_SIZE, height: RING_SIZE }}>
-            <svg width={RING_SIZE} height={RING_SIZE} style={{ transform: "rotate(-90deg)" }}>
-              <circle
-                cx={RING_SIZE / 2}
-                cy={RING_SIZE / 2}
-                r={radius}
-                fill="none"
-                stroke="var(--surface-3)"
-                strokeWidth={STROKE}
-              />
-              <motion.circle
-                cx={RING_SIZE / 2}
-                cy={RING_SIZE / 2}
-                r={radius}
-                fill="none"
-                stroke={accentColor}
-                strokeWidth={STROKE}
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                initial={{ strokeDashoffset: circumference }}
-                animate={{ strokeDashoffset: dashOffset }}
-                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ pointerEvents: "none" }}>
-              <p className="text-3xl font-bold text-white" style={{ fontFamily: "'Fira Code', monospace" }}>{notifiedPct}%</p>
-              <p className="text-[10px] mt-0.5 uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>Notified</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </motion.div>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" />
+    </svg>
   );
 }
 
-function HeroStat({ label, value, color }: { label: string; value: number; color: string }) {
+function SearchIcon() {
   return (
-    <div className="rounded-lg px-3 py-2.5" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
-      <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)", letterSpacing: "0.1em" }}>
-        {label}
-      </p>
-      <p className="text-xl font-bold mt-1" style={{ color, fontFamily: "'Fira Code', monospace" }}>
-        {value}
-      </p>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function InboxIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function MailCheckIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /><path d="m16 19 2 2 4-4" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+// ─── Building blocks ──────────────────────────────────────────────────────────
+
+/** Segmented control shared by the template picker and the guest filter. */
+function Segmented<T extends string>({
+  value, onChange, options, ariaLabel,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { key: T; label: string; count?: number; color?: string }[];
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={ariaLabel}
+      className="inline-flex items-center rounded-lg p-1 gap-0.5"
+      style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
+    >
+      {options.map((o) => {
+        const active = value === o.key;
+        const tint = o.color ?? "var(--accent)";
+        return (
+          <button
+            key={o.key}
+            role="tab"
+            aria-selected={active}
+            onClick={() => onChange(o.key)}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold cursor-pointer transition-colors duration-150 focus-visible:outline-2 focus-visible:outline-offset-1"
+            style={{
+              background: active ? tint : "transparent",
+              color: active ? "#000" : "var(--muted)",
+              outlineColor: "var(--accent)",
+            }}
+            onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "var(--muted)"; }}
+          >
+            {o.label}
+            {typeof o.count === "number" && (
+              <span
+                className="inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5"
+                style={{
+                  background: active ? "rgba(0,0,0,0.18)" : "var(--surface-3)",
+                  color: active ? "#000" : "var(--muted)",
+                  minWidth: 18, height: 16, fontFamily: "'Fira Code', monospace",
+                }}
+              >
+                {o.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
+
+function Kpi({
+  label, value, hint, color, icon,
+}: {
+  label: string; value: number; hint: string; color: string; icon: ReactElement;
+}) {
+  return (
+    <div
+      className="flex items-start justify-between gap-3 rounded-xl px-4 py-3.5 min-w-0"
+      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+    >
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase" style={{ color: "var(--muted)", letterSpacing: "0.12em" }}>{label}</p>
+        <p className="text-2xl font-bold mt-1 leading-none" style={{ color, fontFamily: "'Fira Code', monospace" }}>{value}</p>
+        <p className="text-[11px] mt-1.5 truncate" style={{ color: "var(--muted-2)" }}>{hint}</p>
+      </div>
+      <span
+        className="flex items-center justify-center w-8 h-8 rounded-lg shrink-0"
+        style={{ background: "var(--surface-2)", color, border: "1px solid var(--border)" }}
+      >
+        {icon}
+      </span>
+    </div>
+  );
+}
+
+function ProgressBar({ pct, notified, total, allDone }: { pct: number; notified: number; total: number; allDone: boolean }) {
+  const tint = allDone ? "var(--success)" : "var(--accent)";
+  return (
+    <div
+      className="flex items-center gap-4 rounded-xl px-4 py-3"
+      style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+      role="progressbar"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label="Guests notified"
+    >
+      <span className="text-[10px] font-semibold uppercase shrink-0" style={{ color: "var(--muted)", letterSpacing: "0.12em" }}>Progress</span>
+      <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--surface-3)" }}>
+        <motion.div
+          className="h-full rounded-full"
+          style={{ background: tint }}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+        />
+      </div>
+      <span className="text-xs shrink-0" style={{ color: "var(--muted)" }}>
+        <span className="font-bold" style={{ color: "var(--foreground)", fontFamily: "'Fira Code', monospace" }}>{pct}%</span>
+        {" "}· {notified} of {total} notified
+      </span>
+    </div>
+  );
+}
+
+function DeliveryChip({ status }: { status: RSVP["emailStatus"] }) {
+  if (!status) return <span className="text-xs" style={{ color: "var(--muted-2)" }}>—</span>;
+  const failed = isDeliveryFailure(status);
+  const good = status === "delivered" || status === "opened" || status === "clicked";
+  const color = failed ? "var(--danger)" : good ? "var(--success)" : "var(--muted)";
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium whitespace-nowrap"
+      style={{ color, background: "var(--surface-2)", border: "1px solid var(--border)" }}
+      title={failed ? "This guest did not receive the email" : undefined}
+    >
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />
+      {DELIVERY_LABEL[status]}
+    </span>
+  );
+}
+
+function EmptyState({ title, body, action }: { title: string; body: string; action?: ReactElement }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16 gap-3" style={{ background: "var(--surface)" }}>
+      <span className="flex items-center justify-center w-14 h-14 rounded-2xl" style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }}>
+        <InboxIcon />
+      </span>
+      <p className="text-sm font-semibold text-white">{title}</p>
+      <p className="text-xs max-w-md leading-relaxed" style={{ color: "var(--muted)" }}>{body}</p>
+      {action}
+    </div>
+  );
+}
+
+const BTN_PRIMARY = "inline-flex items-center gap-2 h-9 px-4 rounded-lg text-xs font-semibold cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2";
+const BTN_GHOST = "inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-offset-2";
+
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -441,6 +501,9 @@ const NotificationsPage: NextPageWithLayout = () => {
   // ── Email preview HTML ───────────────────────────────────────────────────────
 
   const isTableMode = event?.assignmentMode === "table";
+  const isFree = event?.assignmentMode === "free";
+  const deliveryIssues = allocatedRsvps.filter((r) => isDeliveryFailure(r.emailStatus)).length;
+  const dateLabel = event ? formatEventDayRange(event) : "";
 
   const blastPreviewHtml = event
     ? buildBlastEmail({
@@ -481,419 +544,402 @@ const NotificationsPage: NextPageWithLayout = () => {
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
+  const guestNoun = isFree ? "pass holder" : "allocated guest";
+  const guestNounPlural = isFree ? "pass holders" : "allocated guests";
+  const noGuests = allocatedRsvps.length === 0;
+  const allDone = !noGuests && unnotifiedCount === 0;
+  const statusLine = noGuests
+    ? (isFree
+        ? "Free seating — every registration gets its QR pass the moment it lands. Registrations will appear here."
+        : "Allocate seats first — the QR pass is minted at allocation.")
+    : allDone
+      ? `All ${allocatedRsvps.length} ${guestNounPlural} have been notified.`
+      : `${unnotifiedCount} of ${allocatedRsvps.length} ${guestNounPlural} still need the ${notifyTemplate === "pass" ? "entry pass" : "thank-you email"}.`;
+
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+    <div className="flex flex-col gap-5" style={{ minHeight: "calc(100vh - var(--header-height) - 48px)" }}>
 
-      {/* ── Back link ──────────────────────────────────────────────────────── */}
-      <button
-        onClick={() => router.back()}
-        className="flex items-center gap-1.5 text-xs cursor-pointer transition-colors"
-        style={{ color: "var(--muted)" }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
-        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
-      >
-        <ArrowLeftIcon />
-        Back to event
-      </button>
+      {/* ── Header: identity left, actions right ─────────────────────────── */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="min-w-0">
+          <button
+            onClick={() => router.push(`/admin/events/${event.id}`)}
+            className="inline-flex items-center gap-1.5 text-xs cursor-pointer transition-colors duration-150"
+            style={{ color: "var(--muted)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--accent)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+          >
+            <ArrowLeftIcon />
+            Back to event
+          </button>
+          <div className="flex flex-wrap items-center gap-2.5 mt-2">
+            <h1 className="text-2xl font-bold text-white tracking-tight leading-none">{event.title}</h1>
+            <span
+              className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[10px] font-semibold uppercase"
+              style={{ background: "rgba(61,155,245,0.08)", color: "var(--accent)", border: "1px solid rgba(61,155,245,0.25)", letterSpacing: "0.08em" }}
+            >
+              <BellIcon />
+              Notifications
+            </span>
+            <span
+              className="inline-flex items-center h-6 px-2.5 rounded-full text-[10px] font-semibold uppercase"
+              style={{ background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)", letterSpacing: "0.08em" }}
+            >
+              {isFree ? "Free seating" : isTableMode ? "Table seating" : "Seated"}
+            </span>
+          </div>
+          <p className="text-xs mt-2" style={{ color: "var(--muted)" }}>
+            {dateLabel}{event.venue ? ` · ${event.venue}` : ""} · {statusLine}
+          </p>
+        </div>
 
-      {/* ── NotificationHero ───────────────────────────────────────────────── */}
-      <NotificationHero
-        eventTitle={event.title}
-        notifiedCount={notifiedCount}
-        unnotifiedCount={unnotifiedCount}
-        totalAllocated={allocatedRsvps.length}
-        notifiedPct={notifiedPct}
-        bulkNotifying={bulkNotifying}
-        canBulk={isAdmin && unnotifiedCount > 0}
-        onBulkNotify={() => handleBulkNotify(false)}
-        onNotifyAll={() => handleBulkNotify(true)}
-      />
+        <div className="flex flex-wrap items-center gap-2">
+          <Segmented
+            ariaLabel="Email to send"
+            value={notifyTemplate}
+            onChange={setNotifyTemplate}
+            options={[
+              { key: "pass", label: "Entry Pass (QR)" },
+              { key: "thankyou", label: "Thank-You" },
+            ]}
+          />
+          <button
+            onClick={() => handleBulkNotify(false)}
+            disabled={!isAdmin || unnotifiedCount === 0 || bulkNotifying}
+            className={BTN_PRIMARY}
+            style={{ background: "var(--accent)", color: "#000", outlineColor: "var(--accent)" }}
+          >
+            {bulkNotifying ? (
+              <>
+                <span className="w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.35)", borderTopColor: "transparent" }} />
+                Sending…
+              </>
+            ) : (
+              <>
+                <SendIcon />
+                {unnotifiedCount > 0 ? `Notify ${unnotifiedCount} unnotified` : "Nothing to notify"}
+              </>
+            )}
+          </button>
+          <button
+            onClick={() => handleBulkNotify(true)}
+            disabled={!isAdmin || noGuests || bulkNotifying}
+            title={`Re-send the selected email to all ${allocatedRsvps.length} ${guestNounPlural}, including those already notified`}
+            className={BTN_GHOST}
+            style={{ background: "transparent", color: "var(--accent)", border: "1px solid rgba(61,155,245,0.4)", outlineColor: "var(--accent)" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(61,155,245,0.08)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+          >
+            <RefreshIcon />
+            Re-send to all {allocatedRsvps.length}
+          </button>
+        </div>
+      </div>
 
-      {/* ── Tab pills ─────────────────────────────────────────────────────── */}
-      <div
-        className="inline-flex rounded-xl p-1 gap-1"
-        style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-      >
+      {/* ── KPI strip + progress ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+        <Kpi
+          label={isFree ? "Pass holders" : "Allocated"}
+          value={allocatedRsvps.length}
+          hint={isFree ? "QR issued at registration" : "Seated guests holding a QR pass"}
+          color="var(--accent)"
+          icon={<UsersIcon />}
+        />
+        <Kpi label="Notified" value={notifiedCount} hint="Handed to the mail provider" color="var(--success)" icon={<MailCheckIcon />} />
+        <Kpi
+          label="Unnotified"
+          value={unnotifiedCount}
+          hint={unnotifiedCount > 0 ? "Waiting for their email" : "Everyone has been reached"}
+          color={unnotifiedCount > 0 ? "var(--warning)" : "var(--muted)"}
+          icon={<ClockIcon />}
+        />
+        <Kpi
+          label="Delivery issues"
+          value={deliveryIssues}
+          hint={deliveryIssues > 0 ? "Bounced or marked as spam — fix the address" : "No bounces or spam reports"}
+          color={deliveryIssues > 0 ? "var(--danger)" : "var(--muted)"}
+          icon={<AlertIcon />}
+        />
+      </div>
+      <ProgressBar pct={notifiedPct} notified={notifiedCount} total={allocatedRsvps.length} allDone={allDone} />
+
+      {/* ── Workspace tabs ───────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1" role="tablist" aria-label="Notification workspace" style={{ borderBottom: "1px solid var(--border)" }}>
         {([
-          { key: "guests",   label: `Allocated Guests${allocatedRsvps.length ? ` (${allocatedRsvps.length})` : ""}` },
-          { key: "template", label: "Template" },
-          { key: "blast",    label: "Email Blast" },
+          { key: "guests",   label: isFree ? "Pass Holders" : "Allocated Guests", count: allocatedRsvps.length },
+          { key: "blast",    label: "Email Blast", count: undefined },
+          { key: "template", label: "Template", count: undefined },
         ] as const).map((t) => {
           const active = activeTab === t.key;
           return (
             <button
               key={t.key}
+              role="tab"
+              aria-selected={active}
               onClick={() => setActiveTab(t.key)}
-              className="px-4 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
+              className="relative flex items-center gap-2 h-10 px-4 text-xs font-semibold cursor-pointer transition-colors duration-150 -mb-px"
               style={{
-                background: active ? "var(--accent)" : "transparent",
-                color: active ? "#000" : "var(--muted)",
+                color: active ? "var(--foreground)" : "var(--muted)",
+                borderBottom: `2px solid ${active ? "var(--accent)" : "transparent"}`,
               }}
+              onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "var(--muted)"; }}
             >
               {t.label}
+              {typeof t.count === "number" && (
+                <span
+                  className="inline-flex items-center justify-center rounded-full text-[10px] font-bold px-1.5"
+                  style={{ background: active ? "var(--accent-subtle)" : "var(--surface-2)", color: active ? "var(--accent)" : "var(--muted)", minWidth: 18, height: 16, fontFamily: "'Fira Code', monospace" }}
+                >
+                  {t.count}
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
-      {/* ── Notify template selector (guests tab only) ────────────────────── */}
-      {activeTab === "guests" && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs" style={{ color: "var(--muted)" }}>Email to send:</span>
-          <div
-            className="inline-flex rounded-lg p-1 gap-1"
-            style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-          >
-            {([
-              { key: "pass", label: "Entry Pass (QR)" },
-              { key: "thankyou", label: "Thank-You" },
-            ] as const).map((t) => {
-              const active = notifyTemplate === t.key;
-              return (
-                <button
-                  key={t.key}
-                  onClick={() => setNotifyTemplate(t.key)}
-                  className="px-3 py-1 rounded-md text-xs font-medium cursor-pointer transition-all duration-150"
-                  style={{
-                    background: active ? "var(--accent)" : "transparent",
-                    color: active ? "#000" : "var(--muted)",
-                  }}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
+      {/* ── Template tab ─────────────────────────────────────────────────── */}
+      {activeTab === "template" && (
+        <div className="flex-1">
+          <EmailEditor
+            event={event}
+            onSaved={(patch) => setEvent((prev) => (prev ? { ...prev, ...patch } : prev))}
+          />
         </div>
       )}
 
-      {/* ── Section B: Template tab — per-event Email Editor ──────────────── */}
-      {activeTab === "template" && event && (
-        <EmailEditor
-          event={event}
-          onSaved={(patch) => setEvent((prev) => (prev ? { ...prev, ...patch } : prev))}
-        />
-      )}
-
-      {/* ── Section C: Allocated Guests tab ──────────────────────────────── */}
+      {/* ── Guests tab ───────────────────────────────────────────────────── */}
       {activeTab === "guests" && (
-      <div
-        className="rounded-xl overflow-hidden"
-        style={{ border: "1px solid var(--border)" }}
-      >
-        {/* Filter + search toolbar */}
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
-          style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
-        >
+        <div className="flex-1 flex flex-col rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--surface)" }}>
           <div
-            className="inline-flex items-center rounded-lg p-1 gap-1"
-            style={{ background: "var(--surface-2)", border: "1px solid var(--border)" }}
-            role="tablist"
+            className="flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+            style={{ borderBottom: "1px solid var(--border)" }}
           >
-            {([
-              { key: "unnotified" as const, label: "Unnotified", count: unnotifiedCount, color: "#f59e0b" },
-              { key: "all"        as const, label: "All",        count: allocatedRsvps.length, color: "var(--accent)" },
-              { key: "notified"   as const, label: "Notified",   count: notifiedCount,    color: "#22c55e" },
-            ]).map((f) => {
-              const active = guestFilter === f.key;
-              return (
-                <button
-                  key={f.key}
-                  onClick={() => setGuestFilter(f.key)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold cursor-pointer transition-all duration-150"
-                  style={{
-                    background: active ? f.color : "transparent",
-                    color: active ? "#000" : "var(--muted)",
-                  }}
-                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
-                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "var(--muted)"; }}
-                >
-                  {f.label}
-                  <span
-                    className="inline-flex items-center justify-center rounded-full text-[10px] font-bold"
-                    style={{
-                      background: active ? "rgba(0,0,0,0.15)" : "var(--surface-3)",
-                      color: active ? "#000" : "var(--muted)",
-                      minWidth: 18,
-                      height: 16,
-                      padding: "0 5px",
-                    }}
-                  >
-                    {f.count}
-                  </span>
-                </button>
-              );
-            })}
+            <div className="flex flex-wrap items-center gap-3">
+              <Segmented
+                ariaLabel="Filter guests"
+                value={guestFilter}
+                onChange={setGuestFilter}
+                options={[
+                  { key: "unnotified", label: "Unnotified", count: unnotifiedCount, color: "var(--warning)" },
+                  { key: "all",        label: "All",        count: allocatedRsvps.length },
+                  { key: "notified",   label: "Notified",   count: notifiedCount, color: "var(--success)" },
+                ]}
+              />
+              <span className="text-xs" style={{ color: "var(--muted-2)" }}>
+                {filteredGuests.length} shown
+              </span>
+            </div>
+
+            <label className="relative block" style={{ width: 300, maxWidth: "100%" }}>
+              <span className="sr-only">Search guests</span>
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }}>
+                <SearchIcon />
+              </span>
+              <input
+                type="search"
+                value={guestSearch}
+                onChange={(e) => setGuestSearch(e.target.value)}
+                placeholder="Search name, email, phone…"
+                className="w-full h-8 pl-8 pr-3 rounded-lg text-xs text-white"
+                style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
+                onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+              />
+            </label>
           </div>
 
-          <div className="relative" style={{ minWidth: 220 }}>
-            <span
-              className="absolute left-2.5 top-1/2 -translate-y-1/2"
-              style={{ color: "var(--muted)" }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </span>
-            <input
-              type="text"
-              value={guestSearch}
-              onChange={(e) => setGuestSearch(e.target.value)}
-              placeholder="Search name, email, phone…"
-              className="w-full pl-8 pr-3 py-1.5 rounded-lg text-xs text-white"
-              style={{ background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none" }}
-              onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
-              onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+          {noGuests ? (
+            <EmptyState
+              title={isFree ? "No registrations yet" : "No allocated guests yet"}
+              body={isFree
+                ? "Each registration gets its QR pass automatically. Use this page to re-send a pass or send the thank-you email once people have registered."
+                : "Allocate seats on the event page first — the QR pass is minted at allocation, and guests show up here once they hold one."}
+              action={!isFree ? (
+                <button
+                  onClick={() => router.push(`/admin/events/${event.id}`)}
+                  className={BTN_GHOST}
+                  style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)", outlineColor: "var(--accent)" }}
+                >
+                  <ArrowLeftIcon /> Go to seat allocation
+                </button>
+              ) : undefined}
             />
-          </div>
-        </div>
-
-        {allocatedRsvps.length === 0 ? (
-          <div className="px-6 py-12 text-center" style={{ background: "var(--surface)" }}>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              No allocated guests yet. Allocate seats first before sending notifications.
-            </p>
-          </div>
-        ) : filteredGuests.length === 0 ? (
-          <div className="px-6 py-12 text-center" style={{ background: "var(--surface)" }}>
-            <p className="text-sm text-white font-medium">
-              {guestSearch
-                ? `No guests match "${guestSearch}"`
-                : guestFilter === "unnotified"
-                  ? "Nothing to notify — all allocated guests have been reached."
-                  : "No guests in this view."}
-            </p>
-            {guestSearch && (
-              <button
-                onClick={() => setGuestSearch("")}
-                className="text-xs mt-2 cursor-pointer"
-                style={{ color: "var(--accent)" }}
-              >
-                Clear search
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="overflow-x-auto" style={{ background: "var(--surface)" }}>
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                  {["#", "Name", "Email", "Phone", isTableMode ? "Table" : "Seat", "Last Notified", "Action"].map((h) => (
-                    <th
-                      key={h}
-                      className="px-4 py-3 text-left text-xs font-medium whitespace-nowrap"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <AnimatePresence initial={false}>
-                  {filteredGuests.map((rsvp, i) => (
-                    <motion.tr
-                      key={rsvp.id}
-                      layout
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      style={{ borderBottom: "1px solid var(--border)" }}
-                      className="transition-colors"
-                      onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                    >
-                      {/* # */}
-                      <td className="px-4 py-3 text-xs" style={{ color: "var(--muted)", fontFamily: "monospace" }}>
-                        {i + 1}
-                      </td>
-                      {/* Name */}
-                      <td className="px-4 py-3 font-medium whitespace-nowrap" style={{ color: "var(--foreground)" }}>
-                        {rsvp.name}
-                      </td>
-                      {/* Email */}
-                      <td className="px-4 py-3 text-xs max-w-[180px] truncate" style={{ color: "var(--muted)" }}>
-                        {rsvp.email}
-                      </td>
-                      {/* Phone */}
-                      <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: "var(--muted)", fontFamily: "monospace" }}>
-                        {rsvp.phone}
-                      </td>
-                      {/* Seat / Table */}
-                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: "var(--accent)" }}>
-                        {event
-                          ? formatAssignment(rsvp.seatNumber, event)?.short ?? "—"
-                          : "—"}
-                      </td>
-                      {/* Last Notified */}
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">
-                        {rsvp.notifiedAt ? (
-                          <span style={{ color: "rgba(34,197,94,0.9)" }}>
-                            {formatNotifiedAt(rsvp.notifiedAt)}
-                          </span>
-                        ) : (
-                          <span style={{ color: "var(--muted)" }}>—</span>
-                        )}
-                      </td>
-                      {/* Action */}
-                      <td className="px-4 py-3">
-                        {rsvp.notifiedAt ? (
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                              style={{
-                                background: "var(--surface-2)",
-                                color: "var(--muted)",
-                                border: "1px solid var(--border)",
-                              }}
+          ) : filteredGuests.length === 0 ? (
+            <EmptyState
+              title={guestSearch ? `No guests match “${guestSearch}”` : guestFilter === "unnotified" ? "Nothing to notify" : "No guests in this view"}
+              body={guestSearch ? "Try a different name, email or phone number." : guestFilter === "unnotified" ? `Every ${guestNoun} has been reached. Switch to “All” to re-send individually.` : "Change the filter to see more guests."}
+              action={guestSearch ? (
+                <button onClick={() => setGuestSearch("")} className="text-xs cursor-pointer font-medium" style={{ color: "var(--accent)" }}>Clear search</button>
+              ) : undefined}
+            />
+          ) : (
+            <div className="flex-1 overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr style={{ background: "var(--surface-2)", borderBottom: "1px solid var(--border)" }}>
+                    {[
+                      { h: "#", cls: "w-12" },
+                      { h: "Guest", cls: "" },
+                      { h: "Email", cls: "" },
+                      { h: "Phone", cls: "" },
+                      { h: isFree ? "Ticket" : isTableMode ? "Table" : "Seat", cls: "" },
+                      { h: "Delivery", cls: "" },
+                      { h: "Last notified", cls: "" },
+                      { h: "", cls: "text-right" },
+                    ].map((c, i) => (
+                      <th
+                        key={i}
+                        className={`px-4 py-2.5 text-left text-[10px] font-semibold uppercase whitespace-nowrap ${c.cls}`}
+                        style={{ color: "var(--muted)", letterSpacing: "0.1em" }}
+                      >
+                        {c.h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <AnimatePresence initial={false}>
+                    {filteredGuests.map((rsvp, i) => (
+                      <motion.tr
+                        key={rsvp.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        style={{ borderBottom: "1px solid var(--border-subtle)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      >
+                        <td className="px-4 py-3 text-xs" style={{ color: "var(--muted-2)", fontFamily: "'Fira Code', monospace" }}>{i + 1}</td>
+                        <td className="px-4 py-3 min-w-[180px]">
+                          <p className="font-medium text-white leading-tight">{rsvp.name}</p>
+                          {rsvp.company && <p className="text-[11px] mt-0.5 truncate" style={{ color: "var(--muted)", maxWidth: 240 }}>{rsvp.company}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: "var(--muted)" }}>
+                          <span className="block truncate" style={{ maxWidth: 260 }}>{rsvp.email}</span>
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: "var(--muted)", fontFamily: "'Fira Code', monospace" }}>{rsvp.phone}</td>
+                        <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: "var(--accent)" }}>
+                          {isFree ? (rsvp.ticketType ?? "Free") : (formatAssignment(rsvp.seatNumber, event)?.short ?? "—")}
+                        </td>
+                        <td className="px-4 py-3"><DeliveryChip status={rsvp.emailStatus} /></td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: rsvp.notifiedAt ? "var(--success)" : "var(--muted-2)", fontFamily: "'Fira Code', monospace" }}>
+                          {rsvp.notifiedAt ? formatNotifiedAt(rsvp.notifiedAt) : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          {isAdmin ? (
+                            <button
+                              onClick={() => handleNotifyOne(rsvp.id!)}
+                              disabled={notifyingId === rsvp.id}
+                              title={rsvp.notifiedAt ? "Send again" : "Send now"}
+                              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-xs font-medium cursor-pointer transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+                              style={rsvp.notifiedAt
+                                ? { background: "var(--surface-2)", color: "var(--muted)", border: "1px solid var(--border)" }
+                                : { background: "var(--accent-subtle)", color: "var(--accent)", border: "1px solid rgba(61,155,245,0.25)" }}
+                              onMouseEnter={(e) => { if (rsvp.notifiedAt) e.currentTarget.style.color = "#fff"; }}
+                              onMouseLeave={(e) => { if (rsvp.notifiedAt) e.currentTarget.style.color = "var(--muted)"; }}
                             >
-                              Notified
-                            </span>
-                            {isAdmin && (
-                              <button
-                                onClick={() => handleNotifyOne(rsvp.id!)}
-                                disabled={notifyingId === rsvp.id}
-                                title="Send again"
-                                className="flex items-center justify-center w-7 h-7 rounded-lg cursor-pointer transition-all duration-150 disabled:opacity-40"
-                                style={{
-                                  background: "var(--surface-2)",
-                                  color: "var(--muted)",
-                                  border: "1px solid var(--border)",
-                                }}
-                              >
-                                <RefreshIcon />
-                              </button>
-                            )}
-                          </div>
-                        ) : isAdmin ? (
-                          <button
-                            onClick={() => handleNotifyOne(rsvp.id!)}
-                            disabled={notifyingId === rsvp.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150 disabled:opacity-50"
-                            style={{
-                              background: "rgba(61,155,245,0.1)",
-                              color: "var(--accent)",
-                              border: "1px solid rgba(61,155,245,0.25)",
-                            }}
-                          >
-                            {notifyingId === rsvp.id ? (
-                              <>
-                                <span
-                                  className="w-3 h-3 rounded-full border border-transparent animate-spin"
-                                  style={{ borderTopColor: "var(--accent)" }}
-                                />
-                                Notifying…
-                              </>
-                            ) : (
-                              <>
-                                <BellIcon />
-                                Notify
-                              </>
-                            )}
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: 12, color: "var(--muted)" }}>—</span>
-                        )}
-                      </td>
-                    </motion.tr>
-                  ))}
-                </AnimatePresence>
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                              {notifyingId === rsvp.id ? (
+                                <>
+                                  <span className="w-3 h-3 rounded-full border-2 animate-spin" style={{ borderColor: "rgba(255,255,255,0.15)", borderTopColor: "currentColor" }} />
+                                  Sending…
+                                </>
+                              ) : rsvp.notifiedAt ? (
+                                <><RefreshIcon /> Re-send</>
+                              ) : (
+                                <><SendIcon /> Notify</>
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-xs" style={{ color: "var(--muted-2)" }}>—</span>
+                          )}
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </AnimatePresence>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ── Section D: Email Blast tab ────────────────────────────────────── */}
+      {/* ── Email Blast tab ──────────────────────────────────────────────── */}
       {activeTab === "blast" && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-5 items-stretch">
 
         {/* Compose */}
-        <div
-          className="rounded-xl p-5 space-y-4"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-        >
+        <div className="rounded-xl p-5 flex flex-col gap-4" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
           <div>
-            <h2 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-              Email Blast
-            </h2>
-            <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>
-              Send a one-off announcement to your guests. No QR or seat info — just your message,
-              with the RSVP-confirmation banner. Use <code>{"{{name}}"}</code> and <code>{"{{event}}"}</code> to personalize.
+            <h2 className="text-sm font-semibold text-white">Email Blast</h2>
+            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--muted)" }}>
+              A one-off announcement to everyone who RSVP&rsquo;d — no QR, no seat details.
+              Use <code style={{ color: "var(--accent)" }}>{"{{name}}"}</code> and <code style={{ color: "var(--accent)" }}>{"{{event}}"}</code> to personalise.
             </p>
           </div>
 
-          {/* Subject */}
           <div className="space-y-1.5">
-            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              Subject
-            </label>
+            <label htmlFor="blast-subject" className="text-xs font-medium text-white">Subject</label>
             <input
+              id="blast-subject"
               type="text"
               value={blastSubject}
               onChange={(e) => setBlastSubject(e.target.value)}
               placeholder={`An update about ${event.title}`}
-              className="w-full rounded-lg px-3 py-2 text-sm outline-none"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--foreground)",
-                border: "1px solid var(--border)",
-              }}
+              className="w-full h-9 rounded-lg px-3 text-sm outline-none"
+              style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+              onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
             />
           </div>
 
-          {/* Body */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-              Message
-            </label>
+          <div className="space-y-1.5 flex-1 flex flex-col">
+            <label htmlFor="blast-body" className="text-xs font-medium text-white">Message</label>
             <textarea
+              id="blast-body"
               value={blastBody}
               onChange={(e) => setBlastBody(e.target.value)}
-              rows={8}
+              rows={7}
               placeholder={`Hi {{name}},\n\nWe wanted to share an update about {{event}}...`}
-              className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y"
-              style={{
-                background: "var(--surface-2)",
-                color: "var(--foreground)",
-                border: "1px solid var(--border)",
-                lineHeight: 1.6,
-              }}
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none resize-y flex-1"
+              style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)", lineHeight: 1.6, minHeight: 140 }}
+              onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+              onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
             />
           </div>
 
-          {/* Recipients */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-medium" style={{ color: "var(--foreground)" }}>
-                Recipients
-              </label>
-              <span className="text-xs" style={{ color: "var(--muted)" }}>
-                {selectedBlastIds.size} of {blastRecipients.length} selected
+              <span className="text-xs font-medium text-white">Recipients</span>
+              <span className="text-xs" style={{ color: "var(--muted)", fontFamily: "'Fira Code', monospace" }}>
+                {selectedBlastIds.size} / {blastRecipients.length} selected
               </span>
             </div>
 
             <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={blastSearch}
-                onChange={(e) => setBlastSearch(e.target.value)}
-                placeholder="Search name or email…"
-                className="flex-1 rounded-lg px-3 py-1.5 text-xs outline-none"
-                style={{
-                  background: "var(--surface-2)",
-                  color: "var(--foreground)",
-                  border: "1px solid var(--border)",
-                }}
-              />
+              <label className="relative flex-1">
+                <span className="sr-only">Search recipients</span>
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }}><SearchIcon /></span>
+                <input
+                  type="search"
+                  value={blastSearch}
+                  onChange={(e) => setBlastSearch(e.target.value)}
+                  placeholder="Search name or email…"
+                  className="w-full h-8 pl-8 pr-3 rounded-lg text-xs outline-none"
+                  style={{ background: "var(--surface-2)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+                  onFocus={(e) => (e.target.style.borderColor = "var(--accent)")}
+                  onBlur={(e) => (e.target.style.borderColor = "var(--border)")}
+                />
+              </label>
               <button
                 onClick={() => setBlastUnsentOnly((v) => !v)}
-                className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-all duration-150"
+                aria-pressed={blastUnsentOnly}
+                className="shrink-0 h-8 px-3 rounded-lg text-xs font-medium cursor-pointer transition-colors duration-150"
                 title="Show only guests who haven't received a blast yet"
                 style={{
-                  background: blastUnsentOnly ? "rgba(61,155,245,0.12)" : "var(--surface-2)",
+                  background: blastUnsentOnly ? "var(--accent-subtle)" : "var(--surface-2)",
                   color: blastUnsentOnly ? "var(--accent)" : "var(--muted)",
                   border: `1px solid ${blastUnsentOnly ? "rgba(61,155,245,0.3)" : "var(--border)"}`,
                 }}
@@ -902,42 +948,24 @@ const NotificationsPage: NextPageWithLayout = () => {
               </button>
             </div>
 
-            <div
-              className="rounded-lg overflow-hidden"
-              style={{ border: "1px solid var(--border)" }}
-            >
-              {/* Select all */}
+            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
               <button
                 onClick={toggleBlastSelectAll}
-                className="flex items-center gap-2 w-full px-3 py-2 text-xs font-medium cursor-pointer transition-colors"
-                style={{
-                  background: "var(--surface-2)",
-                  color: "var(--foreground)",
-                  borderBottom: "1px solid var(--border)",
-                }}
+                className="flex items-center gap-2.5 w-full h-9 px-3 text-xs font-medium cursor-pointer transition-colors duration-150"
+                style={{ background: "var(--surface-2)", color: "var(--foreground)", borderBottom: "1px solid var(--border)" }}
               >
                 <span
-                  className="flex items-center justify-center rounded"
-                  style={{
-                    width: 16,
-                    height: 16,
-                    border: `1px solid ${allBlastSelected ? "var(--accent)" : "var(--border)"}`,
-                    background: allBlastSelected ? "var(--accent)" : "transparent",
-                    color: "#000",
-                    fontSize: 11,
-                  }}
+                  className="flex items-center justify-center rounded shrink-0"
+                  style={{ width: 16, height: 16, border: `1px solid ${allBlastSelected ? "var(--accent)" : "var(--muted-2)"}`, background: allBlastSelected ? "var(--accent)" : "transparent", color: "#000" }}
                 >
-                  {allBlastSelected ? "✓" : ""}
+                  {allBlastSelected && <CheckIcon />}
                 </span>
                 Select all{blastSearch.trim() ? " (filtered)" : ""} ({filteredBlastRecipients.length})
               </button>
 
-              {/* Rows */}
-              <div style={{ maxHeight: 240, overflowY: "auto" }}>
+              <div style={{ maxHeight: 260, overflowY: "auto" }}>
                 {filteredBlastRecipients.length === 0 ? (
-                  <div className="px-3 py-4 text-xs text-center" style={{ color: "var(--muted)" }}>
-                    No matching guests.
-                  </div>
+                  <div className="px-3 py-5 text-xs text-center" style={{ color: "var(--muted)" }}>No matching guests.</div>
                 ) : (
                   filteredBlastRecipients.map((r) => {
                     const checked = selectedBlastIds.has(r.id!);
@@ -945,33 +973,28 @@ const NotificationsPage: NextPageWithLayout = () => {
                       <button
                         key={r.id}
                         onClick={() => toggleBlastSelect(r.id!)}
-                        className="flex items-center gap-2 w-full px-3 py-2 text-xs cursor-pointer transition-colors text-left"
+                        role="checkbox"
+                        aria-checked={checked}
+                        className="flex items-center gap-2.5 w-full h-9 px-3 text-xs cursor-pointer transition-colors duration-150 text-left"
                         style={{ color: "var(--foreground)" }}
                         onMouseEnter={(e) => (e.currentTarget.style.background = "var(--surface-2)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                       >
                         <span
                           className="flex items-center justify-center rounded shrink-0"
-                          style={{
-                            width: 16,
-                            height: 16,
-                            border: `1px solid ${checked ? "var(--accent)" : "var(--border)"}`,
-                            background: checked ? "var(--accent)" : "transparent",
-                            color: "#000",
-                            fontSize: 11,
-                          }}
+                          style={{ width: 16, height: 16, border: `1px solid ${checked ? "var(--accent)" : "var(--muted-2)"}`, background: checked ? "var(--accent)" : "transparent", color: "#000" }}
                         >
-                          {checked ? "✓" : ""}
+                          {checked && <CheckIcon />}
                         </span>
                         <span className="truncate flex-1">
                           <span className="font-medium">{r.name}</span>
                           <span style={{ color: "var(--muted)" }}> · {r.email}</span>
                         </span>
-                        <span
-                          className="shrink-0 px-1.5 py-0.5 rounded text-[10px]"
-                          style={{ background: "var(--surface-2)", color: "var(--muted)" }}
-                        >
-                          {r.status}
+                        {r.blastSentAt && (
+                          <span className="shrink-0 text-[10px]" style={{ color: "var(--muted-2)" }} title={`Last blast ${formatNotifiedAt(r.blastSentAt)}`}>sent</span>
+                        )}
+                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] uppercase" style={{ background: "var(--surface-2)", color: "var(--muted)", letterSpacing: "0.06em" }}>
+                          {r.status.replace("_", " ")}
                         </span>
                       </button>
                     );
@@ -981,18 +1004,17 @@ const NotificationsPage: NextPageWithLayout = () => {
             </div>
           </div>
 
-          {/* Result + send */}
-          <div className="flex items-center justify-between gap-3 pt-1">
-            <div className="text-xs min-w-0" style={{ color: "var(--muted)" }}>
+          <div className="flex items-center justify-between gap-3 pt-1 mt-auto">
+            <div className="text-xs min-w-0" style={{ color: "var(--muted)" }} aria-live="polite">
               {blastResult && (
                 <div className="flex flex-col gap-0.5">
-                  <span style={{ color: blastResult.failed > 0 ? "#f59e0b" : "#22c55e" }}>
+                  <span style={{ color: blastResult.failed > 0 ? "var(--warning)" : "var(--success)" }}>
                     {blastResult.done ? "Sent" : "Sending…"} {blastResult.sent}
                     {blastResult.total ? ` of ${blastResult.total}` : ""}
                     {blastResult.failed > 0 ? ` · ${blastResult.failed} failed` : ""}
                   </span>
                   {blastResult.done && blastResult.failed > 0 && blastResult.firstError && (
-                    <span className="truncate" style={{ color: "#ef4444", maxWidth: 260 }} title={blastResult.firstError}>
+                    <span className="truncate" style={{ color: "var(--danger)", maxWidth: 280 }} title={blastResult.firstError}>
                       {blastResult.firstError}
                     </span>
                   )}
@@ -1001,96 +1023,37 @@ const NotificationsPage: NextPageWithLayout = () => {
             </div>
             <button
               onClick={handleSendBlast}
-              disabled={
-                !isAdmin ||
-                sendingBlast ||
-                !blastSubject.trim() ||
-                !blastBody.trim() ||
-                selectedBlastIds.size === 0
-              }
-              className="px-4 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "var(--accent)", color: "#000" }}
+              disabled={!isAdmin || sendingBlast || !blastSubject.trim() || !blastBody.trim() || selectedBlastIds.size === 0}
+              className={BTN_PRIMARY}
+              style={{ background: "var(--accent)", color: "#000", outlineColor: "var(--accent)" }}
             >
+              <SendIcon />
               {sendingBlast
                 ? `Sending… ${(blastResult?.sent ?? 0) + (blastResult?.failed ?? 0)}/${blastResult?.total ?? selectedBlastIds.size}`
-                : `Send blast to ${selectedBlastIds.size} guest${selectedBlastIds.size === 1 ? "" : "s"}`}
+                : `Send to ${selectedBlastIds.size} guest${selectedBlastIds.size === 1 ? "" : "s"}`}
             </button>
           </div>
         </div>
 
         {/* Live preview */}
-        <div
-          className="rounded-xl overflow-hidden self-start"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-        >
-          <div
-            className="px-4 py-2 text-xs font-medium"
-            style={{
-              background: "var(--surface-2)",
-              color: "var(--muted)",
-              borderBottom: "1px solid var(--border)",
-            }}
-          >
-            Live Preview &mdash; {"{{name}}"} shows as &ldquo;Preview Guest&rdquo;
+        <div className="rounded-xl overflow-hidden flex flex-col" style={{ background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <div className="flex items-center justify-between h-10 px-4 text-xs" style={{ background: "var(--surface-2)", color: "var(--muted)", borderBottom: "1px solid var(--border)" }}>
+            <span className="font-medium">Live preview</span>
+            <span>{"{{name}}"} renders as &ldquo;Preview Guest&rdquo;</span>
           </div>
           <iframe
             srcDoc={`<!DOCTYPE html><html><head><meta charset="utf-8"/></head><body style="margin:0;padding:24px;background:#f5f5f5;">${blastPreviewHtml}</body></html>`}
-            style={{ width: "100%", height: 560, border: "none", display: "block", background: "#f5f5f5" }}
-            title="Blast Preview"
+            className="flex-1 w-full block"
+            style={{ border: "none", background: "#f5f5f5", minHeight: 620 }}
+            title="Blast preview"
           />
         </div>
       </div>
       )}
-
-      {/* ── Floating sticky Bulk Notify ─────────────────────────────────────
-           On the Guests tab: "Notify All" re-sends the latest email to every
-           allocated guest; the secondary pill targets only the unnotified. */}
-      <AnimatePresence>
-        {activeTab === "guests" && isAdmin && allocatedRsvps.length > 0 && guestFilter !== "notified" && (
-          <motion.div
-            key="sticky-bulk"
-            initial={{ opacity: 0, y: 12, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 12, scale: 0.95 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-6 right-6 z-40 flex flex-col items-end gap-2"
-          >
-            <button
-              onClick={() => handleBulkNotify(true)}
-              disabled={bulkNotifying}
-              title="Re-send the QR email to all allocated guests (including already-notified)"
-              className="flex items-center gap-2 px-4 py-3 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={{ background: "var(--accent)", color: "#000" }}
-            >
-              {bulkNotifying ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: "rgba(0,0,0,0.4)", borderTopColor: "transparent" }} />
-                  Sending…
-                </>
-              ) : (
-                <>
-                  <BellIcon />
-                  Notify All {allocatedRsvps.length}
-                </>
-              )}
-            </button>
-            {unnotifiedCount > 0 && !bulkNotifying && (
-              <button
-                onClick={() => handleBulkNotify(false)}
-                disabled={bulkNotifying}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold cursor-pointer transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: "var(--surface-2)", color: "var(--accent)", border: "1px solid var(--accent)" }}
-              >
-                <BellIcon />
-                Notify {unnotifiedCount} Unnotified
-              </button>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
