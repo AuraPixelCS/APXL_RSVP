@@ -5,12 +5,10 @@
  *   node scripts/seed-free-seating.js            # dry run
  *   node scripts/seed-free-seating.js --apply    # writes to Firestore
  *
- * 1. Flips E3 to `assignmentMode: "free"` so registrations coming from the
- *    client's complimentary-pass form get a QR pass at once, no allocation.
- * 2. Creates (or refreshes) a twin event with code "E3-TEST" — same fields,
- *    title suffixed "— TEST". The staging deployment sets
- *    INTEGRATION_EVENT_SUFFIX=-TEST, so the client's UAT submissions land here
- *    and never in the real guest list. Delete the twin after go-live.
+ * Flips E3 to `assignmentMode: "free"` so registrations coming from the
+ * client's complimentary-pass form get a QR pass at once, no allocation.
+ * (The E3-TEST staging twin this once created was dropped on 2026-08-28 —
+ * the client's form goes straight at the real Summit event.)
  *
  * Idempotent: keyed on `code`.
  */
@@ -34,15 +32,6 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 const SOURCE = 'E3';
-const TWIN = 'E3-TEST';
-
-// Fields copied from E3 into the twin. Everything else (RSVPs, custom email
-// copy an admin adds later) stays per-event.
-const COPY = [
-  'title', 'date', 'endDate', 'time', 'days', 'timezone', 'venue', 'address',
-  'description', 'totalSeats', 'seatingConfig', 'assignmentMode', 'capacityLimit',
-  'waitlistEnabled', 'senderName', 'senderEmail', 'replyToEmail', 'dressCode',
-];
 
 async function one(code) {
   const snap = await db.collection('events').where('code', '==', code).get();
@@ -58,31 +47,12 @@ async function main() {
   if (!src) throw new Error(`${SOURCE} not found — run scripts/seed-events-iamairready.js --apply first`);
   const srcData = src.data();
 
-  // 1. E3 → free seating
+  // E3 → free seating
   if (srcData.assignmentMode === 'free') {
     console.log(`  = ${SOURCE} ${srcData.title} — already free seating (${src.id})`);
   } else {
     console.log(`  ~ ${SOURCE} ${srcData.title} — assignmentMode ${srcData.assignmentMode ?? 'seat'} → free (${src.id})`);
     if (APPLY) await src.ref.update({ assignmentMode: 'free', updatedAt: now });
-  }
-
-  // 2. Twin for staging
-  const twinPayload = { code: TWIN, isActive: false, pinned: false };
-  for (const k of COPY) if (srcData[k] !== undefined) twinPayload[k] = srcData[k];
-  twinPayload.assignmentMode = 'free';
-  twinPayload.title = `${srcData.title} — TEST`;
-  twinPayload.description = `Staging twin of ${SOURCE}. Receives the client's UAT form submissions via INTEGRATION_EVENT_SUFFIX=-TEST. Safe to delete after go-live.`;
-
-  const twin = await one(TWIN);
-  if (twin) {
-    console.log(`  ~ ${TWIN} — refresh ${twin.id} from ${SOURCE}`);
-    if (APPLY) await twin.ref.update({ ...twinPayload, updatedAt: now });
-  } else {
-    console.log(`  + ${TWIN} "${twinPayload.title}" — create`);
-    if (APPLY) {
-      const ref = await db.collection('events').add({ ...twinPayload, createdAt: now, updatedAt: now });
-      console.log(`      created ${ref.id}`);
-    }
   }
 
   if (!APPLY) console.log('\nNothing written. Re-run with --apply.');

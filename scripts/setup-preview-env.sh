@@ -55,7 +55,6 @@ for name in "${COPY[@]}"; do
   add "$name" "$val"
 done
 add INTEGRATION_API_KEY "$(cat "$KEY_FILE")"
-add INTEGRATION_EVENT_SUFFIX "-TEST"
 
 echo
 echo "Done. Redeploy the branch (git push) and the preview will build."

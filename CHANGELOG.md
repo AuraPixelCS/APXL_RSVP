@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.2.3] — 2026-08-28
+
+### Changed
+- Dropped the staging setup for the partner Register endpoint: the `E3-TEST` twin event is deleted (`scripts/remove-test-event.js`), `scripts/seed-free-seating.js` no longer creates it, and `scripts/setup-preview-env.sh` no longer sets `INTEGRATION_EVENT_SUFFIX`. The client's complimentary-pass form targets the real Summit (E3) event in production directly.
+- `docs/complimentary-pass-integration.md` now documents a single environment (`https://www.aurapixel.live/rsvp`).
+- `.gitignore` covers `.integration-prod-key` (the production `INTEGRATION_API_KEY` source file).
+
 ## [3.2.2] — 2026-08-28
 
 **Notifications page revamp.** Full-width layout that fills the viewport; no more centred card with dead space.

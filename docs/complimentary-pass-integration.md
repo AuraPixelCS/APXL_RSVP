@@ -23,13 +23,11 @@ X-API-Key: {key we send you separately}
 Content-Type: application/json
 ```
 
-| Environment | `{BASE}` |
-|---|---|
-| Staging (test) | `https://<preview-url>.vercel.app/rsvp` — sent with the test key |
-| Production | `https://www.aurapixel.live/rsvp` |
+`{BASE}` = `https://www.aurapixel.live/rsvp` — there is a single environment.
 
-Staging registrations go into a test event and send real emails only to the
-address you submit — use your own inboxes.
+Every accepted registration is real: it goes on the Summit guest list and the
+entry pass is emailed to the address you submit. For your own testing, submit
+your team's inboxes and tell us the emails afterwards so we can remove them.
 
 ### Request — your field names are accepted as-is
 
