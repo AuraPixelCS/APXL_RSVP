@@ -53,6 +53,9 @@ export interface ResendMessage {
   replyTo?: string;
   /** Extra SMTP headers (e.g. List-Unsubscribe) — improves deliverability. */
   headers?: Record<string, string>;
+  /** Resend tags, echoed back on delivery webhooks so an async callback can
+   *  find the RSVP this message belongs to. See lib/emailDelivery.ts. */
+  tags?: { name: string; value: string }[];
 }
 
 /**
@@ -78,6 +81,7 @@ export async function sendResendEmail(
       ...(msg.text ? { text: msg.text } : {}),
       ...(msg.attachments ? { attachments: msg.attachments } : {}),
       ...(msg.headers ? { headers: msg.headers } : {}),
+      ...(msg.tags ? { tags: msg.tags } : {}),
       ...(rt ? { replyTo: rt } : {}),
     });
     if (error) return { success: false, error: error.message };
@@ -117,6 +121,7 @@ export async function sendResendBatch(
           ...(m.text ? { text: m.text } : {}),
           ...(m.attachments ? { attachments: m.attachments } : {}),
           ...(m.headers ? { headers: m.headers } : {}),
+          ...(m.tags ? { tags: m.tags } : {}),
           ...(rt ? { replyTo: rt } : {}),
         };
       })

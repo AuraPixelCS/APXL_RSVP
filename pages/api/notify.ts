@@ -2,6 +2,7 @@ import type { NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { resolveEventSender } from "@/lib/eventSender";
+import { deliveryTags } from "@/lib/emailDelivery";
 import {
   isResendConfigured,
   sendResendEmail,
@@ -171,7 +172,17 @@ async function buildEntryPassMessage(
     venue: event.venue ?? "",
     address: event.address,
     seatNumber: rsvp.seatNumber,
-    assignmentRows: assignment?.rows,
+    // Append the companion's seat as its own row. Without this the +1 is seated
+    // in Firestore but invisible to the guest, which is only half a fix.
+    assignmentRows: rsvp.plusOneSeatNumber != null
+      ? [
+          ...(assignment?.rows ?? []),
+          {
+            label: `Guest ${event.assignmentMode === "table" ? "Table" : "Seat"}`,
+            value: `#${rsvp.plusOneSeatNumber}`,
+          },
+        ]
+      : assignment?.rows,
     dressCode,
     agendaImageUrl,
     afterAgendaHtml,
@@ -234,7 +245,14 @@ async function buildMessage(
   // Stamp this event's own sender identity onto every outbound message, so two
   // clients' events don't both mail as whatever RESEND_FROM happens to be.
   const sender = resolveEventSender(event);
-  return { ...message, from: sender.from, replyTo: sender.replyTo };
+  return {
+    ...message,
+    from: sender.from,
+    replyTo: sender.replyTo,
+    // Tags come back on Resend's delivery webhooks, which is how an async
+    // callback knows which RSVP a bounce belongs to.
+    tags: deliveryTags(event.id ?? rsvp.eventId, rsvp.id, template === "pass" ? "pass" : "thankyou"),
+  };
 }
 
 // ─── Mark notifiedAt for one RSVP ───────────────────────────────────────────

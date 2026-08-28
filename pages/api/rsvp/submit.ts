@@ -2,9 +2,19 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { sendResendEmail } from "@/lib/resend";
 import { sendWhatsAppTemplate } from "@/lib/whatsapp";
-import { buildRsvpConfirmEmail, buildRsvpConfirmText } from "@/lib/emailTemplates";
+import {
+  buildRsvpConfirmEmail,
+  buildRsvpConfirmText,
+  buildWaitlistEmail,
+  buildWaitlistText,
+} from "@/lib/emailTemplates";
 import { loadPeoplelogyEmailBanner } from "@/lib/emailBanners";
 import { isRsvpDeadlinePassed } from "@/lib/eventTime";
+import { getTotalSeatCount } from "@/lib/seating";
+import { capacityOf, checkCapacity, decideIntake, type IntakeDecision } from "@/lib/capacity";
+import { buildManageUrl } from "@/lib/manageToken";
+import { publicBaseFor } from "@/lib/publicUrl";
+import { deliveryTags } from "@/lib/emailDelivery";
 import { resolveEventSender } from "@/lib/eventSender";
 import {
   normalizeEmail,
@@ -102,14 +112,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
     }
 
+    const isAttending = attending !== false;
+    const wantsPlusOne = plusOne === true;
+    const capacity = capacityOf(
+      event,
+      getTotalSeatCount(event.seatingConfig, Number(event.totalSeats) || 0),
+    );
+
     const now = new Date().toISOString();
     const rsvpData = {
       eventId,
       name: name.trim(),
       email: normalizedEmail,
       phone: phone.trim(),
-      attending: attending !== false,
-      plusOne: plusOne === true,
+      attending: isAttending,
+      plusOne: wantsPlusOne,
       plusOneName: plusOneName?.trim() || null,
       dietaryRestrictions: dietaryRestrictions?.trim() || null,
       message: message?.trim() || null,
@@ -117,26 +134,76 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       company: company?.trim() || null,
       jobTitle: jobTitle?.trim() || null,
       industry: industry?.trim() || null,
-      status: attending === false ? "not_attending" : "pending",
+      // status/waitlistedAt are decided inside the transaction below, where the
+      // capacity count and the write happen together.
+      status: "pending" as string,
+      waitlistedAt: null as string | null,
+      promotedAt: null,
       seatNumber: null,
+      plusOneSeatNumber: null,
       qrToken: null,
+      plusOneQrToken: null,
       qrIssuedAt: null,
       whatsappConfirmSent: false,
       whatsappQRSent: false,
+      // Explicit null rather than absent: the field is declared required, and
+      // its absence breaks the natural server-side "not yet notified" query.
+      notifiedAt: null,
       submittedAt: now,
       updatedAt: now,
     };
 
-    // Atomic duplicate guard: the id is derived from (eventId, email), and
-    // `.create()` fails when that document already exists. Two simultaneous
-    // submissions race to create the SAME id, so exactly one wins — the old
-    // check-then-add left a window where both could pass the check.
+    // One transaction covers BOTH guards, because both are check-then-write:
+    //
+    //   - Duplicate: the id is derived from (eventId, email) and written with
+    //     create(), so two simultaneous submissions race for the same id and
+    //     exactly one wins.
+    //   - Capacity: counting seats and then writing in a separate step would
+    //     let two guests both claim the last chair. The count is taken inside
+    //     the transaction, so a concurrent write forces a retry.
     const ref = rsvpsRef.doc(rsvpDocId(eventId, normalizedEmail));
+    let decision: IntakeDecision = "accept";
+
     try {
-      await ref.create(rsvpData);
+      decision = await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(rsvpsRef);
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as {
+          id: string; email?: string; status?: string; attending?: boolean; plusOne?: boolean;
+        });
+
+        if (rows.some((r) => r.id === ref.id || normalizeEmail(r.email ?? "") === normalizedEmail)) {
+          throw Object.assign(new Error("DUPLICATE"), { duplicate: true });
+        }
+
+        let outcome: IntakeDecision = "accept";
+        if (isAttending) {
+          const check = checkCapacity(rows, { attending: true, plusOne: wantsPlusOne }, capacity);
+          outcome = decideIntake(check, event.waitlistEnabled);
+          if (outcome === "reject") {
+            throw Object.assign(new Error("FULL"), { full: true, remaining: check.remaining });
+          }
+        }
+
+        tx.create(ref, {
+          ...rsvpData,
+          status: !isAttending ? "not_attending" : outcome === "waitlist" ? "waitlisted" : "pending",
+          waitlistedAt: outcome === "waitlist" ? now : null,
+        });
+        return outcome;
+      });
     } catch (e) {
-      if (isAlreadyExistsError(e)) {
+      const err = e as { duplicate?: boolean; full?: boolean; remaining?: number };
+      if (err.duplicate || isAlreadyExistsError(e)) {
         return res.status(400).json({ error: "You have already submitted an RSVP for this event" });
+      }
+      if (err.full) {
+        return res.status(409).json({
+          full: true,
+          error:
+            wantsPlusOne && err.remaining === 1
+              ? "Only one seat is left, so we can't seat you and your guest together. Please contact the organiser."
+              : "This event is fully booked.",
+        });
       }
       throw e;
     }
@@ -150,6 +217,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         bannerUrl = fallback.bannerUrl;
         if (fallback.attachment) attachments = [fallback.attachment];
       }
+      const origin = publicBaseFor(req);
+      const manageUrl = buildManageUrl(origin, ref.id, eventId);
+
+      const sender = resolveEventSender(event);
+      if (sender.warning) console.warn("[submit] sender:", sender.warning);
+
+      // A waitlisted guest must NOT get the confirmation email — it says a seat
+      // is reserved, which is exactly what hasn't happened.
+      const isWaitlisted = decision === "waitlist";
+
+      const waitlistOpts = {
+        name: rsvpData.name,
+        eventTitle: event.title,
+        eventDate: event.date,
+        venue: event.venue ?? "",
+        address: event.address,
+        bannerUrl,
+        showTitleOnBanner: !!event.showEventTitleOnBanner,
+        manageUrl,
+      };
       const confirmOpts = {
         name: rsvpData.name,
         eventTitle: event.title,
@@ -159,19 +246,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         address: event.address,
         bannerUrl,
         showTitleOnBanner: !!event.showEventTitleOnBanner,
+        manageUrl,
       };
-      const sender = resolveEventSender(event);
-      if (sender.warning) console.warn("[submit] sender:", sender.warning);
+
       const emailResult = await sendResendEmail({
         to: rsvpData.email,
-        subject:
-          (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
-          `RSVP Confirmation – ${event.title}`,
-        html: buildRsvpConfirmEmail(confirmOpts),
-        text: buildRsvpConfirmText(confirmOpts),
+        subject: isWaitlisted
+          ? (typeof event.waitlistSubject === "string" && event.waitlistSubject.trim()) ||
+            `You're on the waitlist – ${event.title}`
+          : (typeof event.rsvpConfirmSubject === "string" && event.rsvpConfirmSubject.trim()) ||
+            `RSVP Confirmation – ${event.title}`,
+        html: isWaitlisted ? buildWaitlistEmail(waitlistOpts) : buildRsvpConfirmEmail(confirmOpts),
+        text: isWaitlisted ? buildWaitlistText(waitlistOpts) : buildRsvpConfirmText(confirmOpts),
         attachments,
         from: sender.from,
         replyTo: sender.replyTo,
+        tags: deliveryTags(eventId, ref.id, isWaitlisted ? "waitlist" : "confirm"),
       });
       console.log("✉️ EMAIL LOG:", emailResult);
     } catch (e) {
@@ -198,7 +288,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(201).json({
       success: true,
       rsvpId: ref.id,
-      message: "RSVP submitted successfully",
+      // The form renders a different confirmation for a waitlisted guest —
+      // telling them their RSVP succeeded without saying they have no seat is
+      // how someone turns up to a full room.
+      status: decision === "waitlist" ? "waitlisted" : rsvpData.status,
+      waitlisted: decision === "waitlist",
+      message:
+        decision === "waitlist"
+          ? "Added to the waitlist"
+          : "RSVP submitted successfully",
     });
   } catch (err) {
     console.error("RSVP submit error:", err);

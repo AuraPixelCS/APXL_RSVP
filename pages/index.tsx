@@ -53,6 +53,8 @@ export default function PublicRSVPPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [waitlisted, setWaitlisted] = useState(false);
+  const [eventFull, setEventFull] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
@@ -104,7 +106,11 @@ export default function PublicRSVPPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Something went wrong");
+        // The event filled up while this form was open. Say so specifically —
+        // "Something went wrong" would send the guest into a retry loop.
+        if (data.full) setEventFull(true);
       } else {
+        setWaitlisted(data.status === "waitlisted");
         setSubmitted(true);
       }
     } catch {
@@ -158,6 +164,45 @@ export default function PublicRSVPPage() {
     );
   }
 
+  // Turned away at capacity — a distinct screen, not a red error on a form the
+  // guest will only try to submit again.
+  if (eventFull && !submitted) {
+    return (
+      <>
+        <Head>
+          <title>Fully booked — {event.title}</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </Head>
+        <main className="min-h-screen flex items-center justify-center bg-background px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="text-center space-y-4 max-w-sm"
+          >
+            <h1 className="text-2xl font-bold text-white">Fully booked</h1>
+            <p className="text-sm" style={{ color: "var(--muted)" }}>
+              <strong className="text-white">{event.title}</strong> has reached capacity and is no
+              longer accepting RSVPs. {error}
+            </p>
+            <div
+              className="rounded-xl p-4 mt-6 text-left space-y-2"
+              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+            >
+              <div className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
+                <CalendarIcon />
+                {format(new Date(event.date), "EEEE, dd MMMM yyyy")} · {event.time}
+              </div>
+              <div className="flex items-center gap-2 text-xs" style={{ color: "var(--muted)" }}>
+                <MapPinIcon />
+                {event.venue}
+              </div>
+            </div>
+          </motion.div>
+        </main>
+      </>
+    );
+  }
+
   if (submitted) {
     return (
       <>
@@ -172,11 +217,21 @@ export default function PublicRSVPPage() {
             className="text-center space-y-4 max-w-sm"
           >
             <CheckCircleIcon />
-            <h1 className="text-2xl font-bold text-white">Thank You!</h1>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              Your RSVP for <strong className="text-white">{event.title}</strong> has been submitted
-              successfully. {form.attending ? "We look forward to seeing you!" : "We're sorry you can't make it."}
-            </p>
+            <h1 className="text-2xl font-bold text-white">
+              {waitlisted ? "You're on the waitlist" : "Thank You!"}
+            </h1>
+            {waitlisted ? (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                <strong className="text-white">{event.title}</strong> is currently full, so we&rsquo;ve
+                added you to the waitlist. You don&rsquo;t have a confirmed seat yet — if a place opens
+                up we&rsquo;ll email your entry pass automatically.
+              </p>
+            ) : (
+              <p className="text-sm" style={{ color: "var(--muted)" }}>
+                Your RSVP for <strong className="text-white">{event.title}</strong> has been submitted
+                successfully. {form.attending ? "We look forward to seeing you!" : "We're sorry you can't make it."}
+              </p>
+            )}
             <div
               className="rounded-xl p-4 mt-6 text-left space-y-2"
               style={{ background: "var(--surface)", border: "1px solid var(--border)" }}

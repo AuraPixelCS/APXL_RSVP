@@ -72,7 +72,8 @@ export function generateQRPayload(
   seatNumber: number,
   eventDateISO: string, // "YYYY-MM-DD"
   eventTime: string, // "HH:MM"
-  timeZone: string = DEFAULT_EVENT_TIMEZONE // IANA zone the wall clock is read in
+  timeZone: string = DEFAULT_EVENT_TIMEZONE, // IANA zone the wall clock is read in
+  guestIndex: 0 | 1 = 0 // 0 = the guest who RSVPed, 1 = their +1
 ): QRPayload {
   // The event's date/time is a wall clock at the venue. `setUTCHours` treated
   // that local reading as if it were already UTC, putting `eventTime` ~8h off
@@ -87,5 +88,8 @@ export function generateQRPayload(
     // malformed event can't silently invalidate every pass it issues.
     eventTime: startMs == null ? 0 : Math.floor(startMs / 1000),
     issuedAt: Math.floor(Date.now() / 1000),
+    // Only stamped for a +1. Omitting it for the primary guest keeps the
+    // payload byte-identical to every pass issued before this field existed.
+    ...(guestIndex === 1 ? { guestIndex: 1 as const } : {}),
   };
 }

@@ -25,6 +25,8 @@ export interface RsvpConfirmEmailOpts {
   bannerUrl?: string;
   /** When true and a banner is set, render the event title in a strip below the banner */
   showTitleOnBanner?: boolean;
+  /** Signed self-service link — lets the guest amend or cancel without email. */
+  manageUrl?: string;
 }
 
 /**
@@ -45,6 +47,10 @@ export function buildRsvpConfirmText(opts: RsvpConfirmEmailOpts): string {
   if (venueLine) parts.push(`Venue: ${venueLine}`);
   parts.push("");
   parts.push(`We look forward to welcoming you.`);
+  if (opts.manageUrl) {
+    parts.push("");
+    parts.push(`View or change your RSVP: ${opts.manageUrl}`);
+  }
   parts.push("");
   parts.push(`The ${opts.eventTitle} Team`);
   return parts.join("\n");
@@ -171,12 +177,139 @@ export function buildRsvpConfirmEmail(opts: RsvpConfirmEmailOpts): string {
           Warm regards,<br />
           The ${opts.eventTitle} Team
         </p>
+
+        ${opts.manageUrl ? `<p style="font-size: 13px; color: #666666; margin: 24px 0 0; line-height: 1.7;">
+          Need to update your details or can no longer attend?
+          <a href="${opts.manageUrl}" style="color: #1a6fd4; text-decoration: underline;">Manage your RSVP</a>.
+        </p>` : ""}
       </div>
 
       <!-- Footer -->
       <div style="background: #0a1628; padding: 20px 40px; text-align: center;">
         <p style="font-size: 11px; color: #4a6a9a; margin: 0;">
           Questions about your RSVP? Just reply to this email.
+        </p>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Waitlist Email Template ─────────────────────────────────────────────────
+//
+// Sent instead of the confirmation when the event is at capacity and the
+// organiser has waitlisting enabled. It must not read like a confirmation:
+// the guest does NOT have a seat, and telling them otherwise is how people end
+// up at a door with no chair.
+
+export interface WaitlistEmailOpts {
+  name: string;
+  eventTitle: string;
+  eventDate: string;
+  venue?: string;
+  address?: string;
+  bannerUrl?: string;
+  showTitleOnBanner?: boolean;
+  /** Self-service link so they can withdraw without emailing anyone. */
+  manageUrl?: string;
+}
+
+export function buildWaitlistText(opts: WaitlistEmailOpts): string {
+  const venueLine = [opts.venue, opts.address].filter(Boolean).join(", ");
+  const parts = [
+    `Dear ${opts.name},`,
+    "",
+    `Thank you for your interest in ${opts.eventTitle}.`,
+    "",
+    "The event has reached capacity, so you are currently on the waitlist.",
+    "You do NOT have a confirmed seat yet. If a place opens up we will email",
+    "you an entry pass — no further action is needed from you.",
+    "",
+    `Date: ${opts.eventDate}`,
+  ];
+  if (venueLine) parts.push(`Venue: ${venueLine}`);
+  if (opts.manageUrl) {
+    parts.push("", `Manage or withdraw your request: ${opts.manageUrl}`);
+  }
+  parts.push("", `The ${opts.eventTitle} Team`);
+  return parts.join("\n");
+}
+
+export function buildWaitlistEmail(opts: WaitlistEmailOpts): string {
+  const titleStrip = opts.showTitleOnBanner
+    ? `<div style="background: #0a1628; padding: 14px 20px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 18px; margin: 0; font-weight: 700; letter-spacing: 0.3px;">${escapeHtml(opts.eventTitle)}</h1>
+      </div>`
+    : "";
+
+  const header = opts.bannerUrl
+    ? `<div style="line-height:0;"><img src="${opts.bannerUrl}" alt="Event Banner" style="width:100%;max-width:580px;display:block;" /></div>${titleStrip}`
+    : `<div style="background: #0a1628; padding: 36px 40px; text-align: center;">
+        <h1 style="color: #ffffff; font-size: 20px; margin: 0; font-weight: 700; letter-spacing: 0.5px;">${escapeHtml(opts.eventTitle)}</h1>
+      </div>`;
+
+  const venueLine = [opts.venue, opts.address].filter(Boolean).join(", ");
+
+  const manageBlock = opts.manageUrl
+    ? `<p style="font-size: 13px; color: #666666; margin: 24px 0 0; line-height: 1.7;">
+         Changed your mind? You can
+         <a href="${opts.manageUrl}" style="color: #1a6fd4; text-decoration: underline;">withdraw your request</a>
+         at any time.
+       </p>`
+    : "";
+
+  return `
+    <div style="font-family: 'Helvetica Neue', Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e5e5e5;">
+
+      ${header}
+
+      <div style="padding: 40px 40px 32px;">
+        <p style="font-size: 15px; color: #222222; margin: 0 0 20px; line-height: 1.6;">
+          Dear <strong>${escapeHtml(opts.name)}</strong>,
+        </p>
+
+        <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
+          Thank you for your interest in <strong>${escapeHtml(opts.eventTitle)}</strong>.
+        </p>
+
+        <!-- Amber, not green: this is explicitly NOT a confirmation. -->
+        <div style="background: #fff8ec; border-left: 4px solid #d98a0b; border-radius: 6px; padding: 16px 20px; margin: 24px 0;">
+          <p style="font-size: 14px; color: #8a5a00; margin: 0 0 6px; font-weight: 700;">
+            You are on the waitlist
+          </p>
+          <p style="font-size: 13px; color: #8a5a00; margin: 0; line-height: 1.6;">
+            The event has reached capacity, so a seat is not yet confirmed for you.
+          </p>
+        </div>
+
+        <p style="font-size: 15px; color: #333333; margin: 0 0 16px; line-height: 1.7;">
+          If a place opens up, we will email you an entry pass automatically.
+          There is nothing further you need to do.
+        </p>
+
+        <div style="background: #f8f8f8; border-radius: 10px; padding: 20px 24px; margin: 24px 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px; color: #333333;">
+            <tr>
+              <td style="padding: 6px 0; color: #888888; width: 80px; vertical-align: top;">Date</td>
+              <td style="padding: 6px 0; font-weight: 600;">${escapeHtml(opts.eventDate)}</td>
+            </tr>
+            ${venueLine ? `<tr>
+              <td style="padding: 6px 0; color: #888888; vertical-align: top;">Venue</td>
+              <td style="padding: 6px 0; font-weight: 600;">${escapeHtml(venueLine)}</td>
+            </tr>` : ""}
+          </table>
+        </div>
+
+        <p style="font-size: 15px; color: #333333; margin: 0; line-height: 1.7;">
+          Warm regards,<br />
+          The ${escapeHtml(opts.eventTitle)} Team
+        </p>
+
+        ${manageBlock}
+      </div>
+
+      <div style="background: #0a1628; padding: 20px 40px; text-align: center;">
+        <p style="font-size: 11px; color: #4a6a9a; margin: 0;">
+          Questions? Just reply to this email.
         </p>
       </div>
     </div>

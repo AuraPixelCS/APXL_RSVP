@@ -43,8 +43,18 @@ Secrets are referenced, never reproduced. Ask before assuming a value.
 
 | # | Item | Why it matters | Action |
 |---|---|---|---|
-| 4.1 | **12 uncommitted files** | My `x-scanner-key` header changes are tangled with in-progress gradle / babel / package build work. Nothing is committed, so nothing is recoverable if the tree is lost | Untangle into two commits, build an APK, verify against prod |
+| 4.1 | **12 uncommitted files** | My `x-scanner-key` header changes are tangled with in-progress gradle / babel / package build work (593 insertions, 551 deletions; `MapScreen.tsx` is effectively a rewrite). Nothing is committed, so nothing is recoverable if the tree is lost | Untangle into two commits, build an APK, verify against prod |
+| 4.3 | **BLOCKING for scanner work** — `node_modules` is absent and TypeScript is not installed | The app cannot be built, typechecked, linted, or run. Phase 3's offline scanner was NOT attempted for this reason: writing an untestable sync layer on top of an uncommitted build migration would be unverifiable work | `npm install`, confirm the modified gradle/babel config still builds, commit, THEN start offline work |
 | 4.2 | Phase 1 scanner hardening is not actually live | Server side is deployed; the app has never shipped the matching key (see 1.3) | Ship together with 1.3 |
+
+## 4b · Phase 3 configuration (new)
+
+| # | Item | Why it matters | Action |
+|---|---|---|---|
+| 4b.1 | `RESEND_WEBHOOK_SECRET` not set, webhook endpoint not registered | Delivery tracking is inert until both exist. The endpoint returns 503 rather than trusting unsigned traffic, so nothing is silently accepted | Resend dashboard → Webhooks → add `https://www.aurapixel.live/rsvp/api/webhooks/resend`, subscribe to the email.* events, copy the `whsec_` secret into Vercel |
+| 4b.2 | `MANAGE_SECRET` not set | Self-service links currently fall back to signing with `QR_SECRET`. That works, but it couples two credentials with very different exposure — an entry pass gets photographed and forwarded; a management link can cancel a booking | Generate a random secret, set in Vercel. Setting it invalidates any self-service links already sent |
+| 4b.3 | Waitlist promotion does not email the guest | Deliberate: promotion moves them to `pending`, and the entry pass is sent by the existing allocate → notify flow. Worth knowing so nobody assumes a promoted guest has been told | None — documented behaviour, stated in the UI |
+| 4b.4 | "Re-send my pass" only flags the request | Deliberate: letting an unauthenticated link trigger outbound mail is a spam relay, and the guest may be asking *because* delivery is failing — which an admin needs to see. Surfaces as a "Pass requested" badge in the guest table | None — admin re-sends from the Notifications page |
 
 ## 5 · Known code debt (audit findings, deferred by design)
 
@@ -78,4 +88,5 @@ Things confirmed by running something rather than by reading code.
 - Migration moved 270 documents + 4 Auth users with **document ids and UIDs preserved** — existing QR passes and `WEBHOOK_EVENT_ID` remain valid.
 - Dry run proved **no Storage-backed banners existed**, so the banner re-upload step was correctly a no-op.
 - Storage CORS on `aurapixel-rsvp` was **empty** before Phase 2; explicit-origin config applied and read back.
-- `npm test` — 83 assertions across 4 suites. Timezone suite passes identically under `UTC`, `America/Chicago`, and `Asia/Kuala_Lumpur`.
+- `npm test` — 153 assertions across 6 suites. Timezone suite passes identically under `UTC`, `America/Chicago`, and `Asia/Kuala_Lumpur`.
+- Scanner app confirmed unbuildable as of Phase 3: `node_modules` absent, `typescript` not installed, working tree dirty.

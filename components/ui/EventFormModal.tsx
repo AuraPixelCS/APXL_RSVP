@@ -34,6 +34,8 @@ export default function EventFormModal({
     totalSeats: event?.totalSeats ?? 100,
     maxGuests: event?.maxGuests ?? 0,
     rsvpDeadline: event?.rsvpDeadline ?? "",
+    capacityLimit: event?.capacityLimit ?? 0,
+    waitlistEnabled: event?.waitlistEnabled ?? false,
     // Existing events have no timezone; they were always meant to be Malaysian,
     // so the default preserves their behaviour rather than changing it.
     timezone: event?.timezone ?? DEFAULT_EVENT_TIMEZONE,
@@ -71,6 +73,8 @@ export default function EventFormModal({
           maxGuests: form.maxGuests || 0,
           rsvpDeadline: form.rsvpDeadline,
           timezone: form.timezone,
+          capacityLimit: form.capacityLimit || 0,
+          waitlistEnabled: form.waitlistEnabled,
           isActive: form.isActive,
           seatingConfig,
           assignmentMode,
@@ -89,6 +93,8 @@ export default function EventFormModal({
           ...(form.maxGuests && { maxGuests: form.maxGuests }),
           ...(form.rsvpDeadline && { rsvpDeadline: form.rsvpDeadline }),
           timezone: form.timezone,
+          ...(form.capacityLimit ? { capacityLimit: form.capacityLimit } : {}),
+          waitlistEnabled: form.waitlistEnabled,
           isActive: form.isActive,
           coverImageUrl: null,
           seatingConfig,
@@ -215,6 +221,47 @@ export default function EventFormModal({
                       ? `end of ${form.rsvpDeadline} in ${timezoneShortLabel(form.timezone)}`
                       : `23:59 ${timezoneShortLabel(form.timezone)}`}.
                   </p>
+                </div>
+
+                {/* Capacity — intake previously accepted RSVPs past the seat count. */}
+                <div className="rounded-lg p-3 space-y-3" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
+                  <div>
+                    <label htmlFor="capacity-limit" className="text-xs font-medium block mb-1.5" style={{ color: "var(--muted)" }}>
+                      Capacity Limit
+                    </label>
+                    <input
+                      id="capacity-limit"
+                      type="number"
+                      min={0}
+                      value={form.capacityLimit || ""}
+                      placeholder={`Defaults to seat count (${form.totalSeats})`}
+                      onChange={(e) => update("capacityLimit", parseInt(e.target.value) || 0)}
+                      className="w-full px-3 py-2.5 rounded-lg text-sm"
+                      style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--foreground)", outline: "none" }}
+                    />
+                    <p className="text-[11px] mt-1.5" style={{ color: "var(--muted)" }}>
+                      Stop accepting RSVPs after this many seats are claimed. A guest bringing
+                      a +1 counts as two. Leave blank to use the seat count.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-4 pt-1">
+                    <div>
+                      <label className="text-xs font-medium block text-white">Waitlist when full</label>
+                      <p className="text-[11px] mt-0.5" style={{ color: "var(--muted)" }}>
+                        {form.waitlistEnabled
+                          ? "Late RSVPs are recorded as waitlisted — no seat, no entry pass."
+                          : "Late RSVPs are turned away with a “fully booked” message."}
+                      </p>
+                    </div>
+                    <button type="button" role="switch" aria-checked={form.waitlistEnabled} aria-label="Waitlist when full"
+                      onClick={() => update("waitlistEnabled", !form.waitlistEnabled)}
+                      className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer"
+                      style={{ background: form.waitlistEnabled ? "var(--accent)" : "var(--border)" }}>
+                      <span className="inline-block h-5 w-5 rounded-full bg-white transition-transform"
+                        style={{ transform: form.waitlistEnabled ? "translateX(22px)" : "translateX(2px)" }} />
+                    </button>
+                  </div>
                 </div>
 
                 {isEdit && (

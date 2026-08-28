@@ -46,22 +46,29 @@ check("VIP seat above capacity does not block", lowestFreeSeat(new Set([201]), 2
 check("zero capacity → null", lowestFreeSeat(new Set(), 0), null);
 
 console.log("\nplanAutoAllocation");
+// plusOneSeatNumber is null for every guest without a companion; the +1 cases
+// live in scripts/test-capacity.ts.
 check("seats everyone in order", planAutoAllocation(["a", "b", "c"], new Set(), 10), {
   assignments: [
-    { id: "a", seatNumber: 1 }, { id: "b", seatNumber: 2 }, { id: "c", seatNumber: 3 },
+    { id: "a", seatNumber: 1, plusOneSeatNumber: null },
+    { id: "b", seatNumber: 2, plusOneSeatNumber: null },
+    { id: "c", seatNumber: 3, plusOneSeatNumber: null },
   ],
   seatsExhausted: false,
 });
 check("reuses freed seats before extending", planAutoAllocation(["x"], new Set([1, 3]), 10), {
-  assignments: [{ id: "x", seatNumber: 2 }],
+  assignments: [{ id: "x", seatNumber: 2, plusOneSeatNumber: null }],
   seatsExhausted: false,
 });
 check("stops and flags when capacity runs out", planAutoAllocation(["a", "b", "c"], new Set([1]), 2), {
-  assignments: [{ id: "a", seatNumber: 2 }],
+  assignments: [{ id: "a", seatNumber: 2, plusOneSeatNumber: null }],
   seatsExhausted: true,
 });
 check("respects the per-transaction write cap", planAutoAllocation(["a", "b", "c"], new Set(), 10, 2), {
-  assignments: [{ id: "a", seatNumber: 1 }, { id: "b", seatNumber: 2 }],
+  assignments: [
+    { id: "a", seatNumber: 1, plusOneSeatNumber: null },
+    { id: "b", seatNumber: 2, plusOneSeatNumber: null },
+  ],
   seatsExhausted: false,
 });
 check("no duplicate seats within one plan",
@@ -83,7 +90,9 @@ console.log("\nREGRESSION — VIP seat causes false-full lockout");
 
   const { assignments, seatsExhausted } = planAutoAllocation(pending, takenSeats(rows), standardSeats);
   check("new rule seats all three from seat 1", assignments, [
-    { id: "g1", seatNumber: 1 }, { id: "g2", seatNumber: 2 }, { id: "g3", seatNumber: 3 },
+    { id: "g1", seatNumber: 1, plusOneSeatNumber: null },
+    { id: "g2", seatNumber: 2, plusOneSeatNumber: null },
+    { id: "g3", seatNumber: 3, plusOneSeatNumber: null },
   ]);
   check("new rule does not report the room as full", seatsExhausted, false);
   check("new rule never hands out the VIP seat",

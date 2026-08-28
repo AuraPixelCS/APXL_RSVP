@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebaseAdmin";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { sendResendBatch } from "@/lib/resend";
 import { resolveEventSender } from "@/lib/eventSender";
+import { deliveryTags } from "@/lib/emailDelivery";
 import { buildBlastEmail, buildBlastText } from "@/lib/emailTemplates";
 
 // Unsubscribe contact for the List-Unsubscribe header (deliverability signal —
@@ -112,6 +113,7 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
         text: buildBlastText(blastOpts),
         from: sender.from,
         replyTo: sender.replyTo,
+        tags: deliveryTags(eventId, rsvp.id, "blast"),
         headers: {
           "List-Unsubscribe": `<mailto:${UNSUB_MAILTO}?subject=Unsubscribe>`,
         },

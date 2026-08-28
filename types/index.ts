@@ -1,6 +1,33 @@
 // ─── RSVP ───────────────────────────────────────────────────────────────────
 
-export type RSVPStatus = "pending" | "allocated" | "checked_in" | "not_attending";
+/**
+ * `waitlisted` (Phase 3): the guest RSVPed after the event reached capacity.
+ * They are a real record — kept in submission order so they can be promoted to
+ * `pending` when someone cancels — but they hold no seat and get no entry pass.
+ */
+export type RSVPStatus =
+  | "pending"
+  | "allocated"
+  | "checked_in"
+  | "not_attending"
+  | "waitlisted";
+
+/** Per-recipient delivery state, driven by Resend webhooks (Phase 3). */
+export type EmailDeliveryStatus =
+  | "sent"       // accepted by Resend — NOT proof of delivery
+  | "delivered"
+  | "opened"
+  | "clicked"
+  | "bounced"
+  | "complained" // marked as spam
+  | "delayed";
+
+export interface EmailDeliveryEvent {
+  status: EmailDeliveryStatus;
+  at: string;        // ISO timestamp
+  kind?: string;     // which email: "confirm" | "pass" | "blast" | "thankyou"
+  detail?: string;   // bounce reason etc.
+}
 
 export interface RSVP {
   id?: string;
@@ -33,9 +60,47 @@ export interface RSVP {
   checkInTime?: string | null;
   checkedInAt?: string | null;
   scanLogs?: Array<{ scannedAt: string; deviceId: string }>;
+
+  // ── Plus-one seating (Phase 3) ────────────────────────────────────────────
+  // `plusOne` was collected from day one but the companion was never seated and
+  // never issued a pass — they arrived to no chair. A +1 now consumes a real
+  // seat, adjacent to the primary guest whenever one is free.
+  plusOneSeatNumber?: number | null;
+  plusOneQrToken?: string | null;
+  plusOneCheckedInAt?: string | null;
+
+  // ── Waitlist (Phase 3) ────────────────────────────────────────────────────
+  waitlistedAt?: string | null; // when they were placed on the waitlist
+  promotedAt?: string | null;   // when they were moved off it
+
+  /** Guest asked for their entry pass again via the self-service page. */
+  passResendRequestedAt?: string | null;
+  /** Guest cancelled themselves via the self-service page. */
+  cancelledAt?: string | null;
+
+  // ── Email delivery (Phase 3) ──────────────────────────────────────────────
+  // `notifiedAt`/`blastSentAt` only ever meant "handed to Resend". These carry
+  // what actually happened to the message.
+  emailStatus?: EmailDeliveryStatus | null;
+  emailStatusAt?: string | null;
+  emailEvents?: EmailDeliveryEvent[];
 }
 
 // ─── EVENT ──────────────────────────────────────────────────────────────────
+
+/**
+ * One day of a multi-day event. The unit an entitlement is granted against and
+ * the unit attendance is recorded against: E1 runs two days and E3 runs three,
+ * and F19/F20/F21 differ from F3 only by which of E3's days they open. A pass
+ * therefore carries a set of (event, day) pairs, never a single event flag.
+ */
+export interface EventDay {
+  date: string;       // "YYYY-MM-DD"
+  label?: string;     // "Day 1"
+  theme?: string;     // "SME & Public" — the Summit's per-day theme
+  startTime?: string; // "HH:MM" 24h; unset → Event.time
+  endTime?: string;   // "HH:MM" 24h
+}
 
 export interface Event {
   id?: string;
@@ -49,6 +114,25 @@ export interface Event {
    * Always resolve via lib/eventTime.ts rather than reading this field directly.
    */
   timezone?: string;
+
+  // ── Multi-day programme (Phase 4) ─────────────────────────────────────────
+  // `date`/`time` remain the event's start and stay authoritative for every
+  // single-day event and for every existing consumer (emails, deadlines, QR).
+  /**
+   * Stable short code the ticket-type table and entitlement rules refer to
+   * ("E1", "E2", "E3"). Firestore doc ids are opaque and change per environment;
+   * this does not, so entitlement sets stay readable and portable.
+   */
+  code?: string;
+  /** Last day, "YYYY-MM-DD". Unset → the event is one day (`date`). */
+  endDate?: string;
+  /**
+   * The days this event runs. Unset → one implicit day of `date`, which is what
+   * every event created before this field existed means. Resolve via
+   * lib/eventDays.ts rather than reading this directly.
+   */
+  days?: EventDay[];
+
   venue: string;
   address?: string;
   dressCode?: string; // shown as a "Dress Code" row in the entry-pass email (e.g. "Office attire")
@@ -65,6 +149,18 @@ export interface Event {
   industries?: string[];      // options for the "Industry" dropdown
 
   rsvpDeadline?: string; // "YYYY-MM-DD"
+
+  // ── Capacity & waitlist (Phase 3) ─────────────────────────────────────────
+  // Intake previously accepted unlimited RSVPs regardless of seat count, so
+  // over-subscription only surfaced at allocation time — after everyone had
+  // already been told they were coming.
+  /** Hard cap on committed seats. Unset → derived from totalSeats + VIP seats. */
+  capacityLimit?: number;
+  /** At capacity: true → new RSVPs are waitlisted; false → they're turned away. */
+  waitlistEnabled?: boolean;
+  /** Subject line for the "you're on the waitlist" email. */
+  waitlistSubject?: string;
+
   isActive: boolean;
   pinned?: boolean; // admin-pinned events float to the top of the upcoming list
   coverImageUrl?: string | null;
@@ -126,13 +222,28 @@ export interface QRPayload {
   seatNumber: number;
   eventTime: number; // Unix timestamp (seconds) of event start
   issuedAt: number; // Unix timestamp (seconds) of QR generation
+  /**
+   * Which person on the booking this pass belongs to: 0 = the guest who RSVPed,
+   * 1 = their +1. Omitted on every pass issued before plus-one seating existed,
+   * so absent must read as 0 — those passes are still in guests' inboxes and
+   * must keep verifying.
+   *
+   * Both passes carry the same rsvpId, so today's scanner checks in the party
+   * on either scan. The field is here so the scanner can tell them apart later
+   * without reissuing anything.
+   */
+  guestIndex?: 0 | 1;
 }
 
 // ─── AGGREGATED STATS ───────────────────────────────────────────────────────
 
 export interface EventStats {
   total: number;
+  /** Guests actually holding a place. Excludes waitlisted — they hold nothing. */
   attending: number;
+  waitlisted: number;
+  /** Seats committed, counting a +1 as a second seat. */
+  seatsCommitted: number;
   allocated: number;
   pending: number;
   notAttending: number;

@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { format, parseISO, differenceInCalendarDays } from "date-fns";
+import { parseISO, differenceInCalendarDays } from "date-fns";
 import type { Event, RSVP } from "@/types";
 import { getTotalSeatCount } from "@/lib/seating";
+import { formatEventDayRange } from "@/lib/eventDays";
 
 interface EventCardProps {
   event: Event;
@@ -129,7 +130,7 @@ export default function EventCard({
   const isPast = (() => {
     try { return differenceInCalendarDays(parseISO(event.date), new Date()) < 0; } catch { return false; }
   })();
-  const dateLabel = (() => { try { return format(parseISO(event.date), "EEE, dd MMM yyyy"); } catch { return event.date; } })();
+  const dateLabel = formatEventDayRange(event);
 
   const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
   const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;

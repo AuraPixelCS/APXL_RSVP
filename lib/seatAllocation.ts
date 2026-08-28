@@ -47,28 +47,86 @@ export function lowestFreeSeat(taken: Set<number>, limit: number): number | null
 }
 
 /**
- * Plan an automatic allocation: pick the lowest free seat for each guest in
- * order, stopping when the standard seats run out.
+ * Find a free seat directly beside `seat`, preferring the one after it.
  *
- * Returns the assignments plus whether capacity was the limiting factor, so the
- * caller can tell "seated everyone" apart from "ran out of room" — the old code
- * conflated the two and returned 200 either way.
+ * Used to sit a +1 next to their host. Returns null when neither neighbour is
+ * free — the caller then falls back to any free seat, because a companion
+ * seated across the room still beats a companion with no seat at all, which is
+ * what they got before.
+ */
+export function adjacentFreeSeat(
+  taken: Set<number>,
+  seat: number,
+  limit: number,
+): number | null {
+  const after = seat + 1;
+  if (after <= limit && !taken.has(after)) return after;
+  const before = seat - 1;
+  if (before >= 1 && !taken.has(before)) return before;
+  return null;
+}
+
+/** A guest to seat. `plusOne` means they need two adjacent seats, not one. */
+export interface AllocationRequest {
+  id: string;
+  plusOne?: boolean;
+}
+
+export interface SeatAssignment {
+  id: string;
+  seatNumber: number;
+  /** Seat for the companion — null when this guest has no +1. */
+  plusOneSeatNumber: number | null;
+}
+
+/**
+ * Plan an automatic allocation: lowest free seat per guest, in order, stopping
+ * when the standard seats run out.
+ *
+ * A guest with a +1 is seated as a PAIR — both seats or neither. Placing the
+ * host and then discovering there is no room for the companion would strand
+ * them exactly as before, so the pair is treated as one indivisible unit.
+ *
+ * Returns whether capacity was the limiting factor, so the caller can tell
+ * "seated everyone" from "ran out of room" — the old code conflated the two and
+ * returned 200 either way.
  */
 export function planAutoAllocation(
-  pendingIds: string[],
+  pending: (string | AllocationRequest)[],
   alreadyTaken: Set<number>,
   standardSeats: number,
   maxAssignments: number = Number.POSITIVE_INFINITY,
-): { assignments: { id: string; seatNumber: number }[]; seatsExhausted: boolean } {
+): { assignments: SeatAssignment[]; seatsExhausted: boolean } {
   const taken = new Set(alreadyTaken);
-  const assignments: { id: string; seatNumber: number }[] = [];
+  const assignments: SeatAssignment[] = [];
 
-  for (const id of pendingIds) {
+  for (const entry of pending) {
     if (assignments.length >= maxAssignments) break;
+
+    const req: AllocationRequest = typeof entry === "string" ? { id: entry } : entry;
+
     const seat = lowestFreeSeat(taken, standardSeats);
     if (seat == null) return { assignments, seatsExhausted: true };
+
+    if (!req.plusOne) {
+      taken.add(seat);
+      assignments.push({ id: req.id, seatNumber: seat, plusOneSeatNumber: null });
+      continue;
+    }
+
+    // Reserve the host's seat only long enough to look for a neighbour; if the
+    // companion can't be placed, release it so the pair stays intact.
     taken.add(seat);
-    assignments.push({ id, seatNumber: seat });
+    const companion =
+      adjacentFreeSeat(taken, seat, standardSeats) ?? lowestFreeSeat(taken, standardSeats);
+
+    if (companion == null) {
+      taken.delete(seat);
+      return { assignments, seatsExhausted: true };
+    }
+
+    taken.add(companion);
+    assignments.push({ id: req.id, seatNumber: seat, plusOneSeatNumber: companion });
   }
 
   return { assignments, seatsExhausted: false };

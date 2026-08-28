@@ -52,7 +52,9 @@ function XIcon() {
 
 export default function EventStatsBar({ stats }: EventStatsBarProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+    // 6 columns when a waitlist exists, 5 otherwise — an always-present
+    // "Waitlisted: 0" tile is noise on the overwhelmingly common case.
+    <div className={`grid grid-cols-2 md:grid-cols-3 gap-3 ${stats.waitlisted > 0 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
       <StatCard
         label="Total RSVPs"
         value={stats.total}
@@ -77,6 +79,14 @@ export default function EventStatsBar({ stats }: EventStatsBarProps) {
         icon={<ScanIcon />}
         color="#8b5cf6"
       />
+      {stats.waitlisted > 0 && (
+        <StatCard
+          label="Waitlisted"
+          value={stats.waitlisted}
+          icon={<ClockIcon />}
+          color="#a855f7"
+        />
+      )}
       <StatCard
         label="Not Attending"
         value={stats.notAttending}

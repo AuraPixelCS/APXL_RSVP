@@ -20,6 +20,11 @@ const CONFIG: Record<RSVPStatus, { label: string; bg: string; color: string }> =
     bg: "rgba(61,155,245,0.14)",
     color: "#3d9bf5",
   },
+  waitlisted: {
+    label: "Waitlisted",
+    bg: "rgba(168,85,247,0.14)",
+    color: "#a855f7",
+  },
   not_attending: {
     label: "Not Attending",
     bg: "rgba(107,114,128,0.14)",

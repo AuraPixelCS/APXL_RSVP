@@ -1,5 +1,47 @@
 # Changelog
 
+## [3.2.0] — 2026-07-22
+
+**Phase 3 — operational resilience & guest experience.** The web half is complete. The offline scanner is not included; see the note at the end.
+
+### Capacity guard & waitlist
+- Intake now consults the seat count. Previously a 200-seat room could confirm 300 people, and over-subscription only surfaced at allocation — after everyone had been told they were coming.
+- New `Event.capacityLimit` (blank → seat count) and `Event.waitlistEnabled`, both in the event form. At capacity, a submission is either waitlisted or turned away with a "fully booked" screen, not a generic error.
+- New `waitlisted` RSVP status. A waitlisted guest holds **no** seat, gets **no** entry pass, and receives a distinct amber email that says so explicitly rather than a confirmation implying a seat exists.
+- The capacity count and the write happen in **one transaction**, so two guests can't both claim the last chair.
+- Waitlist panel on the event page (hidden when empty): queue in arrival order, promote-who-fits or promote-selected. Promotion moves guests to `pending` — it does not seat or email them, and the UI says so.
+- Stats no longer count waitlisted guests as "attending", which previously overstated the room by exactly the number of people who couldn't get in.
+
+### Plus-one seating
+- `plusOne` was collected from day one but the companion was never seated and never issued a pass — they arrived to no chair.
+- A +1 now consumes a real seat, placed **adjacent** to their host when possible, falling back to any free seat rather than being stranded.
+- Host and companion are seated as an **indivisible pair**: if only one seat remains, neither is placed. Seating the host and stranding the guest is the bug being fixed, not a partial success.
+- The companion gets their own signed pass (`guestIndex: 1` in the QR payload) and their seat now appears on the entry-pass email. Passes issued before this change omit the field, and absent reads as `0`, so every pass already in a guest's inbox still verifies.
+
+### Email delivery tracking
+- `notifiedAt`/`blastSentAt` only ever meant "handed to Resend". New `/api/webhooks/resend` records what actually happened: delivered, opened, clicked, bounced, complained, delayed.
+- Every outbound message now carries event/RSVP/kind tags, which is how an async webhook attributes a bounce without a stored message id (batch sends never return one).
+- Svix signature verified with standard-library crypto — no new dependency. **Without `RESEND_WEBHOOK_SECRET` the endpoint returns 503 rather than trusting unsigned traffic**, because an unauthenticated writer that can mark any guest's mail as bounced is worse than no tracking.
+- Out-of-order webhooks are ranked, not last-write-wins: a late `sent` can't downgrade `delivered`, and nothing can mask a bounce.
+- Bounces show as a red badge directly in the guest table — the one delivery state that needs to be visible without opening anything.
+
+### Guest self-service (`/manage`)
+- Signed-link page reached from the confirmation and waitlist emails. Guests can correct their details, drop a +1, cancel, or ask for their pass again — without emailing the organiser.
+- Cancelling releases both seats **and revokes the passes**; a cancelled guest holding a working QR is how someone walks in on a seat that's been given away.
+- Signed with its own `MANAGE_SECRET` (falls back to `QR_SECRET` until set). A pass is photographed and forwarded routinely; a management link can cancel a booking — one secret for both would be wrong.
+- A guest may drop a +1 but not add one: an extra body is a capacity decision, which belongs to the organiser.
+- "Re-send my pass" **flags** the request rather than sending. Letting an unauthenticated link trigger outbound mail is a spam relay, and the guest may be asking precisely because delivery is failing. Surfaces as a "Pass requested" badge for the admin.
+
+### Also
+- Extracted `lib/publicUrl.ts` — links in emails no longer point at `localhost` when an admin sends from a dev session.
+- `notifiedAt` is now written explicitly as `null` on public-form records instead of being absent (audit #36).
+
+### Tests
+- `npm test` — **153 assertions** across 6 suites, still framework-free. New: `test-capacity.ts` (capacity, waitlist ordering, plus-one pairing) and `test-email-delivery.ts` (tag round-trip, out-of-order status ranking, token forgery/expiry).
+
+### Not included — offline scanner
+The remaining Phase 3 item is the offline-capable scanner, which lives in the separate `rsvp-app` repo. It was **not attempted**: that repo has no `node_modules` installed and no TypeScript, so it cannot be built, typechecked, linted, or run, and its working tree carries 593 insertions / 551 deletions of uncommitted build-migration work. Writing an unverifiable sync layer on top of that would not be a fix. See `OPEN-ITEMS.md` §4.
+
 ## [3.1.0] — 2026-07-22
 
 Completes **Phase 2** of the audit roadmap. v3.0.0 shipped Phase 2's *features*; this release closes the *correctness* half that was still outstanding — the three bugs that fail silently during a live event — plus per-event sender identity and Storage provisioning.

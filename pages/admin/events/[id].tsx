@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { committedSeats, capacityOf } from "@/lib/capacity";
 import { useRouter } from "next/router";
 import Link from "next/link";
 import type { ReactElement } from "react";
 import type { NextPageWithLayout } from "@/pages/_app";
 import AdminLayout from "@/components/layout/AdminLayout";
 import EventStatsBar from "@/components/ui/EventStatsBar";
+import WaitlistPanel from "@/components/ui/WaitlistPanel";
 import RSVPTable from "@/components/ui/RSVPTable";
 import EmptyState from "@/components/ui/EmptyState";
 import { getEvent, subscribeToRSVPs, updateRSVP } from "@/lib/firestore";
@@ -19,14 +21,21 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { useToast } from "@/contexts/ToastContext";
 import { getAuthHeaders } from "@/lib/auth";
 import { getTotalSeatCount } from "@/lib/seating";
+import { formatEventDayRange } from "@/lib/eventDays";
 import type { Event, RSVP, EventStats, FieldMapping, SeatingConfig } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
-import { format, parseISO, differenceInCalendarDays, isToday, formatDistanceToNow } from "date-fns";
+import { parseISO, differenceInCalendarDays, isToday, formatDistanceToNow } from "date-fns";
 
 function computeStats(rsvps: RSVP[]): EventStats {
+  // A waitlisted guest has attending === true but holds no place, so counting
+  // them as "attending" would overstate the room by exactly the number of
+  // people who couldn't get in.
+  const holding = rsvps.filter((r) => r.attending && r.status !== "waitlisted" && r.status !== "not_attending");
   return {
     total: rsvps.length,
-    attending: rsvps.filter((r) => r.attending).length,
+    attending: holding.length,
+    waitlisted: rsvps.filter((r) => r.status === "waitlisted").length,
+    seatsCommitted: committedSeats(rsvps),
     allocated: rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length,
     pending: rsvps.filter((r) => r.status === "pending" && r.attending).length,
     notAttending: rsvps.filter((r) => !r.attending || r.status === "not_attending").length,
@@ -314,7 +323,7 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
   const vipSeats = totalSeats - event.totalSeats;
   const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
   const fillPct = totalSeats > 0 ? Math.round((allocated / totalSeats) * 100) : 0;
-  const dateLabel = (() => { try { return format(parseISO(event.date), "EEE, dd MMM yyyy"); } catch { return event.date; } })();
+  const dateLabel = formatEventDayRange(event);
 
   return (
     <motion.div
@@ -1026,6 +1035,9 @@ const EventDetailPage: NextPageWithLayout = () => {
 
       {/* Stats */}
       <EventStatsBar stats={stats} />
+
+      {/* Waitlist — renders nothing when nobody is waiting */}
+      <WaitlistPanel event={event} rsvps={rsvps} />
 
       {/* RSVP Table */}
       <RSVPTable

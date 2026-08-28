@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { useDebounce } from "use-debounce";
 import StatusChip from "./StatusChip";
+import { DELIVERY_LABEL, isDeliveryFailure } from "@/lib/emailDelivery";
 import SeatBadge from "./SeatBadge";
 import { formatAssignment } from "@/lib/seatLabel";
 import type { RSVP, RSVPStatus, FieldMapping, SeatingConfig } from "@/types";
@@ -35,6 +36,7 @@ const STATUS_FILTERS: { label: string; value: RSVPStatus | "all" }[] = [
   { label: "Pending",       value: "pending"      },
   { label: "Allocated",     value: "allocated"    },
   { label: "Checked In",    value: "checked_in"   },
+  { label: "Waitlisted",    value: "waitlisted"   },
   { label: "Not Attending", value: "not_attending"},
 ];
 
@@ -151,6 +153,16 @@ function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeat
           <InfoRow label="Industry" value={rsvp.industry} />
           <InfoRow label="Phone" value={rsvp.phone} />
           <InfoRow label={`${seatLabel}`} value={assignment ? assignment.long : null} />
+          <InfoRow label={`+1 ${seatLabel}`} value={rsvp.plusOneSeatNumber != null ? `#${rsvp.plusOneSeatNumber}` : null} />
+          <InfoRow label="+1 Name" value={rsvp.plusOne ? (rsvp.plusOneName || "Not given") : null} />
+          <InfoRow
+            label="Email Delivery"
+            value={rsvp.emailStatus ? DELIVERY_LABEL[rsvp.emailStatus] : null}
+          />
+          <InfoRow
+            label="Pass Re-requested"
+            value={rsvp.passResendRequestedAt ? format(new Date(rsvp.passResendRequestedAt), "dd MMM yyyy, HH:mm") : null}
+          />
           <InfoRow label="Allocated By" value={rsvp.allocatedBy?.displayName ?? null} />
           <InfoRow label="Dietary Restrictions" value={rsvp.dietaryRestrictions} />
           <InfoRow label="Message / Notes" value={rsvp.message} />
@@ -393,7 +405,33 @@ export default function RSVPTable({
                           <td className={TD}><span className="text-sm font-medium text-white">{rsvp.name}</span></td>
                         )}
 
-                        <td className={TD}><span className="text-xs text-white">{rsvp.email}</span></td>
+                        <td className={TD}>
+                          <span className="text-xs text-white">{rsvp.email}</span>
+                          {/* A bounce is the one delivery state that needs to be
+                              visible without opening anything — the guest never
+                              got their pass and someone has to act on it. */}
+                          {/* The guest pressed "send my pass again" on the
+                              self-service page. Writing that flag without ever
+                              showing it would leave them waiting forever. */}
+                          {rsvp.passResendRequestedAt && (
+                            <span
+                              className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle"
+                              style={{ background: "rgba(245,158,11,0.14)", color: "#f59e0b" }}
+                              title={`Guest requested their pass again on ${rsvp.passResendRequestedAt.slice(0, 10)}`}
+                            >
+                              Pass requested
+                            </span>
+                          )}
+                          {isDeliveryFailure(rsvp.emailStatus) && (
+                            <span
+                              className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold align-middle"
+                              style={{ background: "rgba(239,68,68,0.14)", color: "#ef4444" }}
+                              title={`Email ${DELIVERY_LABEL[rsvp.emailStatus!].toLowerCase()} — this guest did not receive it`}
+                            >
+                              {DELIVERY_LABEL[rsvp.emailStatus!]}
+                            </span>
+                          )}
+                        </td>
                         <td className={TD}><span className="text-xs font-mono" style={{ color: "var(--muted)" }}>{rsvp.phone}</span></td>
 
                         <td className={`${TD} hidden lg:table-cell`} style={{ fontSize: 12, color: "var(--muted)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

@@ -4,7 +4,12 @@ import { generateQRPayload, signQRPayload } from "@/lib/qr";
 import { withAuth, type AuthedRequest } from "@/lib/apiAuth";
 import { getTotalSeatCount } from "@/lib/seating";
 import { eventTimezone } from "@/lib/eventTime";
-import { takenSeats, lowestFreeSeat, planAutoAllocation } from "@/lib/seatAllocation";
+import {
+  takenSeats,
+  lowestFreeSeat,
+  adjacentFreeSeat,
+  planAutoAllocation,
+} from "@/lib/seatAllocation";
 
 /**
  * Seat allocation.
@@ -43,7 +48,24 @@ interface RsvpRow {
   status?: string;
   attending?: boolean;
   seatNumber?: number | null;
+  plusOne?: boolean;
+  plusOneSeatNumber?: number | null;
   name?: string;
+}
+
+/**
+ * Every seat an RSVP occupies. A +1's seat is just as taken as their host's —
+ * omitting it here would let the next guest be seated straight on top of them.
+ */
+function seatsOf(r: RsvpRow): (number | null | undefined)[] {
+  return [r.seatNumber, r.plusOneSeatNumber];
+}
+
+/** Flatten rows into the shape takenSeats() expects, +1 seats included. */
+function occupiedSeatRows(rows: RsvpRow[]): { id: string; seatNumber?: number | null }[] {
+  return rows.flatMap((r) =>
+    seatsOf(r).map((seatNumber, i) => ({ id: `${r.id}:${i}`, seatNumber })),
+  );
 }
 
 function signedToken(
@@ -51,9 +73,32 @@ function signedToken(
   eventId: string,
   seatNumber: number,
   event: { date: string; time: string; timezone?: string },
+  guestIndex: 0 | 1 = 0,
 ): string {
   return signQRPayload(
-    generateQRPayload(rsvpId, eventId, seatNumber, event.date, event.time, eventTimezone(event)),
+    generateQRPayload(
+      rsvpId, eventId, seatNumber, event.date, event.time, eventTimezone(event), guestIndex,
+    ),
+  );
+}
+
+/** Build the full allocation patch for one guest, companion pass included. */
+function patchFor(
+  req: AuthedRequest,
+  a: { id: string; seatNumber: number; plusOneSeatNumber: number | null },
+  eventId: string,
+  event: { date: string; time: string; timezone?: string },
+): Record<string, unknown> {
+  return allocationPatch(
+    req,
+    a.seatNumber,
+    signedToken(a.id, eventId, a.seatNumber, event, 0),
+    a.plusOneSeatNumber == null
+      ? null
+      : {
+          seatNumber: a.plusOneSeatNumber,
+          qrToken: signedToken(a.id, eventId, a.plusOneSeatNumber, event, 1),
+        },
   );
 }
 
@@ -61,6 +106,7 @@ function allocationPatch(
   req: AuthedRequest,
   seatNumber: number,
   qrToken: string,
+  plusOne?: { seatNumber: number; qrToken: string } | null,
 ): Record<string, unknown> {
   const now = new Date().toISOString();
   return {
@@ -68,6 +114,10 @@ function allocationPatch(
     seatNumber,
     qrToken,
     qrIssuedAt: now,
+    // Explicit null (not undefined) when there is no +1, so re-allocating a
+    // guest who dropped their companion actually clears the stale seat.
+    plusOneSeatNumber: plusOne ? plusOne.seatNumber : null,
+    plusOneQrToken: plusOne ? plusOne.qrToken : null,
     allocatedBy: {
       uid: req.decodedToken.uid,
       displayName: req.decodedToken.name ?? req.decodedToken.email ?? "Unknown",
@@ -115,23 +165,22 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           const snap = await tx.get(rsvpsRef);
           const rows: RsvpRow[] = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as RsvpRow);
 
+          // Waitlisted guests are deliberately excluded — they hold no seat
+          // until an admin promotes them.
           const pending = rows.filter(
             (r) => r.status === "pending" && r.attending === true && r.seatNumber == null,
           );
           if (pending.length === 0) return { count: 0, pending: 0, full: false };
 
           const { assignments, seatsExhausted } = planAutoAllocation(
-            pending.map((r) => r.id),
-            takenSeats(rows),
+            pending.map((r) => ({ id: r.id, plusOne: r.plusOne === true })),
+            takenSeats(occupiedSeatRows(rows)),
             standardSeats,
             MAX_WRITES_PER_TXN,
           );
 
           for (const a of assignments) {
-            tx.update(
-              rsvpsRef.doc(a.id),
-              allocationPatch(req, a.seatNumber, signedToken(a.id, eventId, a.seatNumber, event)),
-            );
+            tx.update(rsvpsRef.doc(a.id), patchFor(req, a, eventId, event));
           }
 
           return { count: assignments.length, pending: pending.length, full: seatsExhausted };
@@ -202,18 +251,45 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           }
           // Seats held by guests OUTSIDE the group are unavailable; seats held
           // by guests INSIDE it are being vacated by this same transaction, so
-          // the group can rotate among its own seats.
+          // the group can rotate among its own seats. A +1's seat counts as
+          // occupied just like their host's.
           for (const r of rows) {
-            if (r.seatNumber == null || movingIds.has(r.id)) continue;
-            if (seatSet.has(Number(r.seatNumber))) {
-              throw new Error(`Seat #${r.seatNumber} is already taken by ${r.name ?? "another guest"}`);
+            if (movingIds.has(r.id)) continue;
+            for (const held of seatsOf(r)) {
+              if (held != null && seatSet.has(Number(held))) {
+                throw new Error(`Seat #${held} is already taken by ${r.name ?? "another guest"}`);
+              }
             }
           }
 
+          // Place each guest's +1 beside them, drawing from the seats this
+          // group is not already using.
+          const claimed = new Set(seatSet);
+          for (const r of rows) {
+            if (movingIds.has(r.id)) continue;
+            for (const held of seatsOf(r)) if (held != null) claimed.add(Number(held));
+          }
+
           for (const a of requested) {
+            const guest = byId.get(a.rsvpId)!;
+            let companionSeat: number | null = null;
+            if (guest.plusOne === true) {
+              companionSeat =
+                adjacentFreeSeat(claimed, a.seatNumber, standardSeats) ??
+                lowestFreeSeat(claimed, standardSeats);
+              if (companionSeat == null) {
+                throw new Error(`No free seat for ${guest.name ?? "a guest"}'s +1`);
+              }
+              claimed.add(companionSeat);
+            }
             tx.update(
               rsvpsRef.doc(a.rsvpId),
-              allocationPatch(req, a.seatNumber, signedToken(a.rsvpId, eventId, a.seatNumber, event)),
+              patchFor(
+                req,
+                { id: a.rsvpId, seatNumber: a.seatNumber, plusOneSeatNumber: companionSeat },
+                eventId,
+                event,
+              ),
             );
           }
         });
@@ -256,35 +332,55 @@ async function handler(req: AuthedRequest, res: NextApiResponse) {
           throw Object.assign(new Error("RSVP is not pending"), { httpStatus: 400 });
         }
 
+        // Seats held by everyone except this guest — their own current seats
+        // are free to keep or move within.
+        const othersTaken = takenSeats(occupiedSeatRows(rows.filter((r) => r.id !== rsvpId)));
+
         let seat: number;
         if (explicitSeat != null) {
-          const holder = rows.find(
-            (r) => r.id !== rsvpId && r.seatNumber != null && Number(r.seatNumber) === explicitSeat,
-          );
-          if (holder) {
+          if (othersTaken.has(explicitSeat)) {
             throw Object.assign(new Error(`Seat #${explicitSeat} is already taken`), { httpStatus: 409 });
           }
           seat = explicitSeat;
         } else {
-          // Exclude this guest's own seat so a re-allocation can keep it.
-          const taken = takenSeats(rows.filter((r) => r.id !== rsvpId));
-          const free = lowestFreeSeat(taken, standardSeats);
+          const free = lowestFreeSeat(othersTaken, standardSeats);
           if (free == null) {
             throw Object.assign(new Error("No seats available"), { httpStatus: 409 });
           }
           seat = free;
         }
 
+        let companionSeat: number | null = null;
+        if (target.plusOne === true) {
+          const claimed = new Set(othersTaken);
+          claimed.add(seat);
+          companionSeat =
+            adjacentFreeSeat(claimed, seat, standardSeats) ?? lowestFreeSeat(claimed, standardSeats);
+          if (companionSeat == null) {
+            throw Object.assign(
+              new Error("No free seat for this guest's +1"),
+              { httpStatus: 409 },
+            );
+          }
+        }
+
         tx.update(
           rsvpsRef.doc(rsvpId),
-          allocationPatch(req, seat, signedToken(rsvpId, eventId, seat, event)),
+          patchFor(req, { id: rsvpId, seatNumber: seat, plusOneSeatNumber: companionSeat }, eventId, event),
         );
-        return seat;
+        return { seat, companionSeat };
       });
 
       outcome = {
         status: 200,
-        body: { success: true, seatNumber: assignedSeat, message: `Seat #${assignedSeat} allocated` },
+        body: {
+          success: true,
+          seatNumber: assignedSeat.seat,
+          plusOneSeatNumber: assignedSeat.companionSeat,
+          message: assignedSeat.companionSeat
+            ? `Seats #${assignedSeat.seat} and #${assignedSeat.companionSeat} allocated`
+            : `Seat #${assignedSeat.seat} allocated`,
+        },
       };
     } catch (e) {
       const status = (e as { httpStatus?: number }).httpStatus ?? 409;
