@@ -1,69 +1,145 @@
-# Complimentary Pass → RSVP: one page for the form team
+# Registration → RSVP: one page for the form team
 
-Applies to the free Summit pass form (`#pass-complimentary`). The paid BAFT
-passes use the same endpoint later, once the payment step is agreed.
+Applies to every pass sold or issued through your forms — the free Summit pass
+(`#pass-complimentary`), the paid BAFT passes (`#pass-baft`) and the internal
+Sponsor / Partner / Media passes. One endpoint, one payload shape, one key per
+environment.
 
 ## What happens
 
-1. A visitor submits your complimentary-pass form.
+1. A visitor submits your form. For a paid pass you confirm payment first
+   (Stripe, or your finance team for corporate/grant bookings) — we only ever
+   hear about a paid delegate after that.
 2. Your backend calls **Register** (below) with the submission.
-3. We create the registration, generate the QR pass and **email it to the
-   registrant straight away** — there is no seat allocation on this event.
-4. You receive `201 { status: "confirmed", passIssued: true, emailSent: true }`.
+3. We create one registration **per event the ticket opens** and email the
+   registrant an entry pass per venue — one QR for the Summit, one for BAFT,
+   and (P2 only) one for the Gala once a table is assigned.
+4. You receive `201` with a `passes[]` array, one entry per event.
 
-Your existing success message ("Look out for a confirmation email shortly") is
-correct as it stands — the email it refers to is our QR pass. Please don't send a
-second confirmation of your own, or if you must, say the QR pass follows separately.
+Your own acknowledgement email is optional. If you keep it, please say the entry
+pass follows separately from AuraPixel, so nobody reads yours as the ticket.
+
+## Environments
+
+Same URL, two keys. Which key you send decides where the registration lands.
+
+| Key | Registrations land in | Emails |
+|---|---|---|
+| **Production key** | The real events — the guest lists we scan at the door | Real, to the address submitted |
+| **Test key** | Test twins of the same events (titled "— TEST") | Real, to the address submitted — use your own inboxes |
+
+Use the test key from your local, QA and UAT environments. Nothing sent with it
+can reach a real guest list, so no `submission_id` prefix filtering is needed on
+our side. We can wipe the test twins on request.
+
+Both keys reach you separately from this document.
 
 ## Register
 
 ```
-POST {BASE}/api/integrations/register
-X-API-Key: {key we send you separately}
+POST https://www.aurapixel.live/rsvp/api/integrations/register
+X-API-Key: {production or test key}
 Content-Type: application/json
 ```
-
-`{BASE}` = `https://www.aurapixel.live/rsvp` — there is a single environment.
-
-Every accepted registration is real: it goes on the Summit guest list and the
-entry pass is emailed to the address you submit. For your own testing, submit
-your team's inboxes and tell us the emails afterwards so we can remove them.
 
 ### Request — your field names are accepted as-is
 
 ```json
 {
   "submission_id": "CP-000123",
-  "pass_id": "complimentary",
+  "pass_id": "F3",
   "name": "Aisyah Rahman",
   "email": "aisyah@example.com",
   "phone": "+60123456789",
   "organisation": "Example Sdn Bhd",
   "job_title": "Head of People",
   "industry": "Education",
-  "days": ["2026-11-19", "2026-11-20"],
+  "days": ["2026-11-12", "2026-11-13", "2026-11-14"],
   "consent": true
 }
 ```
 
 Required: `submission_id` (any stable reference of yours — this is what makes
-retries safe), `name`, `email`, `phone`. Everything else is optional and stored as
-sent. `pass_id` defaults to `complimentary`.
+retries safe), `name`, `email`, `phone`. Everything else is optional and stored
+as sent. `pass_id` defaults to the free Summit pass when omitted.
+
+### `pass_id` — the ticket codes
+
+The codes from Build Brief v3 are canonical. Your product ids are accepted as
+aliases so you need no translation table. Matching is case-insensitive.
+
+| Send | Ticket | Registers into | Also accepted |
+|---|---|---|---|
+| `F3` | Free — 3 days Summit | Summit (12–14 Nov) | `complimentary`, `pass-complimentary`, `free` |
+| `F12` | Free — 12 Nov only, SME & Public | Summit, 12 Nov | |
+| `F13` | Free — 13 Nov only, Workforce & Public | Summit, 13 Nov | |
+| `F14` | Free — 14 Nov only, Uni & Youth / Public | Summit, 14 Nov | |
+| `P1` | BAFT delegate + 3 days Summit, MYR | BAFT (17–18 Nov) **and** Summit | `standard-delegate`, `baft_conference_myr` |
+| `P1-INT` | Same, USD | BAFT and Summit | `baft_conference_usd` |
+| `P2` | BAFT delegate + Gala + 3 days Summit, MYR | BAFT, Gala (18 Nov) **and** Summit | `all-inclusive`, `baft_gala_myr` |
+| `P2-INT` | Same, USD | BAFT, Gala and Summit | `baft_gala_usd` |
+| `V-SP` / `V-PT` / `V-MD` | Sponsor / Partner / Media (internal) | BAFT and Summit | `sponsor`, `partner`, `media` |
+
+MYR and USD are separate codes only so our reporting can tell them apart — they
+open exactly the same events. `F19`, `F20` and `F21` from brief v2 are **not**
+accepted: the days moved, so an old code fails with `unknown_ticket` rather than
+silently admitting to the wrong day.
+
+`days` is optional. For `F12`–`F14` the day is implied by the code; for `F3`
+and the paid passes it defaults to all three Summit days. If you send `days`,
+we store what you send.
 
 ### Responses
 
 | Code | Body | Meaning |
 |---|---|---|
-| `201` | `{ registrationId, status: "confirmed", passIssued: true, emailSent: true }` | Registered; QR pass emailed. |
-| `201` | `{ status: "waitlisted", ... }` | Event at capacity; registrant emailed a waitlist notice, no pass. |
-| `200` | `{ ..., duplicate: true }` | Same `submission_id` seen before — nothing changed, no second email. Safe to retry on timeouts. |
-| `409` | `{ error: "duplicate_email" }` | This email is already registered for the event under a different submission. |
+| `201` | `{ registrationId, status, passIssued, emailSent, event, ticketType, environment, passes: [...] }` | Registered. `passes[]` has one entry per event the ticket opens; the flat fields mirror the first (primary) one. `environment` is `"production"` or `"test"`. |
+| `200` | `{ ..., duplicate: true }` | Same `submission_id` seen before — nothing changed, no email. Safe to retry on timeouts. |
+| `409` | `{ error: "duplicate_email", event }` | This email already holds a registration for the ticket's primary event under a **different** `submission_id`. |
+| `409` | `{ error: "event_full" }` | The ticket's primary event is at capacity. Should not occur for paid passes — tell us if it does. |
 | `400` | `{ error: "invalid_payload", message, field }` | Missing/invalid field — `message` says which. |
 | `401` | `{ error: "unauthorized" }` | Wrong or missing `X-API-Key`. |
-| `422` | `{ error: "ticket_not_enabled" | "unknown_ticket" | "event_not_found" | "registration_closed" }` | Ticket/event problem — the paid BAFT keys return `ticket_not_enabled` until that step is live. |
+| `422` | `{ error: "unknown_ticket" \| "ticket_not_enabled" \| "event_not_found" \| "registration_closed" }` | Ticket/event problem — `message` explains. |
+
+Each entry in `passes[]`:
+
+```json
+{
+  "event": { "code": "E3", "title": "Summit (NAIRW)" },
+  "registrationId": "…",
+  "status": "confirmed",
+  "passIssued": true,
+  "emailSent": true
+}
+```
+
+`status` is `confirmed` (QR issued and emailed), `pending_allocation` (Gala
+only — the pass follows once a table is assigned) or `waitlisted` (free passes
+only, if the Summit ever hits capacity). An entry may also carry `duplicate:
+true` (that event already had this submission) or `reused: true` (see below).
 
 If `emailSent` is `false` the registration still exists; our team resends from
 the admin panel. Nothing for your side to do.
+
+### Duplicates — what actually happens
+
+- The rule is **one registration per email per event**. Phone numbers are never
+  used for matching, so colleagues sharing an office line do not collide.
+- Same `submission_id` again → `200 duplicate: true`, nothing sent. Your backfill
+  and your retries both rely on this and it holds.
+- Different `submission_id`, same email, same **primary** event → `409
+  duplicate_email`. (Someone buying a second BAFT ticket with the same address.)
+- Different `submission_id`, same email, on a **secondary** event → the existing
+  registration is kept and reported as `reused: true`. This is the "took the
+  free Summit pass in September, employer bought them a BAFT ticket in October"
+  case: the BAFT pass is issued, and their Summit pass is the one they already
+  have. No refusal, no second Summit email.
+
+### Capacity and waitlisting
+
+Only the **free** Summit passes can ever be waitlisted, and only if the Summit
+reaches its cap. Paid passes are never waitlisted: you gate the sale, so we
+accept every paid registration you send.
 
 ### Retries
 

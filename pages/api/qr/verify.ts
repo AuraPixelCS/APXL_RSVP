@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { verifyQRToken, isQRValidForEvent } from "@/lib/qr";
+import { isDayRestricted, isEventDay, passDays } from "@/lib/eventDays";
+import { dateISOInZone, eventTimezone } from "@/lib/eventTime";
 import { formatAssignment } from "@/lib/seatLabel";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { scannerKeyValid } from "@/lib/apiAuth";
@@ -73,9 +75,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(401).json({ error: "This QR Code has been revoked (a newer one exists)" });
     }
 
+    // Single-day passes (F12/F13/F14): a hard refusal when the holder turns up
+    // on an event day their pass doesn't cover. Outside the event's days
+    // entirely (a pre-event scanner test) it stays a soft `timeValid` warning.
+    const todayISO = dateISOInZone(Date.now(), eventTimezone(event as any));
+    const validDays = passDays(event as any, rsvp.days).map((d) => d.date);
+    const dayValid = !isDayRestricted(event as any, rsvp.days) || validDays.includes(todayISO);
+    if (!dayValid && isEventDay(event as any, todayISO)) {
+      return res.status(400).json({
+        error: `Pass not valid today — admits on ${validDays.join(", ")} only`,
+        validDays,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       timeValid, // Let scanner show a warning if out-of-time but still valid signature
+      dayValid,
+      validDays,
       event: {
         title: event.title || event.name || "Event",
         date: event.date,

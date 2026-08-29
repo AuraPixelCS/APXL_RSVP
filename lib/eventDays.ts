@@ -82,3 +82,39 @@ export function formatEventDayRange(
     return event.date;
   }
 }
+
+/**
+ * Days a pass admits to. Single-day Summit tickets (F12/F13/F14) store their
+ * day on the RSVP as `days`; everything else reads as every day of the event.
+ * Anything on the RSVP that isn't an event day is ignored — a partner sending
+ * "19 Nov" against a 12–14 Nov event must not silently create a dead pass.
+ */
+export function passDays(event: DayLike, days: string[] | null | undefined): EventDay[] {
+  const all = eventDays(event);
+  if (!Array.isArray(days) || !days.length) return all;
+  const wanted = new Set(days.map((d) => String(d).trim().slice(0, 10)));
+  const subset = all.filter((d) => wanted.has(d.date));
+  return subset.length ? subset : all;
+}
+
+/** True when the pass covers fewer days than the event runs. */
+export function isDayRestricted(event: DayLike, days: string[] | null | undefined): boolean {
+  return passDays(event, days).length < eventDays(event).length;
+}
+
+/**
+ * Date line for a pass: the event's range when it covers every day, otherwise
+ * the specific day(s) — "Thu, 12 Nov 2026" or "Thu, 12 Nov · Fri, 13 Nov 2026".
+ */
+export function formatPassDays(event: DayLike, days: string[] | null | undefined): string {
+  if (!isDayRestricted(event, days)) return formatEventDayRange(event);
+  const subset = passDays(event, days);
+  try {
+    if (subset.length === 1) return format(parseISO(subset[0].date), "EEE, dd MMM yyyy");
+    return subset
+      .map((d, i) => format(parseISO(d.date), i === subset.length - 1 ? "EEE, dd MMM yyyy" : "EEE, dd MMM"))
+      .join(" · ");
+  } catch {
+    return subset.map((d) => d.date).join(", ");
+  }
+}

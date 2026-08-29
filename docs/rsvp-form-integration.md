@@ -37,10 +37,11 @@
 
 Events: **E1** BAFT Conference 17–18 Nov · **E2** Award Gala Dinner 18 Nov evening, seated with tables · **E3** Summit (NAIRW) 19–21 Nov, themed by day.
 
-> **Status (28 Aug 2026):** Register is built and on staging for the **complimentary Summit pass** — see
-> [`complimentary-pass-integration.md`](./complimentary-pass-integration.md) for the one-page version the
-> form team needs. The paid BAFT passes and the payment-confirmation sections below are on hold until the
-> payment step is agreed; v0.2 of this document will replace them with a single **Confirm** call from your backend.
+> **Status (30 Aug 2026):** superseded by [`complimentary-pass-integration.md`](./complimentary-pass-integration.md),
+> which is the live contract for **every** pass (free, paid and internal). Payment is confirmed on the
+> partner's side before they call Register, so the Confirm endpoint and the Stripe webhook below are **not
+> being built**. Duplicate handling below ("accepted but flagged") is also superseded: it is one registration
+> per email per event, `409` on the primary event, reuse on a secondary one.
 
 ## 4 · Endpoint 1 — Register
 

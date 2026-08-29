@@ -134,7 +134,12 @@ function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeat
         {/* Header */}
         <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--foreground)" }}>{rsvp.name}</h3>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: "var(--foreground)" }}>
+              {rsvp.name}
+              {rsvp.ticketType && (
+                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 600, letterSpacing: "0.04em", padding: "2px 6px", borderRadius: 4, background: "var(--accent-subtle)", color: "var(--accent)", border: "1px solid var(--border)", verticalAlign: "middle" }}>{rsvp.ticketType}</span>
+              )}
+            </h3>
             <p style={{ margin: "2px 0 0", fontSize: 12, color: "var(--muted)" }}>{rsvp.email}</p>
           </div>
           <button
@@ -404,7 +409,9 @@ export default function RSVPTable({
                             <td className={TD}><span className="text-sm text-white">{lastName}</span></td>
                           </>
                         ) : (
-                          <td className={TD}><span className="text-sm font-medium text-white">{rsvp.name}</span></td>
+                          <td className={TD}><span className="text-sm font-medium text-white">{rsvp.name}</span>{rsvp.ticketType && (
+                            <span className="ml-2 inline-block rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide align-middle" style={{ background: "var(--accent-subtle)", color: "var(--accent)", border: "1px solid var(--border)" }} title={`Ticket ${rsvp.ticketType}${rsvp.externalRef ? ` · ref ${rsvp.externalRef}` : ""}`}>{rsvp.ticketType}</span>
+                          )}</td>
                         )}
 
                         <td className={TD}>

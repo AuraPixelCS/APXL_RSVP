@@ -1,5 +1,26 @@
 # Changelog
 
+## [3.2.4] — 2026-08-30
+
+**Build Brief v3 applied — every ticket code registers through the partner endpoint.**
+
+### Added
+- Ticket rules carry `events[]`: P1 = E1 + E3, P2 = E1 + E2 + E3, F3/F12/F13/F14 = E3, V-SP/V-PT/V-MD = E1 + E3. `POST /api/integrations/register` writes one RSVP per event and emails one QR per venue; the response gains `passes[]`, `ticketLabel` and `environment`. Free-seating events (E1, E3) issue the pass immediately; the table-seated Gala records a pending RSVP whose pass follows allocation.
+- Paid codes `P1`, `P1-INT`, `P2`, `P2-INT` enabled — the partner confirms payment (Stripe or finance) before calling Register, so no Confirm endpoint or webhook exists.
+- `INTEGRATION_TEST_API_KEY`: same URL, second key; registrations sent with it land in `-TEST` twins of E1/E2/E3. `scripts/seed-events-iamairready.js --twins` creates them; `scripts/remove-test-events.js [--rsvps]` wipes or deletes them. Replaces `INTEGRATION_EVENT_SUFFIX`.
+- Single-day passes: `passDays` / `isDayRestricted` / `formatPassDays` (`lib/eventDays.ts`) and `dateISOInZone` (`lib/eventTime.ts`). The pass email and pass page show the pass's day; `POST /api/qr/verify` returns `400` when a day-restricted pass is scanned on another event day and reports `dayValid` / `validDays`.
+- RSVP table and guest card show the ticket code beside the name.
+- `scripts/test-pass-days.ts` (16 checks); integration suite grown to 53.
+
+### Changed
+- Events per Build Brief v3: Summit (E3) Thu 12 – Sat 14 Nov at The Campus Ampang; BAFT (E1) Tue 17 – Wed 18 Nov and Gala (E2) Wed 18 Nov at Marriott Petaling Jaya. E1 is free seating. Working caps E1 500 / E2 300 / E3 1000.
+- Free single-day codes F19/F20/F21 removed (renamed F12/F13/F14 in v3 — the days moved, so old codes fail `unknown_ticket` rather than remap).
+- Duplicate handling: `409 duplicate_email` only on the ticket's primary event; on a secondary event an existing record under another reference is kept and reported `reused: true`. A full secondary event never sinks a paid registration.
+- `docs/complimentary-pass-integration.md` rewritten as the contract for every pass; `docs/rsvp-form-integration.md` marked superseded (Confirm + Stripe webhook not built).
+
+### Removed
+- `scripts/seed-free-seating.js`, `scripts/remove-test-event.js` (folded into the seed and `remove-test-events.js`).
+
 ## [3.2.3] — 2026-08-28
 
 ### Changed

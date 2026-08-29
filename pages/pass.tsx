@@ -200,7 +200,7 @@ export const getServerSideProps: GetServerSideProps<PassProps> = async (ctx) => 
     const { adminDb } = await import("@/lib/firebaseAdmin");
     const QRCode = (await import("qrcode")).default;
     const { formatAssignment } = await import("@/lib/seatLabel");
-    const { formatEventDayRange } = await import("@/lib/eventDays");
+    const { formatPassDays } = await import("@/lib/eventDays");
 
     const eventSnap = await adminDb.collection("events").doc(payload.eventId).get();
     if (!eventSnap.exists) return invalid;
@@ -233,7 +233,7 @@ export const getServerSideProps: GetServerSideProps<PassProps> = async (ctx) => 
         token,
         name: rsvp.name ?? "",
         eventTitle: event.title ?? "",
-        eventDate: event.date ? formatEventDayRange(event) : "",
+        eventDate: event.date ? formatPassDays(event, rsvp.days) : "",
         eventTime: event.time ?? "",
         venue: event.venue ?? "",
         address: event.address ?? "",

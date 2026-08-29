@@ -15,7 +15,7 @@ import { buildSeatEmail } from "@/lib/emailTemplates";
 import { formatAssignment } from "@/lib/seatLabel";
 import { resolvePublicBase } from "@/lib/publicUrl";
 import { resolveEntryPassBanner } from "@/lib/emailBanners";
-import { formatEventDayRange, isMultiDay } from "@/lib/eventDays";
+import { formatPassDays, isDayRestricted, isMultiDay } from "@/lib/eventDays";
 import { resolveEventSender } from "@/lib/eventSender";
 import { deliveryTags } from "@/lib/emailDelivery";
 
@@ -64,7 +64,9 @@ export async function buildEntryPassMessage(
   const passUrl = `${publicBase}/pass?t=${encodeURIComponent(rsvp.qrToken)}`;
 
   const bannerUrl = resolveEntryPassBanner(event, publicBase);
-  const dateLabel = formatEventDayRange(event);
+  // Single-day Summit passes (F12/F13/F14) show and admit to their day only.
+  const dayRestricted = isDayRestricted(event, rsvp.days);
+  const dateLabel = formatPassDays(event, rsvp.days);
 
   // Optional per-event content — used generically when present.
   let dressCode: string | undefined = event.dressCode;
@@ -129,9 +131,11 @@ export async function buildEntryPassMessage(
     headerTitle: event.customEmailTitle,
     showTitleOnBanner: !!event.showEventTitleOnBanner,
     confirmLabel: freeSeating ? "Registration Confirmed" : undefined,
-    qrCaption: isMultiDay(event)
-      ? `Valid for every day of ${displayTitle} (${dateLabel}). Do not share this QR code.`
-      : undefined,
+    qrCaption: dayRestricted
+      ? `Valid on ${dateLabel} only. Do not share this QR code.`
+      : isMultiDay(event)
+        ? `Valid for every day of ${displayTitle} (${dateLabel}). Do not share this QR code.`
+        : undefined,
     customBody,
     passUrl,
     // No qrDataUrl — the cid:qr_code PNG attachment is the real inline QR.

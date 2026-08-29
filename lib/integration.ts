@@ -20,57 +20,86 @@ export function apiKeyMatches(provided: unknown, expected: string | undefined): 
   return crypto.timingSafeEqual(a, b);
 }
 
-// ─── Ticket → event ─────────────────────────────────────────────────────────
+// ─── Keys: production vs test ───────────────────────────────────────────────
 
-export interface TicketRule {
-  /** Short event code the ticket registers into ("E3"). */
-  event: string;
-  /** Our canonical code for reporting. */
-  code: string;
-  /** false → recognised but not wired yet (paid passes wait on the Stripe call). */
-  enabled: boolean;
-}
+export type KeyKind = "production" | "test";
 
 /**
- * Every spelling a partner might send, lower-cased. The complimentary Summit
- * pass is the only enabled ticket in this phase; BAFT passes are listed so
- * they fail with a clear "not enabled" rather than "unknown".
+ * Two keys, one URL. The production key writes into the real events; the test
+ * key writes into their "-TEST" twins (same Firestore, titles suffixed
+ * "— TEST"). The partner's QA/UAT environments use the test key, so nothing
+ * they do while testing can reach a real guest list — and nobody has to filter
+ * by submission-id prefix.
+ */
+export function resolveKeyKind(
+  provided: unknown,
+  keys: { production?: string; test?: string },
+): KeyKind | null {
+  if (apiKeyMatches(provided, keys.production)) return "production";
+  if (apiKeyMatches(provided, keys.test)) return "test";
+  return null;
+}
+
+export const TEST_EVENT_SUFFIX = "-TEST";
+
+// ─── Ticket → events ────────────────────────────────────────────────────────
+
+export interface TicketRule {
+  /** Our canonical code (Build Brief v3 §ticket types). */
+  code: string;
+  /** Short codes of every event the ticket opens, primary first. */
+  events: string[];
+  /** false → recognised but not open through this endpoint. */
+  enabled: boolean;
+  /** Single-day Summit codes: the day(s) the pass admits to, ISO dates. */
+  days?: string[];
+  /** Human label for responses and the admin panel. */
+  label: string;
+}
+
+const SUMMIT_DAYS = ["2026-11-12", "2026-11-13", "2026-11-14"];
+
+const P1: TicketRule   = { code: "P1",     events: ["E1", "E3"],       enabled: true, label: "BAFT delegate + 3 days Summit" };
+const P1I: TicketRule  = { code: "P1-INT", events: ["E1", "E3"],       enabled: true, label: "BAFT delegate + 3 days Summit (USD)" };
+const P2: TicketRule   = { code: "P2",     events: ["E1", "E2", "E3"], enabled: true, label: "BAFT delegate + Gala + 3 days Summit" };
+const P2I: TicketRule  = { code: "P2-INT", events: ["E1", "E2", "E3"], enabled: true, label: "BAFT delegate + Gala + 3 days Summit (USD)" };
+const F3: TicketRule   = { code: "F3",     events: ["E3"],             enabled: true, label: "Free — 3 days Summit" };
+const F12: TicketRule  = { code: "F12",    events: ["E3"],             enabled: true, days: [SUMMIT_DAYS[0]], label: "Free — 12 Nov only, SME & Public" };
+const F13: TicketRule  = { code: "F13",    events: ["E3"],             enabled: true, days: [SUMMIT_DAYS[1]], label: "Free — 13 Nov only, Workforce & Public" };
+const F14: TicketRule  = { code: "F14",    events: ["E3"],             enabled: true, days: [SUMMIT_DAYS[2]], label: "Free — 14 Nov only, Uni & Youth / Public" };
+// Internal passes open all five days; whether they include the Gala is brief
+// open question 05 — E2 is left out until that is answered.
+const VSP: TicketRule  = { code: "V-SP",   events: ["E1", "E3"],       enabled: true, label: "Sponsor (internal)" };
+const VPT: TicketRule  = { code: "V-PT",   events: ["E1", "E3"],       enabled: true, label: "Partner (internal)" };
+const VMD: TicketRule  = { code: "V-MD",   events: ["E1", "E3"],       enabled: true, label: "Media (internal)" };
+
+/**
+ * Every spelling a partner might send, lower-cased. The brief's own codes are
+ * canonical; the partner's product ids are aliases so their form needs no
+ * translation table. F19/F20/F21 (brief v2) are gone on purpose — v3 renamed
+ * them because the days moved, so an old code must fail loudly, not remap.
  */
 export const TICKET_RULES: Record<string, TicketRule> = {
-  // Free Summit (NAIRW) pass — the client's #pass-complimentary form.
-  "complimentary":       { event: "E3", code: "F3", enabled: true },
-  "pass-complimentary":  { event: "E3", code: "F3", enabled: true },
-  "complimentary-pass":  { event: "E3", code: "F3", enabled: true },
-  "nairw-complimentary": { event: "E3", code: "F3", enabled: true },
-  "nairw_complimentary": { event: "E3", code: "F3", enabled: true },
-  "free":                { event: "E3", code: "F3", enabled: true },
-  "f3":                  { event: "E3", code: "F3", enabled: true },
-  "f19":                 { event: "E3", code: "F19", enabled: true },
-  "f20":                 { event: "E3", code: "F20", enabled: true },
-  "f21":                 { event: "E3", code: "F21", enabled: true },
-  // Paid BAFT passes — parked until the Stripe call settles the Confirm step.
-  "standard-delegate":   { event: "E1", code: "P1", enabled: false },
-  "baft_conference_myr": { event: "E1", code: "P1", enabled: false },
-  "baft_conference_usd": { event: "E1", code: "P1-INT", enabled: false },
-  "p1":                  { event: "E1", code: "P1", enabled: false },
-  "p1-int":              { event: "E1", code: "P1-INT", enabled: false },
-  "all-inclusive":       { event: "E1", code: "P2", enabled: false },
-  "baft_gala_myr":       { event: "E1", code: "P2", enabled: false },
-  "baft_gala_usd":       { event: "E1", code: "P2-INT", enabled: false },
-  "p2":                  { event: "E1", code: "P2", enabled: false },
-  "p2-int":              { event: "E1", code: "P2-INT", enabled: false },
+  // Paid — the partner calls us only after payment is confirmed on their side.
+  "p1": P1, "standard-delegate": P1, "standard_delegate": P1, "baft_conference_myr": P1, "baft_standard_myr": P1,
+  "p1-int": P1I, "p1_int": P1I, "standard-delegate-int": P1I, "baft_conference_usd": P1I, "baft_standard_usd": P1I,
+  "p2": P2, "all-inclusive": P2, "all_inclusive": P2, "baft_gala_myr": P2, "baft_all_inclusive_myr": P2,
+  "p2-int": P2I, "p2_int": P2I, "all-inclusive-int": P2I, "baft_gala_usd": P2I, "baft_all_inclusive_usd": P2I,
+  // Free Summit — the partner's #pass-complimentary form.
+  "f3": F3, "complimentary": F3, "pass-complimentary": F3, "complimentary-pass": F3,
+  "nairw-complimentary": F3, "nairw_complimentary": F3, "free": F3,
+  "f12": F12, "f13": F13, "f14": F14,
+  // Internal.
+  "v-sp": VSP, "v_sp": VSP, "sponsor": VSP,
+  "v-pt": VPT, "v_pt": VPT, "partner": VPT,
+  "v-md": VMD, "v_md": VMD, "media": VMD,
 };
 
 export function ticketRule(ticketType: string): TicketRule | null {
   return TICKET_RULES[String(ticketType ?? "").trim().toLowerCase()] ?? null;
 }
 
-/**
- * Event code the registration lands in. `INTEGRATION_EVENT_SUFFIX` lets a
- * staging deployment that shares the production Firestore write into a
- * throwaway twin ("E3" + "-TEST" → "E3-TEST") while the partner keeps sending
- * the real code.
- */
+/** Event code a registration lands in: the real event, or its test twin. */
 export function targetEventCode(code: string, suffix: string | undefined): string {
   const s = (suffix ?? "").trim();
   return s ? `${code}${s}` : code;

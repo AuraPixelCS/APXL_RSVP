@@ -182,3 +182,12 @@ export function timezoneShortLabel(timeZone: string, at: number = Date.now()): s
   const m = abs % 60;
   return `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`;
 }
+
+/** Calendar date ("YYYY-MM-DD") of an instant as seen in `timeZone`. */
+export function dateISOInZone(utcMs: number, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
