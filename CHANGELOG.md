@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.2.5] — 2026-08-30
+
+### Changed
+- `sendResendEmail` retries up to 4 times with backoff on a Resend rate-limit response, so a burst of partner registrations (their backfill) no longer leaves passes unsent.
+- Event seed sets the sender identity on every November event and twin (`PEOPLElogy Events <events@aurapixel.live>`) — `RESEND_FROM` still carries the anniversary display name.
+
 ## [3.2.4] — 2026-08-30
 
 **Build Brief v3 applied — every ticket code registers through the partner endpoint.**

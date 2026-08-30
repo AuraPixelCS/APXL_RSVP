@@ -106,6 +106,11 @@ const EVENTS = [
 // Fields every one of the three shares.
 const COMMON = {
   timezone: TZ,
+  // Sender identity on every pass email. RESEND_FROM still carries the old
+  // "PEOPLElogy Anniversary RSVP" display name, which is wrong for November.
+  // The address must stay on the Resend-verified aurapixel.live domain.
+  senderName: 'PEOPLElogy Events',
+  senderEmail: 'events@aurapixel.live',
   // Registration is the client's form calling our endpoint (brief p5), not this
   // app's public page — so nothing here should accept a walk-up RSVP yet.
   isActive: false,

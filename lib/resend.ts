@@ -59,9 +59,25 @@ export interface ResendMessage {
 }
 
 /**
+ * Resend's API allows a small number of requests per second. The partner's
+ * backfill (one Register call per delegate, each sending a pass) can exceed
+ * that, and a 429 there would leave a registration with no pass until an admin
+ * resends. A short retry absorbs the burst instead.
+ */
+const RATE_LIMIT_ATTEMPTS = 4;
+const RATE_LIMIT_BACKOFF_MS = 700;
+
+function isRateLimited(message: string | undefined): boolean {
+  return /rate[_ ]limit|too many requests|\b429\b/i.test(message ?? "");
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
  * Send a SINGLE email via Resend. Used for transactional one-offs (a single
  * entry-pass notification, an RSVP confirmation). Returns whether Resend
- * accepted it; delivery happens asynchronously on Resend's side.
+ * accepted it; delivery happens asynchronously on Resend's side. Retries on a
+ * rate-limit response with a short backoff.
  */
 export async function sendResendEmail(
   msg: ResendMessage
@@ -69,7 +85,17 @@ export async function sendResendEmail(
   if (!process.env.RESEND_API_KEY) {
     return { success: false, error: "RESEND_API_KEY is not configured" };
   }
+  let result = await sendResendEmailOnce(msg);
+  for (let attempt = 1; attempt < RATE_LIMIT_ATTEMPTS && !result.success && isRateLimited(result.error); attempt++) {
+    await sleep(RATE_LIMIT_BACKOFF_MS * attempt);
+    result = await sendResendEmailOnce(msg);
+  }
+  return result;
+}
 
+async function sendResendEmailOnce(
+  msg: ResendMessage
+): Promise<{ success: boolean; error?: string; id?: string }> {
   const rt = msg.replyTo ?? replyTo();
 
   try {
