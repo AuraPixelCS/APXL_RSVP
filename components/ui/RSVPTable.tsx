@@ -441,7 +441,7 @@ export default function RSVPTable({
                             </span>
                           )}
                         </td>
-                        <td className={TD}><span className="text-xs font-mono" style={{ color: "var(--muted)" }}>{rsvp.phone}</span></td>
+                        <td className={TD}><span className="text-xs font-mono" style={{ color: "var(--muted)" }}>{rsvp.phone || "—"}</span></td>
 
                         <td className={`${TD} hidden lg:table-cell`} style={{ fontSize: 12, color: "var(--muted)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {rsvp.partOf || "—"}

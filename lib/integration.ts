@@ -191,7 +191,10 @@ export function normalizeRegisterPayload(body: any): NormalizeResult {
   if (!name) return { ok: false, error: "name is required", field: "name" };
   if (!email) return { ok: false, error: "email is required", field: "email" };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "email is not a valid address", field: "email" };
-  if (!phone) return { ok: false, error: "phone is required", field: "phone" };
+  // Phone is OPTIONAL here on purpose (2026-08-30): the partner's delegate
+  // form doesn't always have one — a company booking seats gives names and
+  // emails weeks ahead. Requiring it made their code drop those delegates,
+  // who then silently got no pass. Nothing in this path uses the number.
 
   const company = str(pick(a, ["company", "organisation", "organization", "company_name", "companyName"]) ?? pick(body, ["company", "organisation", "organization", "company_name", "companyName"]));
   const jobTitle = str(pick(a, ["jobTitle", "job_title", "designation", "position"]) ?? pick(body, ["jobTitle", "job_title", "designation", "position"]));
@@ -202,7 +205,7 @@ export function normalizeRegisterPayload(body: any): NormalizeResult {
 
   const value: NormalizedRegistration = {
     externalRef, ticketType, event,
-    attendee: { name, email: email.toLowerCase(), phone, company, jobTitle, industry },
+    attendee: { name, email: email.toLowerCase(), phone: phone ?? "", company, jobTitle, industry },
     days, consent, message,
   };
 

@@ -820,7 +820,7 @@ const NotificationsPage: NextPageWithLayout = () => {
                         <td className="px-4 py-3 text-xs" style={{ color: "var(--muted)" }}>
                           <span className="block truncate" style={{ maxWidth: 260 }}>{rsvp.email}</span>
                         </td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: "var(--muted)", fontFamily: "'Fira Code', monospace" }}>{rsvp.phone}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: "var(--muted)", fontFamily: "'Fira Code', monospace" }}>{rsvp.phone || "—"}</td>
                         <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: "var(--accent)" }}>
                           {isFree ? (rsvp.ticketType ?? "Free") : (formatAssignment(rsvp.seatNumber, event)?.short ?? "—")}
                         </td>

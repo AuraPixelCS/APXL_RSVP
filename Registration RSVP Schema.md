@@ -32,7 +32,7 @@ Use the test key from your local, QA and UAT environments. Nothing sent with it
 can reach a real guest list, so no `submission_id` prefix filtering is needed on
 our side. We can wipe the test twins on request.
 
-Both keys reach you separately from this document.
+Both keys are at the bottom of this document (section "Keys").
 
 ## Register
 
@@ -60,9 +60,8 @@ Content-Type: application/json
 ```
 
 Required: `submission_id` (any stable reference of yours — this is what makes
-retries safe), `name`, `email`. Everything else — `phone` included — is
-optional and stored as sent: send it when you have it, leave it out when you
-don't. `pass_id` defaults to the free Summit pass when omitted.
+retries safe), `name`, `email`, `phone`. Everything else is optional and stored
+as sent. `pass_id` defaults to the free Summit pass when omitted.
 
 ### `pass_id` — the ticket codes
 
@@ -146,3 +145,19 @@ accept every paid registration you send.
 
 Call again with the same `submission_id` on any network error or `5xx`. You
 will get `200 duplicate: true` if the first call had actually gone through.
+
+## Keys
+
+Please keep these out of shared channels and repos. Tell us if either is ever exposed and we will rotate it the same day.
+
+**Production key** (production only):
+
+```
+8edc17b885260435de5f068c9b64d908fe6f393c4ca200cef604c146bdaf250b
+```
+
+**Test key** (local / QA / UAT; registers into the test twin events):
+
+```
+0b4b23378af7b7b406e72d8aeeb3b623e5e62f95c6e9296346d9b817c120ab5c
+```

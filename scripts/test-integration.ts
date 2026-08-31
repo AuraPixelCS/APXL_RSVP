@@ -117,7 +117,7 @@ check("missing name rejected", !noName.ok && noName.field === "name");
 const badEmail = normalizeRegisterPayload({ externalRef: "1", name: "A", email: "not-an-email", phone: "1" });
 check("bad email rejected", !badEmail.ok && badEmail.field === "email");
 const noPhone = normalizeRegisterPayload({ externalRef: "1", name: "A", email: "a@b.co" });
-check("missing phone rejected", !noPhone.ok && noPhone.field === "phone");
+check("missing phone accepted (delegate forms omit it)", noPhone.ok && (noPhone as any).value.attendee.phone === "");
 const tooLong = normalizeRegisterPayload({ externalRef: "1", name: "A".repeat(121), email: "a@b.co", phone: "1" });
 check("over-long name rejected", !tooLong.ok && tooLong.field === "name");
 check("non-object body rejected", !normalizeRegisterPayload("hello").ok);

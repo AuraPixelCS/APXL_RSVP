@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.6] — 2026-08-30
+
+### Changed
+- `phone` is now optional on `POST /api/integrations/register` — the partner's delegate form doesn't always collect one, and requiring it made their backend drop those delegates silently. Stored as an empty string; admin surfaces show "—". The public RSVP form still requires it (WhatsApp path).
+
 ## [3.2.5] — 2026-08-30
 
 ### Changed
