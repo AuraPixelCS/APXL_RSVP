@@ -31,7 +31,7 @@ function computeStats(rsvps: RSVP[]): EventStats {
   // A waitlisted guest has attending === true but holds no place, so counting
   // them as "attending" would overstate the room by exactly the number of
   // people who couldn't get in.
-  const holding = rsvps.filter((r) => r.attending && r.status !== "waitlisted" && r.status !== "not_attending");
+  const holding = rsvps.filter((r) => r.attending && r.status !== "waitlisted" && r.status !== "not_attending" && r.status !== "cancelled" && r.status !== "unpaid");
   return {
     total: rsvps.length,
     attending: holding.length,
@@ -78,6 +78,16 @@ function FormsIcon() {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" /><line x1="3" y1="15" x2="21" y2="15" />
       <line x1="9" y1="9" x2="9" y2="21" />
+    </svg>
+  );
+}
+
+function SheetIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+      <line x1="9" y1="3" x2="9" y2="21" /><line x1="15" y1="9" x2="15" y2="21" />
     </svg>
   );
 }
@@ -705,6 +715,7 @@ const EventDetailPage: NextPageWithLayout = () => {
   const [bulkAllocating, setBulkAllocating] = useState(false);
   const [deallocatingId, setDeallocatingId] = useState<string | null>(null);
   const [deletingRsvpId, setDeletingRsvpId] = useState<string | null>(null);
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
   const [showSeatMap, setShowSeatMap] = useState(false);
   const [showImportCsvModal, setShowImportCsvModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -957,6 +968,64 @@ const EventDetailPage: NextPageWithLayout = () => {
     }
   };
 
+  // Corporate billing / HRD claim: payment verified by hand → activate the
+  // ticket. The server confirms EVERY event on the ticket in one call (a P2
+  // has records on E1 + E2 + E3), so warn accordingly before firing.
+  const handleConfirmPayment = useCallback(
+    async (rsvpId: string) => {
+      if (!event?.id) return;
+      const rsvp = rsvps.find((r) => r.id === rsvpId);
+      const ok = await toast.confirm({
+        title: `Confirm payment for ${rsvp?.name ?? "this guest"}?`,
+        message:
+          "This activates their registration on every event of their ticket and emails the QR pass(es) immediately. Only confirm once the invoice or HRD claim is actually settled.",
+        confirmLabel: "Confirm Payment",
+      });
+      if (!ok) return;
+      setConfirmingPaymentId(rsvpId);
+      try {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/confirm-payment`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({ eventId: event.id, rsvpId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error("Could not confirm payment", data.error || undefined);
+        } else {
+          toast.success("Payment confirmed", data.message || "Passes are on their way.");
+        }
+      } catch {
+        toast.error("Network error", "Could not reach the server.");
+      } finally {
+        setConfirmingPaymentId(null);
+      }
+    },
+    [event, rsvps, toast]
+  );
+
+  // "Open Google Sheet": push a fresh sync first so what opens is current.
+  // The window must open synchronously (popup blockers), so open it blank and
+  // point it at the sheet once the sync answers.
+  const sheetId = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID;
+  const handleOpenSheet = useCallback(async () => {
+    if (!sheetId) return;
+    const url = `https://docs.google.com/spreadsheets/d/${sheetId}`;
+    const win = window.open("", "_blank");
+    try {
+      const headers = await getAuthHeaders();
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/admin/sheets-sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+      });
+    } catch {
+      // Sheet still opens — it just shows the last synced state.
+    }
+    if (win) win.location.href = url;
+    else window.open(url, "_blank");
+  }, [sheetId]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -1032,6 +1101,12 @@ const EventDetailPage: NextPageWithLayout = () => {
       icon: <FormsIcon />,
       onClick: () => setShowGFormsModal(true),
     },
+    {
+      label: "Open Google Sheet",
+      icon: <SheetIcon />,
+      onClick: handleOpenSheet,
+      hidden: !sheetId,
+    },
   ];
 
   const heroActions: HeroActions = {
@@ -1085,6 +1160,8 @@ const EventDetailPage: NextPageWithLayout = () => {
         onDeleteRsvp={isAdmin ? handleDeleteRsvp : undefined}
         deletingRsvpId={deletingRsvpId}
         onEditRsvp={isAdmin ? setEditGuest : undefined}
+        onConfirmPayment={isAdmin ? handleConfirmPayment : undefined}
+        confirmingPaymentId={confirmingPaymentId}
         assignmentMode={event?.assignmentMode}
         seatingConfig={event?.seatingConfig}
         totalSeats={event?.totalSeats}

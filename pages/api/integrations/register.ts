@@ -1,10 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
-import { isRsvpDeadlinePassed } from "@/lib/eventTime";
+import { isRsvpDeadlinePassed, eventTimezone } from "@/lib/eventTime";
 import { publicBaseFor } from "@/lib/publicUrl";
 import { rsvpDocId } from "@/lib/rsvpIdentity";
 import { createRsvp, sendIntakeEmail, IntakeError } from "@/lib/intake";
 import { sendEntryPass } from "@/lib/entryPass";
+import { generateQRPayload, signQRPayload } from "@/lib/qr";
+import { syncSheetForEvents } from "@/lib/googleSheets";
 import {
   normalizeRegisterPayload,
   partitionTransfer,
@@ -50,7 +52,7 @@ type EventDoc = {
   [key: string]: any;
 };
 
-type PublicStatus = "confirmed" | "waitlisted" | "pending_allocation" | "not_attending";
+type PublicStatus = "confirmed" | "waitlisted" | "pending_allocation" | "not_attending" | "awaiting_payment";
 
 interface PassResult {
   event: { code: string | null; title: string | undefined };
@@ -77,6 +79,7 @@ function publicStatus(status: string): PublicStatus {
   if (status === "allocated" || status === "checked_in") return "confirmed";
   if (status === "waitlisted") return "waitlisted";
   if (status === "not_attending") return "not_attending";
+  if (status === "unpaid") return "awaiting_payment";
   return "pending_allocation";
 }
 
@@ -201,6 +204,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (existingSnap.exists) {
         const existing = existingSnap.data()!;
 
+        // An unpaid record re-sent as PAID is the partner confirming payment
+        // (invoice settled / HRD claim approved): issue everything the
+        // original registration withheld. Free seating mints the pass here;
+        // the seated Gala moves to pending and waits for table allocation.
+        if (existing.status === "unpaid" && !reg.paymentPending) {
+          const freeSeating = event.assignmentMode === "free";
+          const now = new Date().toISOString();
+          const qrToken = existing.qrToken ?? (freeSeating
+            ? signQRPayload(generateQRPayload(existingSnap.id, event.id, null, event.date, event.time, eventTimezone(event)))
+            : null);
+          const confirmed: Record<string, any> = {
+            ...existing,
+            externalRef: reg.externalRef,
+            ticketType: rule.code,
+            paymentMethod: reg.paymentMethod ?? existing.paymentMethod ?? null,
+            paymentConfirmedAt: now,
+            paymentConfirmedBy: { uid: "partner", displayName: "Partner (sent as paid)" },
+            status: freeSeating ? "allocated" : "pending",
+            qrToken,
+            qrIssuedAt: qrToken ? existing.qrIssuedAt ?? now : null,
+            allocatedBy: freeSeating ? { uid: "system", displayName: "Free seating" } : null,
+            updatedAt: now,
+          };
+          await rsvpsRef.doc(existingSnap.id).update(confirmed);
+          const rsvpForEmail = { ...confirmed, id: existingSnap.id, eventId: event.id };
+          let email: { sent: boolean; error?: string } = { sent: false };
+          if (confirmed.status === "allocated" && confirmed.qrToken) {
+            email = await sendEntryPass(rsvpForEmail, event, origin);
+          } else {
+            email = await sendIntakeEmail(rsvpForEmail, event, origin, "confirm");
+          }
+          passes.push({
+            event: { code: event.code ?? null, title: event.title },
+            registrationId: existingSnap.id,
+            status: publicStatus(confirmed.status),
+            passIssued: !!confirmed.qrToken,
+            emailSent: email.sent,
+            ...(email.error ? { emailError: email.error } : {}),
+          });
+          continue;
+        }
+
         // A cancelled record at this email is a re-registration, not a
         // duplicate: bring it back to life under the incoming reference.
         if (existing.status === "cancelled") {
@@ -276,6 +321,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ticketType: rule.code,
           days,
           consent: reg.consent,
+          paymentPending: reg.paymentPending,
+          paymentMethod: reg.paymentMethod,
         });
       } catch (e) {
         if (e instanceof IntakeError && e.code === "duplicate") {
@@ -327,6 +374,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ...(email.error ? { emailError: email.error } : {}),
         ...(reg.transfer ? { transferred: true } : {}),
       });
+    }
+
+    // Mirror the change into the client's Google Sheet (best-effort — a sheet
+    // hiccup must never fail a registration). Test-twin traffic stays out.
+    if (keyKind === "production") {
+      await syncSheetForEvents(events.map((e) => e.code).filter((c): c is string => !!c));
     }
 
     const head = passes[0];

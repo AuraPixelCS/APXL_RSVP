@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { adminDb } from "@/lib/firebaseAdmin";
 import { resolveKeyKind, TEST_EVENT_SUFFIX } from "@/lib/integration";
+import { syncSheetForEvents } from "@/lib/googleSheets";
 
 /**
  * POST /api/integrations/cancel — void a registration by the partner's own
@@ -75,6 +76,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!cancelled.length && !alreadyCancelled.length) {
       return res.status(404).json({ error: "not_found", message: `No registration under "${externalRef}"` });
+    }
+    if (keyKind === "production" && cancelled.length) {
+      await syncSheetForEvents(cancelled.map((c) => c.event.code).filter(Boolean));
     }
     return res.status(200).json({
       externalRef,

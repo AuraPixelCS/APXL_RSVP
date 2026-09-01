@@ -118,6 +118,7 @@ check("string entries still work (back-compat)", planAutoAllocation(
 ]);
 
 check("cancelled RSVP holds no seat", seatsHeldBy({ status: "cancelled", attending: true, plusOne: true }), 0);
+check("unpaid RSVP holds no seat", seatsHeldBy({ status: "unpaid", attending: true, plusOne: true }), 0);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

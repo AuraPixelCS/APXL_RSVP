@@ -13,7 +13,11 @@ export type RSVPStatus =
   | "waitlisted"
   // Voided by the partner (delegate transfer or drop-out). The QR stops
   // scanning; the record stays for the paper trail.
-  | "cancelled";
+  | "cancelled"
+  // Registered through the partner's form on corporate billing / HRD Corp
+  // claim — payment not yet confirmed. Holds no seat, gets no email and no
+  // QR until an admin confirms payment (or the partner re-sends it as paid).
+  | "unpaid";
 
 /** Per-recipient delivery state, driven by Resend webhooks (Phase 3). */
 export type EmailDeliveryStatus =
@@ -101,6 +105,17 @@ export interface RSVP {
   days?: string[] | null;
   /** PDPA consent as captured on the partner's form. */
   consent?: boolean | null;
+
+  // ── Payment (Phase 5 — corporate billing / HRD Corp claims) ───────────────
+  // Self-funded registrations arrive only after Stripe settles, so they never
+  // carry a payment state. Invoice/claim registrations arrive as "unpaid" and
+  // are confirmed by an admin (or by the partner re-sending them as paid).
+  /** How the delegate said they'd pay: "self_funded" | "corporate_billing" | "hrd_claim" | raw value. */
+  paymentMethod?: string | null;
+  /** When payment was confirmed and the passes issued. */
+  paymentConfirmedAt?: string | null;
+  /** Who confirmed it: an admin (uid + name) or "partner" (re-sent as paid). */
+  paymentConfirmedBy?: { uid: string; displayName: string } | null;
 }
 
 export type AssignmentMode = "seat" | "table" | "free";

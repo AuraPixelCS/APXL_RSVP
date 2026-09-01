@@ -73,6 +73,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           : "Pass cancelled",
       });
     }
+    if (rsvp.status === "unpaid") {
+      // Shouldn't be reachable (no QR is minted while unpaid) — but a pass
+      // must never admit someone whose payment was rolled back after minting.
+      return res.status(400).json({ error: "Payment not confirmed — this registration is awaiting payment" });
+    }
     if (rsvp.status !== "attending" && rsvp.status !== "allocated") {
       return res.status(400).json({ error: `RSVP is marked as ${rsvp.status || 'not attending'}` });
     }

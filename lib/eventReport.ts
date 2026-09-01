@@ -923,6 +923,7 @@ const STATUS_LABEL: Record<RSVP["status"], string> = {
   waitlisted: "Waitlisted",
   not_attending: "Declined",
   cancelled: "Cancelled",
+  unpaid: "Awaiting Payment",
 };
 
 const STATUS_COLOR: Record<RSVP["status"], RGB> = {
@@ -932,6 +933,7 @@ const STATUS_COLOR: Record<RSVP["status"], RGB> = {
   waitlisted: PURPLE,
   not_attending: RED,
   cancelled: GRAY,
+  unpaid: AMBER,
 };
 
 export async function buildEventReportPdf(

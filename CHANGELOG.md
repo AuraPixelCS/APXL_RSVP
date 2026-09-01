@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.3.0] — 2026-09-01
+
+### Added
+- **Unpaid registration capture** for corporate billing / HRD Corp (SBL-KHAS) claims: Register accepts `payment_status: "unpaid"` (+ optional `payment_method`) and stores the delegate as a new **Awaiting Payment** status — no email, no QR, no seat held. Status chip, table filter, info-popup payment rows, and PDF report cover the new status; the scanner refuses unpaid passes.
+- **Confirm Payment** admin action (`POST /api/admin/confirm-payment`): one click activates every event on the delegate's ticket — free-seating events mint + email the QR pass, the seated Gala moves to pending for table allocation. Records who confirmed and when.
+- **Partner auto-confirm**: re-sending an unpaid registration as paid (same `submission_id`) activates it without admin action.
+- **Google Sheet mirror** (`lib/googleSheets.ts`, opt-in via `GOOGLE_SHEETS_SERVICE_ACCOUNT` / `GOOGLE_SHEET_ID` / `NEXT_PUBLIC_GOOGLE_SHEET_ID`): one spreadsheet with a tab per real event, auto-rewritten on every integration register/cancel/payment-confirm; test-twin traffic never syncs. New "Open Google Sheet" ⋯-menu item syncs then opens; `POST /api/admin/sheets-sync` behind it. Setup guide: `docs/google-sheet-setup.md`.
+- Integration contract doc gains a "Corporate billing & HRD Corp claims" section; 14 new test checks (payment parsing + unpaid seat accounting).
+
+### Fixed
+- Event stats no longer count cancelled guests as attending.
+
 ## [3.2.13] — 2026-09-01
 
 ### Changed

@@ -35,6 +35,11 @@ const CONFIG: Record<RSVPStatus, { label: string; bg: string; color: string }> =
     bg: "rgba(239,68,68,0.12)",
     color: "#ef4444",
   },
+  unpaid: {
+    label: "Awaiting Payment",
+    bg: "rgba(249,115,22,0.14)",
+    color: "#f97316",
+  },
 };
 
 export default function StatusChip({ status }: StatusChipProps) {

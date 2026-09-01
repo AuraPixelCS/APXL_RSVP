@@ -142,6 +142,47 @@ Only the **free** Summit passes can ever be waitlisted, and only if the Summit
 reaches its cap. Paid passes are never waitlisted: you gate the sale, so we
 accept every paid registration you send.
 
+### Corporate billing & HRD Corp claims — unpaid capture
+
+For **Self-funded (pay now)** nothing changes: call Register after Stripe
+settles, exactly as today.
+
+For **Corporate billing (invoice)** and **SBL-KHAS claim (HRD Corp)**, don't
+hold the registration on your side while finance processes it — send it to us
+**at form-submission time** with one extra field:
+
+```json
+{ "submission_id": "BD-000101", "pass_id": "P2",
+  "name": "Delegate Name", "email": "delegate@company.com",
+  "payment_status": "unpaid",
+  "payment_method": "corporate_billing" }
+```
+
+- `payment_status`: `"unpaid"` (also accepted: `pending`, `awaiting_payment`,
+  `invoiced`) or `paid: false`. **Without this field a Register call still
+  means "payment is done"** — the original contract is unchanged.
+- `payment_method` (optional, informational): `corporate_billing`,
+  `hrd_claim`, or `self_funded` — your own spellings are folded onto these.
+
+What we do with it: the delegate is **captured but not activated**. They
+appear in the organiser's panel and guest sheet marked **Awaiting Payment**;
+no email is sent, no QR is issued, no seat is held. The response answers
+`201` with `status: "awaiting_payment"` and `passIssued: false` on every
+event of the ticket.
+
+When payment is confirmed, either side can activate it — whichever comes
+first wins, and the other becomes a harmless duplicate:
+
+1. **You**: call Register again with the same `submission_id` and
+   `payment_status: "paid"` (or simply omit the payment fields). We issue
+   the passes and email them, exactly like a normal paid registration.
+2. **The organiser**: presses **Confirm Payment** in the admin panel, which
+   does the same across every event of the ticket.
+
+An unpaid registration re-sent while still unpaid answers `duplicate: true`
+and changes nothing. Cancel works on unpaid registrations too, if the invoice
+falls through.
+
 ### Delegate transfers
 
 Your terms allow a registration to move to another person from the same

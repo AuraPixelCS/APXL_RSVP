@@ -126,6 +126,45 @@ export interface NormalizedRegistration {
   /** Delegate transfer: void the records under this externalRef held by a
    *  DIFFERENT email, and issue the passes to this (new) person instead. */
   transfer: boolean;
+  /** Payment not yet confirmed (corporate billing / HRD claim): capture the
+   *  registration but send nothing — no email, no QR, no seat held. */
+  paymentPending: boolean;
+  /** Canonical payment method when the partner sent one; informational. */
+  paymentMethod: string | null;
+}
+
+// ─── Payment (corporate billing / HRD Corp claims) ──────────────────────────
+
+/**
+ * Explicitly-unpaid markers. Only these flip a registration to "unpaid" —
+ * a payment_method alone never does, because the partner also calls us with a
+ * method AFTER payment settles and that must register normally. An absent
+ * payment_status keeps the original contract: a call means payment is done.
+ */
+const UNPAID_STATUSES = new Set([
+  "unpaid", "pending", "awaiting", "awaiting_payment", "awaiting-payment",
+  "invoice", "invoiced", "invoice_pending", "unconfirmed", "processing", "claim_pending",
+]);
+const PAID_STATUSES = new Set(["paid", "confirmed", "settled", "complete", "completed", "success", "succeeded"]);
+
+/** Fold the partner's payment-method spellings onto our three canonical values. */
+export function canonicalPaymentMethod(raw: string | null): string | null {
+  if (!raw) return null;
+  const v = raw.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!v) return null;
+  if (/hrd|sbl/.test(v)) return "hrd_claim";
+  if (/corp|invoice|billing/.test(v)) return "corporate_billing";
+  if (/self|stripe|card|online|pay_now|paynow/.test(v)) return "self_funded";
+  return v;
+}
+
+/** Human label for the admin panel / sheet. Unknown methods shown as sent. */
+export function paymentMethodLabel(method: string | null | undefined): string {
+  if (!method) return "—";
+  if (method === "hrd_claim") return "HRD Corp claim (SBL-KHAS)";
+  if (method === "corporate_billing") return "Corporate billing (invoice)";
+  if (method === "self_funded") return "Self-funded";
+  return method;
 }
 
 /**
@@ -231,10 +270,25 @@ export function normalizeRegisterPayload(body: any): NormalizeResult {
   const message = str(pick(body, ["message", "notes", "remarks"]));
   const transfer = bool(pick(body, ["transfer", "is_transfer", "isTransfer", "replace_delegate", "replaceDelegate"])) === true;
 
+  // Payment: `payment_status: "unpaid"` (or `paid: false`) captures the
+  // registration without issuing anything — the corporate-billing / HRD-claim
+  // path. An explicit paid marker, or no payment fields at all, registers
+  // normally (the original contract: partners call after payment settles).
+  const paymentStatusRaw = str(pick(body, ["paymentStatus", "payment_status", "payment_state", "paymentState"]));
+  const paidFlag = bool(pick(body, ["paid", "payment_confirmed", "paymentConfirmed", "is_paid", "isPaid"]));
+  const statusToken = paymentStatusRaw ? paymentStatusRaw.trim().toLowerCase().replace(/[\s-]+/g, "_") : null;
+  if (statusToken && !UNPAID_STATUSES.has(statusToken) && !PAID_STATUSES.has(statusToken)) {
+    return { ok: false, error: `payment_status "${paymentStatusRaw}" is not recognised — send "unpaid" or "paid"`, field: "payment_status" };
+  }
+  const paymentPending = paidFlag === false || (paidFlag !== true && statusToken !== null && UNPAID_STATUSES.has(statusToken));
+  const paymentMethod = canonicalPaymentMethod(
+    str(pick(body, ["paymentMethod", "payment_method", "billing_method", "billingMethod", "payment_mode", "paymentMode", "funding", "funding_type", "fundingType"])),
+  );
+
   const value: NormalizedRegistration = {
     externalRef, ticketType, event,
     attendee: { name, email: email.toLowerCase(), phone: phone ?? "", company, jobTitle, industry },
-    days, consent, message, transfer,
+    days, consent, message, transfer, paymentPending, paymentMethod,
   };
 
   const lengths: Record<string, string | null> = {

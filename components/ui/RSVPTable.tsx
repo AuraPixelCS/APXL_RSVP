@@ -19,6 +19,9 @@ interface RSVPTableProps {
   onDeleteRsvp?: (rsvpId: string) => void;
   deletingRsvpId?: string | null;
   onEditRsvp?: (rsvp: RSVP) => void;
+  /** Corporate billing / HRD claim: confirm payment → allocate + email passes. */
+  onConfirmPayment?: (rsvpId: string) => void;
+  confirmingPaymentId?: string | null;
   assignmentMode?: "seat" | "table" | "free";
   // Event seating context — needed to format the seat/table label consistently.
   seatingConfig?: SeatingConfig;
@@ -39,6 +42,7 @@ const STATUS_FILTERS: { label: string; value: RSVPStatus | "all" }[] = [
   { label: "Waitlisted",    value: "waitlisted"   },
   { label: "Not Attending", value: "not_attending"},
   { label: "Cancelled",     value: "cancelled"    },
+  { label: "Awaiting Payment", value: "unpaid"    },
 ];
 
 const SORT_OPTIONS: { label: string; value: "az" | "za" | "vip" }[] = [
@@ -159,6 +163,8 @@ function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeat
           <InfoRow label="Phone" value={rsvp.phone} />
           <InfoRow label="Ticket" value={rsvp.ticketType} />
           <InfoRow label="Reference" value={rsvp.externalRef} />
+          <InfoRow label="Payment Method" value={rsvp.paymentMethod === "hrd_claim" ? "HRD Corp claim (SBL-KHAS)" : rsvp.paymentMethod === "corporate_billing" ? "Corporate billing (invoice)" : rsvp.paymentMethod === "self_funded" ? "Self-funded" : rsvp.paymentMethod} />
+          <InfoRow label="Payment" value={rsvp.status === "unpaid" ? "NOT CONFIRMED" : rsvp.paymentConfirmedAt ? `Confirmed ${format(new Date(rsvp.paymentConfirmedAt), "dd MMM yyyy, HH:mm")} by ${rsvp.paymentConfirmedBy?.displayName ?? "—"}` : null} />
           <InfoRow label="Days" value={rsvp.days?.length ? rsvp.days.join(", ") : null} />
           <InfoRow label="Consent" value={rsvp.consent === true ? "Yes" : rsvp.consent === false ? "No" : null} />
           <InfoRow label="Source" value={rsvp.source === "integration" ? "Partner form" : rsvp.source === "csv" ? "CSV import" : rsvp.source === "admin" ? "Added by admin" : null} />
@@ -195,6 +201,8 @@ export default function RSVPTable({
   onDeleteRsvp,
   deletingRsvpId,
   onEditRsvp,
+  onConfirmPayment,
+  confirmingPaymentId,
   assignmentMode,
   seatingConfig,
   totalSeats,
@@ -505,6 +513,23 @@ export default function RSVPTable({
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                   <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                                 </svg>
+                              </button>
+                            )}
+
+                            {rsvp.status === "unpaid" && onConfirmPayment && (
+                              <button
+                                onClick={() => onConfirmPayment(rsvp.id!)}
+                                disabled={confirmingPaymentId === rsvp.id}
+                                title="Payment received — allocate and email the pass(es) for every event on this ticket"
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                style={{
+                                  background: "rgba(34,197,94,0.1)",
+                                  color: "#22c55e",
+                                  border: "1px solid rgba(34,197,94,0.3)",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {confirmingPaymentId === rsvp.id ? "Confirming…" : "Confirm Payment"}
                               </button>
                             )}
 

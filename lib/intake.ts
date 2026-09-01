@@ -57,6 +57,11 @@ export interface IntakeInput {
   ticketType?: string | null;
   days?: string[] | null;
   consent?: boolean | null;
+  // Payment (Phase 5): true → write the record as "unpaid" — no capacity
+  // check (it holds no seat), no QR mint, no email. Confirmed later by an
+  // admin or by the partner re-sending the registration as paid.
+  paymentPending?: boolean;
+  paymentMethod?: string | null;
 }
 
 export class IntakeError extends Error {
@@ -120,6 +125,9 @@ export async function createRsvp(eventId: string, event: any, input: IntakeInput
     ticketType: trimOrNull(input.ticketType),
     days: Array.isArray(input.days) && input.days.length ? input.days.map(String) : null,
     consent: typeof input.consent === "boolean" ? input.consent : null,
+    paymentMethod: trimOrNull(input.paymentMethod),
+    paymentConfirmedAt: null as string | null,
+    paymentConfirmedBy: null as { uid: string; displayName: string } | null,
     status: "pending" as RSVPStatus,
     waitlistedAt: null as string | null,
     promotedAt: null,
@@ -157,6 +165,14 @@ export async function createRsvp(eventId: string, event: any, input: IntakeInput
 
       if (rows.some((r) => r.id === ref.id || normalizeEmail(r.email ?? "") === normalizedEmail)) {
         throw new IntakeError("duplicate", "already registered");
+      }
+
+      // Awaiting payment: no capacity check (the record holds no seat until
+      // payment is confirmed) and nothing minted — the record is the whole point.
+      if (input.paymentPending && isAttending) {
+        written = { ...base, status: "unpaid" as RSVPStatus };
+        tx.create(ref, written);
+        return "accept";
       }
 
       let outcome: IntakeDecision = "accept";
