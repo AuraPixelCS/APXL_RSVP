@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.3.1] — 2026-09-01
+
+### Changed
+- Google Sheet mirror switched on in production: `GOOGLE_SHEETS_SERVICE_ACCOUNT`, `GOOGLE_SHEET_ID` and `NEXT_PUBLIC_GOOGLE_SHEET_ID` set in Vercel (service account `rsvp-sheet-sync@aurapixel-rsvp-db`, sheet "NAIRW 2026 — Guest Lists"). Rebuild bakes the sheet id in, which makes the "Open Google Sheet" ⋯-menu item visible. First fill verified: E1/E2/E3 tabs created (0 real registrations yet — test twins never sync).
+
 ## [3.3.0] — 2026-09-01
 
 ### Added
