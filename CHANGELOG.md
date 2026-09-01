@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.3.2] — 2026-09-02
+
+### Added
+- Ops scripts for the PEOPLElogy 1 Sep reply: `scripts/rename-gala.js` (sets E2/E2-TEST title to the confirmed "Asia AI Excellence Award Gala Dinner", dry-run by default), `scripts/add-peoplelogy-domain.sh` (provisions events.peoplelogy.com in Resend and prints the three DNS records to forward), `scripts/inspect-reply-items.js` (read-only audit of event titles and registrations — used to establish that no LCL2-* test registrations ever reached us and production events are empty).
+
 ## [3.3.1] — 2026-09-01
 
 ### Changed
