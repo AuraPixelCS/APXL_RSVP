@@ -48,6 +48,9 @@ const AdminHome: NextPageWithLayout = () => {
   const [showForm, setShowForm] = useState(false);
   const [tab, setTab] = useState<TabKey>("upcoming");
   const [search, setSearch] = useState("");
+  // The partner's "-TEST" twin events are working infrastructure, not events
+  // anyone manages day to day — keep them out of the grid unless asked for.
+  const [showTest, setShowTest] = useState(false);
   const router = useRouter();
   const { role } = useAuthContext();
   const isAdmin = role === "admin";
@@ -125,6 +128,10 @@ const AdminHome: NextPageWithLayout = () => {
     return { upcoming: up, past: pa };
   }, [events]);
 
+  const isTestEvent = (e: Event) => (e.code ?? "").endsWith("-TEST") || /—\s*TEST$/.test(e.title ?? "");
+  const realUpcoming = useMemo(() => upcoming.filter((e) => !isTestEvent(e)), [upcoming]);
+  const testEvents = useMemo(() => upcoming.filter(isTestEvent), [upcoming]);
+
   const handleTogglePin = async (eventId: string, nextPinned: boolean) => {
     // Optimistic: live subscription will reconcile state from Firestore
     try {
@@ -134,7 +141,10 @@ const AdminHome: NextPageWithLayout = () => {
     }
   };
 
-  const visibleList = tab === "upcoming" ? upcoming : past;
+  const visibleList = useMemo(
+    () => (tab === "upcoming" ? (showTest ? [...realUpcoming, ...testEvents] : realUpcoming) : past),
+    [tab, showTest, realUpcoming, testEvents, past],
+  );
   const showSearch = tab === "past" && past.length >= 6;
   const filteredList = useMemo(() => {
     if (!showSearch || !search.trim()) return visibleList;
@@ -212,7 +222,7 @@ const AdminHome: NextPageWithLayout = () => {
             >
               <TabButton
                 active={tab === "upcoming"}
-                count={upcoming.length}
+                count={realUpcoming.length}
                 onClick={() => { setTab("upcoming"); setSearch(""); }}
               >
                 Upcoming
@@ -292,6 +302,24 @@ const AdminHome: NextPageWithLayout = () => {
                   />
                 ))}
               </AnimatePresence>
+            </div>
+          )}
+
+          {/* Partner test twins — hidden by default so the grid stays the real three */}
+          {tab === "upcoming" && testEvents.length > 0 && (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setShowTest((v) => !v)}
+                className="text-xs px-3 py-1.5 rounded-full cursor-pointer transition-colors duration-200"
+                style={{ color: "var(--muted)", border: "1px dashed var(--border)", background: "transparent" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--foreground)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+              >
+                {showTest
+                  ? "Hide test events"
+                  : `${testEvents.length} test event${testEvents.length === 1 ? "" : "s"} hidden — show`}
+              </button>
             </div>
           )}
         </>

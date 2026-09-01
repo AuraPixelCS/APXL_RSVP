@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.8] — 2026-09-01
+
+### Changed
+- Admin events page shows only the real events; the partner's "-TEST" twins sit behind a "test events hidden — show" toggle and no longer count in the Upcoming tab.
+
 ## [3.2.7] — 2026-09-01
 
 **Delegate transfers and cancellations** — BAFT's terms promise a paid registration can move to a colleague; before this, re-registering a swapped delegate left the original QR valid and two people could scan in on one seat.
