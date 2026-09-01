@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.11] — 2026-09-01
+
+### Changed
+- "Part Of" column removed from the guest table — always empty for partner-registered events; the value (legacy anniversary guests) remains in the guest Info popup and the form's collapsed extras.
+
 ## [3.2.10] — 2026-09-01
 
 ### Changed

@@ -260,7 +260,7 @@ export default function RSVPTable({
     (splitNameCols ? 2 : 1) + // name
     1 + // email
     1 + // phone
-    3 + // part of, company, job title (hidden mobile)
+    2 + // company, job title (hidden mobile)
     1 + // seat
     1 + // submitted (hidden mobile)
     (starredLabel && googleFormMode ? 1 : 0) +
@@ -362,7 +362,6 @@ export default function RSVPTable({
                 <th className={TH} style={{ color: "var(--muted)" }}>{emailLabel}</th>
                 <th className={TH} style={{ color: "var(--muted)" }}>{phoneLabel}</th>
 
-                <th className={`${TH} hidden lg:table-cell`} style={{ color: "var(--muted)" }}>Part Of</th>
                 <th className={`${TH} hidden lg:table-cell`} style={{ color: "var(--muted)" }}>Company</th>
                 <th className={`${TH} hidden lg:table-cell`} style={{ color: "var(--muted)" }}>Job Title</th>
 
@@ -449,9 +448,6 @@ export default function RSVPTable({
                         </td>
                         <td className={TD}><span className="text-xs font-mono" style={{ color: "var(--muted)" }}>{rsvp.phone || "—"}</span></td>
 
-                        <td className={`${TD} hidden lg:table-cell`} style={{ fontSize: 12, color: "var(--muted)", maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {rsvp.partOf || "—"}
-                        </td>
                         <td className={`${TD} hidden lg:table-cell`} style={{ fontSize: 12, color: "var(--foreground)", maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {rsvp.company || "—"}
                         </td>
