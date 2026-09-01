@@ -7,6 +7,11 @@ import type { Event, RSVP } from "@/types";
 // Add a guest by hand, or edit an existing one — replaces the add-missing-guests
 // / update-guest-email CLI scripts. In edit mode, seat/QR/status are left alone
 // (those belong to the allocation flow); only profile fields change.
+//
+// Field order mirrors the partner's November registration forms (name, email,
+// phone, company, job title, industry) — the anniversary-era extras (group,
+// plus-one, dietary) live in a collapsed section so they stay reachable for
+// legacy events without leading the layout.
 export default function GuestFormModal({
   event,
   guest,
@@ -24,6 +29,10 @@ export default function GuestFormModal({
   const isEdit = !!guest;
   const toast = useToast();
   const [saving, setSaving] = useState(false);
+  // Open the extras when any of them already carries a value.
+  const [showMore, setShowMore] = useState(
+    !!(guest?.partOf || guest?.dietaryRestrictions || guest?.message || guest?.plusOne || guest?.attending === false),
+  );
   const [form, setForm] = useState({
     name: guest?.name ?? "",
     email: guest?.email ?? "",
@@ -45,8 +54,10 @@ export default function GuestFormModal({
     const name = form.name.trim();
     const email = form.email.trim().toLowerCase();
     const phone = form.phone.trim();
-    if (!name || !email || !phone) {
-      toast.warning("Missing required fields", "Name, email, and phone are required.");
+    // Phone is optional — the partner's delegate form doesn't always have one,
+    // so an admin correcting such a guest must not be forced to invent it.
+    if (!name || !email) {
+      toast.warning("Missing required fields", "Name and email are required.");
       return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -143,27 +154,53 @@ export default function GuestFormModal({
         <Field label="Full Name *" value={form.name} onChange={(v) => set("name", v)} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Email *" type="email" value={form.email} onChange={(v) => set("email", v)} />
-          <Field label="Phone *" value={form.phone} onChange={(v) => set("phone", v)} placeholder="+60…" />
+          <Field label="Phone" value={form.phone} onChange={(v) => set("phone", v)} placeholder="+60…" />
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Company" value={form.company} onChange={(v) => set("company", v)} />
+          <Field label="Company / Organisation" value={form.company} onChange={(v) => set("company", v)} />
           <Field label="Job Title" value={form.jobTitle} onChange={(v) => set("jobTitle", v)} />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Industry" value={form.industry} onChange={(v) => set("industry", v)} />
-          <Field label="Part Of / Group" value={form.partOf} onChange={(v) => set("partOf", v)} />
-        </div>
+        <Field label="Industry" value={form.industry} onChange={(v) => set("industry", v)} />
 
-        <div className="grid grid-cols-2 gap-3">
-          <Toggle label="Attending" checked={form.attending} onChange={(v) => set("attending", v)} />
-          <Toggle label="Plus One" checked={form.plusOne} onChange={(v) => set("plusOne", v)} />
-        </div>
-        {form.plusOne && (
-          <Field label="Plus One Name" value={form.plusOneName} onChange={(v) => set("plusOneName", v)} />
+        {isEdit && (guest?.ticketType || guest?.externalRef || (guest?.days && guest.days.length)) && (
+          <div className="rounded-lg px-3 py-2.5 space-y-1" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
+            <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>Registration</p>
+            <p className="text-xs text-white">
+              {[
+                guest?.ticketType ? `Ticket ${guest.ticketType}` : null,
+                guest?.externalRef ? `Ref ${guest.externalRef}` : null,
+                guest?.days?.length ? `Days ${guest.days.map((d) => d.slice(8)).join(", ")} Nov` : null,
+                guest?.consent === true ? "Consent given" : guest?.consent === false ? "No consent" : null,
+              ].filter(Boolean).join(" · ")}
+            </p>
+          </div>
         )}
 
-        <Field label="Dietary Restrictions" value={form.dietaryRestrictions} onChange={(v) => set("dietaryRestrictions", v)} textarea />
-        <Field label="Notes / Message" value={form.message} onChange={(v) => set("message", v)} textarea />
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className="w-full text-left text-xs cursor-pointer py-1 transition-colors"
+          style={{ color: "var(--muted)", background: "none", border: "none" }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
+        >
+          {showMore ? "▾ Hide extra fields" : "▸ More fields (group, plus one, dietary, notes)"}
+        </button>
+
+        {showMore && (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Part Of / Group" value={form.partOf} onChange={(v) => set("partOf", v)} />
+              <Toggle label="Attending" checked={form.attending} onChange={(v) => set("attending", v)} />
+            </div>
+            <Toggle label="Plus One" checked={form.plusOne} onChange={(v) => set("plusOne", v)} />
+            {form.plusOne && (
+              <Field label="Plus One Name" value={form.plusOneName} onChange={(v) => set("plusOneName", v)} />
+            )}
+            <Field label="Dietary Restrictions" value={form.dietaryRestrictions} onChange={(v) => set("dietaryRestrictions", v)} textarea />
+            <Field label="Notes / Message" value={form.message} onChange={(v) => set("message", v)} textarea />
+          </>
+        )}
 
         <div className="flex items-center gap-3 pt-1">
           <button type="button" onClick={onClose}

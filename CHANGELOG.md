@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.2.9] — 2026-09-01
+
+### Changed
+- Guest add/edit modal restructured around the November registration shape: name, email, phone (now optional — delegate registrations may lack one), company/organisation, job title, industry lead; a read-only Registration line shows ticket code, partner reference, days and consent; the anniversary-era extras (group, attending, plus one, dietary, notes) sit behind a "More fields" toggle.
+- Guest detail card shows Ticket, Reference, Days, Consent and Source rows; "Part Of" moved to the bottom.
+
+### Fixed
+- The event page's "⋯" menu was clipped by the hero card after two items (`overflow-hidden`); it now renders in a portal above everything, so all actions are reachable.
+
 ## [3.2.8] — 2026-09-01
 
 ### Changed

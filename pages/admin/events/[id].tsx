@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { committedSeats, capacityOf } from "@/lib/capacity";
 import { useRouter } from "next/router";
@@ -223,19 +224,41 @@ interface MoreMenuItem {
 
 function MoreMenu({ items }: { items: MoreMenuItem[] }) {
   const [open, setOpen] = useState(false);
+  // The hero card clips its children (overflow-hidden for the rounded corners),
+  // which used to cut the dropdown off after two items. Rendering the panel in
+  // a body portal at a fixed position puts it above every container.
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  const toggle = () => {
+    setOpen((v) => {
+      if (!v && rootRef.current) {
+        const r = rootRef.current.getBoundingClientRect();
+        setPos({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+      }
+      return !v;
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     };
     const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const handleScroll = () => setOpen(false);
     window.addEventListener("mousedown", handleClick);
     window.addEventListener("keydown", handleKey);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleScroll);
     return () => {
       window.removeEventListener("mousedown", handleClick);
       window.removeEventListener("keydown", handleKey);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
     };
   }, [open]);
 
@@ -245,7 +268,7 @@ function MoreMenu({ items }: { items: MoreMenuItem[] }) {
     <div ref={rootRef} style={{ position: "relative", display: "inline-block" }}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
         aria-label="More actions"
         aria-haspopup="menu"
         aria-expanded={open}
@@ -261,17 +284,22 @@ function MoreMenu({ items }: { items: MoreMenuItem[] }) {
         <MoreIcon />
       </button>
 
+      {typeof document !== "undefined" && createPortal(
       <AnimatePresence>
-        {open && (
+        {open && pos && (
           <motion.div
+            ref={panelRef}
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.15 }}
             role="menu"
-            className="absolute z-30 mt-1.5 rounded-lg overflow-hidden"
+            className="rounded-lg overflow-hidden"
             style={{
-              right: 0,
+              position: "fixed",
+              top: pos.top,
+              right: pos.right,
+              zIndex: 60,
               minWidth: 200,
               background: "var(--surface-2)",
               border: "1px solid var(--border)",
@@ -298,7 +326,8 @@ function MoreMenu({ items }: { items: MoreMenuItem[] }) {
             </div>
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body)}
     </div>
   );
 }

@@ -153,11 +153,16 @@ function RsvpInfoModal({ rsvp, onClose, assignmentMode, seatingConfig, totalSeat
 
         {/* Body */}
         <div style={{ padding: "12px 20px 20px", overflowY: "auto", flex: 1 }}>
-          <InfoRow label="Part Of" value={rsvp.partOf} />
           <InfoRow label="Company" value={rsvp.company} />
           <InfoRow label="Job Title" value={rsvp.jobTitle} />
           <InfoRow label="Industry" value={rsvp.industry} />
           <InfoRow label="Phone" value={rsvp.phone} />
+          <InfoRow label="Ticket" value={rsvp.ticketType} />
+          <InfoRow label="Reference" value={rsvp.externalRef} />
+          <InfoRow label="Days" value={rsvp.days?.length ? rsvp.days.join(", ") : null} />
+          <InfoRow label="Consent" value={rsvp.consent === true ? "Yes" : rsvp.consent === false ? "No" : null} />
+          <InfoRow label="Source" value={rsvp.source === "integration" ? "Partner form" : rsvp.source === "csv" ? "CSV import" : rsvp.source === "admin" ? "Added by admin" : null} />
+          <InfoRow label="Part Of" value={rsvp.partOf} />
           <InfoRow label={`${seatLabel}`} value={assignment ? assignment.long : null} />
           <InfoRow label={`+1 ${seatLabel}`} value={rsvp.plusOneSeatNumber != null ? `#${rsvp.plusOneSeatNumber}` : null} />
           <InfoRow label="+1 Name" value={rsvp.plusOne ? (rsvp.plusOneName || "Not given") : null} />
