@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.13] — 2026-09-01
+
+### Changed
+- Seat Map and Preview stay in place on free-seating events but are disabled (greyed, tooltip "Free seating — no seat map for this event") instead of being replaced; seat/table events are untouched. Reverts 3.2.12's Notifications swap.
+
 ## [3.2.12] — 2026-09-01
 
 ### Changed
