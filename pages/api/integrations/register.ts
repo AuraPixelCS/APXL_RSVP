@@ -7,6 +7,7 @@ import { createRsvp, sendIntakeEmail, IntakeError } from "@/lib/intake";
 import { sendEntryPass } from "@/lib/entryPass";
 import {
   normalizeRegisterPayload,
+  partitionTransfer,
   resolveKeyKind,
   targetEventCode,
   ticketRule,
@@ -62,6 +63,8 @@ interface PassResult {
   duplicate?: boolean;
   /** Existing record under another reference kept as the pass for this event. */
   reused?: boolean;
+  /** This pass was (re)issued as part of a delegate transfer. */
+  transferred?: boolean;
 }
 
 async function findEventByCode(code: string): Promise<EventDoc | null> {
@@ -75,6 +78,24 @@ function publicStatus(status: string): PublicStatus {
   if (status === "waitlisted") return "waitlisted";
   if (status === "not_attending") return "not_attending";
   return "pending_allocation";
+}
+
+/**
+ * Void a registration for a delegate transfer. The record stays (paper trail);
+ * `status: "cancelled"` is what makes the scanner refuse its QR.
+ */
+async function cancelForTransfer(
+  ref: FirebaseFirestore.CollectionReference,
+  doc: { id: string },
+  replacement: { name: string; email: string },
+): Promise<void> {
+  await ref.doc(doc.id).update({
+    status: "cancelled",
+    cancelledAt: new Date().toISOString(),
+    cancelReason: "transfer",
+    transferredTo: { name: replacement.name, email: replacement.email },
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 function passFromExisting(event: EventDoc, id: string, existing: any, flag: "duplicate" | "reused"): PassResult {
@@ -148,9 +169,77 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const rsvpsRef = adminDb.collection("events").doc(event.id).collection("rsvps");
       const docId = rsvpDocId(event.id, reg.attendee.email);
 
+      // ── Delegate transfer ─────────────────────────────────────────────
+      // Same externalRef, new person: void the old holder's record (their QR
+      // stops scanning) and fall through to issue this event's pass to the
+      // replacement. Requires the explicit `transfer: true` flag — without it
+      // a typo'd email on a retry would silently revoke someone's pass.
+      if (reg.transfer) {
+        const matchesSnap = await rsvpsRef.where("externalRef", "==", reg.externalRef).get();
+        const matches = matchesSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        const { existing: sameEmail, toCancel } = partitionTransfer(matches, reg.attendee.email);
+
+        if (primary && !matches.length) {
+          return res.status(422).json({
+            error: "transfer_target_not_found",
+            message: `No registration under "${reg.externalRef}" on ${event.title ?? event.code} — nothing to transfer`,
+          });
+        }
+        for (const old of toCancel) {
+          await cancelForTransfer(rsvpsRef, old, reg.attendee);
+        }
+        if (sameEmail && sameEmail.status !== "cancelled") {
+          // Retry of a completed transfer (or the "new" person already held
+          // this pass) — nothing to reissue.
+          passes.push(passFromExisting(event, sameEmail.id, sameEmail, "duplicate"));
+          continue;
+        }
+        // Fall through: create (or reactivate) the replacement's record below.
+      }
+
       const existingSnap = await rsvpsRef.doc(docId).get();
       if (existingSnap.exists) {
         const existing = existingSnap.data()!;
+
+        // A cancelled record at this email is a re-registration, not a
+        // duplicate: bring it back to life under the incoming reference.
+        if (existing.status === "cancelled") {
+          const freeSeating = event.assignmentMode === "free";
+          const revived: Record<string, any> = {
+            ...existing,
+            name: reg.attendee.name,
+            phone: reg.attendee.phone || existing.phone || "",
+            company: reg.attendee.company ?? existing.company ?? null,
+            jobTitle: reg.attendee.jobTitle ?? existing.jobTitle ?? null,
+            industry: reg.attendee.industry ?? existing.industry ?? null,
+            externalRef: reg.externalRef,
+            ticketType: rule.code,
+            status: freeSeating && existing.qrToken ? "allocated" : freeSeating ? "allocated" : "pending",
+            cancelledAt: null,
+            cancelReason: null,
+            transferredTo: null,
+            updatedAt: new Date().toISOString(),
+          };
+          await rsvpsRef.doc(existingSnap.id).update(revived);
+          const rsvpForEmail = { ...revived, id: existingSnap.id, eventId: event.id };
+          let email: { sent: boolean; error?: string } = { sent: false };
+          if (revived.status === "allocated" && revived.qrToken) {
+            email = await sendEntryPass(rsvpForEmail, event, origin);
+          } else if (revived.status === "pending") {
+            email = await sendIntakeEmail(rsvpForEmail, event, origin, "confirm");
+          }
+          passes.push({
+            event: { code: event.code ?? null, title: event.title },
+            registrationId: existingSnap.id,
+            status: publicStatus(revived.status),
+            passIssued: !!revived.qrToken,
+            emailSent: email.sent,
+            ...(email.error ? { emailError: email.error } : {}),
+            ...(reg.transfer ? { transferred: true } : {}),
+          });
+          continue;
+        }
+
         if (existing.externalRef && existing.externalRef === reg.externalRef) {
           passes.push(passFromExisting(event, existingSnap.id, existing, "duplicate"));
           continue;
@@ -236,6 +325,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         passIssued: !!result.qrToken,
         emailSent: email.sent,
         ...(email.error ? { emailError: email.error } : {}),
+        ...(reg.transfer ? { transferred: true } : {}),
       });
     }
 
@@ -252,6 +342,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ticketType: rule.code,
       ticketLabel: rule.label,
       environment: keyKind,
+      ...(reg.transfer ? { transfer: true } : {}),
       ...(allDuplicate ? { duplicate: true } : {}),
       passes,
     });

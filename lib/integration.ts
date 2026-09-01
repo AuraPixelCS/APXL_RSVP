@@ -123,6 +123,33 @@ export interface NormalizedRegistration {
   days: string[] | null;
   consent: boolean | null;
   message: string | null;
+  /** Delegate transfer: void the records under this externalRef held by a
+   *  DIFFERENT email, and issue the passes to this (new) person instead. */
+  transfer: boolean;
+}
+
+/**
+ * Split the records already carrying a transferred `externalRef`:
+ * the one that already belongs to the incoming email (a retry, or a
+ * transfer back), and the active ones held by someone else (to void).
+ * Explicitly ignores already-cancelled records held by others.
+ */
+export interface TransferMatch {
+  id: string;
+  email?: string;
+  status?: string;
+}
+
+export function partitionTransfer<T extends TransferMatch>(
+  matches: T[],
+  newEmail: string,
+): { existing: T | null; toCancel: T[] } {
+  const email = String(newEmail ?? "").trim().toLowerCase();
+  const existing = matches.find((m) => String(m.email ?? "").trim().toLowerCase() === email) ?? null;
+  const toCancel = matches.filter(
+    (m) => m !== existing && m.status !== "cancelled",
+  );
+  return { existing, toCancel };
 }
 
 export type NormalizeResult =
@@ -202,11 +229,12 @@ export function normalizeRegisterPayload(body: any): NormalizeResult {
   const days = dayList(pick(body, ["days", "attend_days", "attendDays", "day", "sessions", "session"]));
   const consent = bool(pick(body, ["consent", "pdpa", "pdpa_consent", "consented"]));
   const message = str(pick(body, ["message", "notes", "remarks"]));
+  const transfer = bool(pick(body, ["transfer", "is_transfer", "isTransfer", "replace_delegate", "replaceDelegate"])) === true;
 
   const value: NormalizedRegistration = {
     externalRef, ticketType, event,
     attendee: { name, email: email.toLowerCase(), phone: phone ?? "", company, jobTitle, industry },
-    days, consent, message,
+    days, consent, message, transfer,
   };
 
   const lengths: Record<string, string | null> = {

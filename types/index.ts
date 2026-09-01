@@ -10,7 +10,10 @@ export type RSVPStatus =
   | "allocated"
   | "checked_in"
   | "not_attending"
-  | "waitlisted";
+  | "waitlisted"
+  // Voided by the partner (delegate transfer or drop-out). The QR stops
+  // scanning; the record stays for the paper trail.
+  | "cancelled";
 
 /** Per-recipient delivery state, driven by Resend webhooks (Phase 3). */
 export type EmailDeliveryStatus =

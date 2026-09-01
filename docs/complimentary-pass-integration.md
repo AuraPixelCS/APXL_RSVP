@@ -142,6 +142,49 @@ Only the **free** Summit passes can ever be waitlisted, and only if the Summit
 reaches its cap. Paid passes are never waitlisted: you gate the sale, so we
 accept every paid registration you send.
 
+### Delegate transfers
+
+Your terms allow a registration to move to another person from the same
+company. Send **Register** again with the **same `submission_id`**, the new
+delegate's details, and one extra field:
+
+```json
+{ "submission_id": "BD-000042", "pass_id": "P1", "transfer": true,
+  "name": "Replacement Person", "email": "replacement@company.com" }
+```
+
+What happens, atomically per event the ticket opens:
+
+- The previous holder's registration is voided — their QR is refused at the
+  door from that moment ("Pass cancelled — this registration was transferred").
+- The replacement is registered and their passes are emailed, exactly like a
+  fresh registration. The response carries `transfer: true` and each affected
+  entry in `passes[]` is marked `transferred: true`.
+- If the departing delegate's Summit pass was their own free registration
+  (`reused` at purchase time), it is **not** touched — it was never part of
+  the ticket. The replacement gets their own Summit pass.
+- Retry-safe: send the same transfer twice and the second answers
+  `duplicate: true` with nothing re-sent.
+
+Without `transfer: true`, the same `submission_id` with a new email is treated
+as a mistake and refused — so a typo on a retry can never silently revoke
+someone's pass.
+
+### Cancellations
+
+For a drop-out with no replacement:
+
+```
+POST {BASE}/api/integrations/cancel
+X-API-Key: {same keys}
+{ "submission_id": "BD-000042", "reason": "optional note" }
+```
+
+Voids every registration under that reference in your environment (test key →
+test events only). Response lists what was cancelled; `404 not_found` if the
+reference is unknown; cancelling twice is safe. A cancelled person can
+re-register later under a new `submission_id` — same email is fine.
+
 ### Retries
 
 Call again with the same `submission_id` on any network error or `5xx`. You

@@ -30,6 +30,11 @@ const CONFIG: Record<RSVPStatus, { label: string; bg: string; color: string }> =
     bg: "rgba(107,114,128,0.14)",
     color: "#6b7280",
   },
+  cancelled: {
+    label: "Cancelled",
+    bg: "rgba(239,68,68,0.12)",
+    color: "#ef4444",
+  },
 };
 
 export default function StatusChip({ status }: StatusChipProps) {

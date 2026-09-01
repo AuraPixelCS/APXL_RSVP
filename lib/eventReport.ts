@@ -41,6 +41,7 @@ const TABLE_ALT = rgb(0.974, 0.978, 0.985);
 const GREEN = rgb(0.13, 0.74, 0.37);
 const AMBER = rgb(0.92, 0.62, 0.12);
 const RED = rgb(0.9, 0.27, 0.27);
+const GRAY = rgb(0.42, 0.45, 0.5); // #6b7280 — cancelled
 const PURPLE = rgb(0.659, 0.333, 0.969); // #a855f7 — waitlisted
 const VIOLET = rgb(0.62, 0.36, 0.92);
 
@@ -921,6 +922,7 @@ const STATUS_LABEL: Record<RSVP["status"], string> = {
   checked_in: "Checked-in",
   waitlisted: "Waitlisted",
   not_attending: "Declined",
+  cancelled: "Cancelled",
 };
 
 const STATUS_COLOR: Record<RSVP["status"], RGB> = {
@@ -929,6 +931,7 @@ const STATUS_COLOR: Record<RSVP["status"], RGB> = {
   checked_in: GREEN,
   waitlisted: PURPLE,
   not_attending: RED,
+  cancelled: GRAY,
 };
 
 export async function buildEventReportPdf(

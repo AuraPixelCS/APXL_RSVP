@@ -28,7 +28,7 @@ export interface SeatConsumer {
  */
 export function seatsHeldBy(rsvp: SeatConsumer): number {
   if (rsvp.attending === false) return 0;
-  if (rsvp.status === "not_attending" || rsvp.status === "waitlisted") return 0;
+  if (rsvp.status === "not_attending" || rsvp.status === "waitlisted" || rsvp.status === "cancelled") return 0;
   return rsvp.plusOne === true ? 2 : 1;
 }
 

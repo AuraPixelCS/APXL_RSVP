@@ -66,6 +66,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (rsvp.status === "checked_in") {
       return res.status(400).json({ error: "Already checked in" });
     }
+    if (rsvp.status === "cancelled") {
+      return res.status(400).json({
+        error: rsvp.transferredTo
+          ? "Pass cancelled — this registration was transferred to another delegate"
+          : "Pass cancelled",
+      });
+    }
     if (rsvp.status !== "attending" && rsvp.status !== "allocated") {
       return res.status(400).json({ error: `RSVP is marked as ${rsvp.status || 'not attending'}` });
     }

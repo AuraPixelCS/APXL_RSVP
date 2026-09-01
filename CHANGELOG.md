@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.2.7] — 2026-09-01
+
+**Delegate transfers and cancellations** — BAFT's terms promise a paid registration can move to a colleague; before this, re-registering a swapped delegate left the original QR valid and two people could scan in on one seat.
+
+### Added
+- Register accepts `transfer: true` with an existing `submission_id`: the previous holder's records are voided across the ticket's events (QR refused at the door — "Pass cancelled — this registration was transferred"), the replacement is registered and emailed their passes. A `reused` free Summit pass belonging to the departing delegate is never touched. Retry-safe; without the explicit flag a changed email on a known reference is still refused, so a typo can't revoke a pass.
+- `POST /api/integrations/cancel` — void every registration under a `submission_id` (drop-out, no replacement). Environment-scoped by key (test key → `-TEST` events only), idempotent, `404` on unknown reference. A cancelled email can re-register; Register revives a cancelled record instead of refusing it as a duplicate.
+- RSVP status `cancelled`: excluded from seat counts, red chip + filter in the admin table, own colour in the PDF report; scanner shows a clear refusal.
+- `scripts/test-transfer.ts` (11 checks); suite count now 11 files.
+
 ## [3.2.6] — 2026-08-30
 
 ### Changed

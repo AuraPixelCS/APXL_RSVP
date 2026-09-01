@@ -38,6 +38,7 @@ const STATUS_FILTERS: { label: string; value: RSVPStatus | "all" }[] = [
   { label: "Checked In",    value: "checked_in"   },
   { label: "Waitlisted",    value: "waitlisted"   },
   { label: "Not Attending", value: "not_attending"},
+  { label: "Cancelled",     value: "cancelled"    },
 ];
 
 const SORT_OPTIONS: { label: string; value: "az" | "za" | "vip" }[] = [
