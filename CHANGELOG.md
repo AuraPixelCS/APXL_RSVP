@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.10] — 2026-09-01
+
+### Changed
+- Guest form front section now matches the live complimentary form exactly: Full Name, Email, Phone / WhatsApp, Company / Organisation, Job Title. Industry joined the collapsed extras (the live form doesn't collect it). The partner's "How did you hear" field was never captured by the endpoint and stays uncaptured.
+
 ## [3.2.9] — 2026-09-01
 
 ### Changed

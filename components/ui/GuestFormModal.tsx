@@ -31,7 +31,7 @@ export default function GuestFormModal({
   const [saving, setSaving] = useState(false);
   // Open the extras when any of them already carries a value.
   const [showMore, setShowMore] = useState(
-    !!(guest?.partOf || guest?.dietaryRestrictions || guest?.message || guest?.plusOne || guest?.attending === false),
+    !!(guest?.partOf || guest?.industry || guest?.dietaryRestrictions || guest?.message || guest?.plusOne || guest?.attending === false),
   );
   const [form, setForm] = useState({
     name: guest?.name ?? "",
@@ -154,13 +154,12 @@ export default function GuestFormModal({
         <Field label="Full Name *" value={form.name} onChange={(v) => set("name", v)} />
         <div className="grid grid-cols-2 gap-3">
           <Field label="Email *" type="email" value={form.email} onChange={(v) => set("email", v)} />
-          <Field label="Phone" value={form.phone} onChange={(v) => set("phone", v)} placeholder="+60…" />
+          <Field label="Phone / WhatsApp" value={form.phone} onChange={(v) => set("phone", v)} placeholder="+60…" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <Field label="Company / Organisation" value={form.company} onChange={(v) => set("company", v)} />
           <Field label="Job Title" value={form.jobTitle} onChange={(v) => set("jobTitle", v)} />
         </div>
-        <Field label="Industry" value={form.industry} onChange={(v) => set("industry", v)} />
 
         {isEdit && (guest?.ticketType || guest?.externalRef || (guest?.days && guest.days.length)) && (
           <div className="rounded-lg px-3 py-2.5 space-y-1" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
@@ -184,15 +183,16 @@ export default function GuestFormModal({
           onMouseEnter={(e) => (e.currentTarget.style.color = "#fff")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted)")}
         >
-          {showMore ? "▾ Hide extra fields" : "▸ More fields (group, plus one, dietary, notes)"}
+          {showMore ? "▾ Hide extra fields" : "▸ More fields (industry, group, plus one, dietary, notes)"}
         </button>
 
         {showMore && (
           <>
             <div className="grid grid-cols-2 gap-3">
+              <Field label="Industry" value={form.industry} onChange={(v) => set("industry", v)} />
               <Field label="Part Of / Group" value={form.partOf} onChange={(v) => set("partOf", v)} />
-              <Toggle label="Attending" checked={form.attending} onChange={(v) => set("attending", v)} />
             </div>
+            <Toggle label="Attending" checked={form.attending} onChange={(v) => set("attending", v)} />
             <Toggle label="Plus One" checked={form.plusOne} onChange={(v) => set("plusOne", v)} />
             {form.plusOne && (
               <Field label="Plus One Name" value={form.plusOneName} onChange={(v) => set("plusOneName", v)} />
