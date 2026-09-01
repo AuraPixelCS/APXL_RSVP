@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.2.12] — 2026-09-01
+
+### Changed
+- Free-seating events no longer show the Seat Map and Preview buttons (there is no map); Notifications takes the primary spot in the event hero, on the event-day view too.
+
 ## [3.2.11] — 2026-09-01
 
 ### Changed

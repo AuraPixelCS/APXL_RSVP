@@ -439,32 +439,47 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
           style={{ background: "var(--surface)", borderLeft: "1px solid var(--border)" }}
         >
           <div className="flex items-center gap-2">
-            <button
-              onClick={actions.onOpenSeatMapPage}
-              className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
-              style={{ background: "var(--accent)", color: "#000" }}
-            >
-              <GridIcon />
-              Seat Map
-            </button>
-            <button
-              onClick={actions.onPreviewSeatMap}
-              title="Preview the seat map (read-only)"
-              className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
-              style={{
-                background: "var(--surface-3)",
-                color: "var(--muted)",
-                border: "1px solid var(--border)",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.color = "white"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface-3)"; e.currentTarget.style.color = "var(--muted)"; }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                <circle cx="12" cy="12" r="3" />
-              </svg>
-              Preview
-            </button>
+            {/* Free seating has no map — there is nothing to open or preview. */}
+            {event.assignmentMode !== "free" && (
+              <>
+                <button
+                  onClick={actions.onOpenSeatMapPage}
+                  className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
+                  style={{ background: "var(--accent)", color: "#000" }}
+                >
+                  <GridIcon />
+                  Seat Map
+                </button>
+                <button
+                  onClick={actions.onPreviewSeatMap}
+                  title="Preview the seat map (read-only)"
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors"
+                  style={{
+                    background: "var(--surface-3)",
+                    color: "var(--muted)",
+                    border: "1px solid var(--border)",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = "var(--surface)"; e.currentTarget.style.color = "white"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface-3)"; e.currentTarget.style.color = "var(--muted)"; }}
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                  Preview
+                </button>
+              </>
+            )}
+            {event.assignmentMode === "free" && (
+              <button
+                onClick={actions.onOpenNotifications}
+                className="flex-1 flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
+                style={{ background: "var(--accent)", color: "#000" }}
+              >
+                <BellIcon />
+                Notifications
+              </button>
+            )}
             <MoreMenu items={actions.moreItems} />
           </div>
 
@@ -590,6 +605,7 @@ function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; 
           </p>
 
           <div className="flex flex-wrap gap-2 mt-1">
+            {event.assignmentMode !== "free" && (
             <button
               onClick={actions.onOpenSeatMapPage}
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150"
@@ -599,6 +615,8 @@ function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; 
               Seat Map
               <ArrowRightIcon />
             </button>
+            )}
+            {event.assignmentMode !== "free" && (
             <button
               onClick={actions.onPreviewSeatMap}
               title="Preview the seat map (read-only)"
@@ -613,6 +631,7 @@ function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; 
               </svg>
               Preview
             </button>
+            )}
             <button
               onClick={actions.onOpenNotifications}
               className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer transition-all duration-150 relative"
