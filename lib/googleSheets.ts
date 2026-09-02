@@ -70,7 +70,9 @@ async function getAccessToken(): Promise<string> {
   const sa = serviceAccount();
   if (!sa) throw new Error("Google Sheets service account not configured");
 
-  const iat = Math.floor(Date.now() / 1000);
+  // Backdated 60s: serverless clocks drift, and Google rejects a JWT whose
+  // iat sits even slightly in the future ("token used too early").
+  const iat = Math.floor(Date.now() / 1000) - 60;
   const header = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claims = b64url(
     JSON.stringify({ iss: sa.client_email, scope: SCOPE, aud: TOKEN_URL, iat, exp: iat + 3600 }),
@@ -217,18 +219,47 @@ async function syncEventTab(event: any): Promise<void> {
  */
 export async function syncSheetForEvents(codes?: string[]): Promise<{ synced: string[]; skipped: boolean }> {
   if (!sheetsConfigured()) return { synced: [], skipped: true };
-  try {
-    const snap = await adminDb.collection("events").get();
-    const events = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }) as any)
-      .filter((e) => typeof e.code === "string" && e.code && !e.code.endsWith(TEST_EVENT_SUFFIX))
-      .filter((e) => !codes || codes.includes(e.code));
-    for (const event of events) {
-      await syncEventTab(event);
+  let lastError: unknown = null;
+  // Two attempts: the first production registration's sync was lost to a
+  // one-off failure that a single retry (with a fresh token) would have
+  // absorbed. The sheet is a mirror, so a repeat write is harmless.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const snap = await adminDb.collection("events").get();
+      const events = snap.docs
+        .map((d) => ({ id: d.id, ...d.data() }) as any)
+        .filter((e) => typeof e.code === "string" && e.code && !e.code.endsWith(TEST_EVENT_SUFFIX))
+        .filter((e) => !codes || codes.includes(e.code));
+      for (const event of events) {
+        await syncEventTab(event);
+      }
+      await recordSyncOutcome(null);
+      return { synced: events.map((e) => e.code as string), skipped: false };
+    } catch (e) {
+      lastError = e;
+      cachedToken = null; // a stale/rejected token is the likeliest transient cause
+      console.error(`[googleSheets] sync attempt ${attempt} failed:`, e);
     }
-    return { synced: events.map((e) => e.code as string), skipped: false };
-  } catch (e) {
-    console.error("[googleSheets] sync failed:", e);
-    return { synced: [], skipped: true };
+  }
+  await recordSyncOutcome(lastError);
+  return { synced: [], skipped: true };
+}
+
+/**
+ * Leave a trace of the last sync in Firestore (`system/sheetSync`), so a
+ * silently swallowed failure is at least visible somewhere — the register
+ * endpoint must never surface a sheet error to the partner.
+ */
+async function recordSyncOutcome(error: unknown): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    await adminDb.doc("system/sheetSync").set(
+      error
+        ? { lastFailureAt: now, lastError: String(error).slice(0, 500) }
+        : { lastSyncedAt: now },
+      { merge: true },
+    );
+  } catch {
+    // Observability must never break the sync itself.
   }
 }

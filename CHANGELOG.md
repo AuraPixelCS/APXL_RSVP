@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.3.3] — 2026-09-02
+
+### Fixed
+- **Google Sheet sync hardened** after the first real production registration (1 Sep 23:20 UTC) never reached the sheet: the sync now retries once with a fresh token, the service-account JWT `iat` is backdated 60s (serverless clock skew makes Google reject a future-dated token), and every outcome is recorded in Firestore at `system/sheetSync` (`lastSyncedAt` / `lastFailureAt` + `lastError`) so a swallowed failure is no longer invisible. The sheet self-heals on any later sync — one "Open Google Sheet" click backfills the missed row.
+
+### Added
+- `scripts/switch-sender-imaiready.js` — flips all NAIRW events' pass-email sender to `PEOPLElogy Events <passes@events.imaiready.asia>` (dry-run by default, `--revert` to undo). To be run only after the client adds the DNS records, Resend verifies the domain, and `RESEND_ALLOWED_DOMAINS` is set in Vercel.
+
+### Changed
+- `scripts/add-peoplelogy-domain.sh` → `scripts/add-sending-domain.sh`: target moved to `events.imaiready.asia` per the client's choice; records now come from Resend's per-domain endpoint (the list endpoint returns none) with full hostnames (the API's zone-relative names doubled the subdomain).
+
 ## [3.3.2] — 2026-09-02
 
 ### Added
