@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.3.5] — 2026-09-03
+
+### Fixed
+- Admin capacity displays (events list card, event hero, event-day hero, dashboard aggregates) now show the organiser's `capacityLimit` when set instead of the physical seat count — the confirmed caps (BAFT 300 / Gala 300 / Summit 500) were enforcing correctly but the UI still displayed the old working numbers. Seat-map, allocation and VIP maths keep using the physical count.
+
+### Added
+- `scripts/set-capacities.js` — applies the client-confirmed venue capacities (dry-run by default); Summit gets `waitlistEnabled` so free passes past 500 waitlist instead of being refused.
+
+
 ## [3.3.4] — 2026-09-03
 
 ### Added

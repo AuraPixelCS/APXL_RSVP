@@ -6,6 +6,7 @@ import AdminLayout from "@/components/layout/AdminLayout";
 import EmptyState from "@/components/ui/EmptyState";
 import { subscribeToEvents, subscribeToRSVPs } from "@/lib/firestore";
 import { getTotalSeatCount } from "@/lib/seating";
+import { capacityOf } from "@/lib/capacity";
 import type { Event, RSVP } from "@/types";
 import type { Unsubscribe } from "firebase/firestore";
 import {
@@ -711,7 +712,7 @@ const DashboardPage: NextPageWithLayout = () => {
     for (const e of scopedEvents) {
       if (!e.id) continue;
       const list = allRsvps.get(e.id) ?? [];
-      const capacity = getTotalSeatCount(e.seatingConfig, e.totalSeats);
+      const capacity = capacityOf(e, getTotalSeatCount(e.seatingConfig, e.totalSeats));
       const allocated = list.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
       const notified = list.filter((r) => (r.status === "allocated" || r.status === "checked_in") && !!r.notifiedAt).length;
       totalCapacity += capacity;
@@ -780,7 +781,7 @@ const DashboardPage: NextPageWithLayout = () => {
         const rsvps = list.length;
         const attending = list.filter((r) => r.attending).length;
         const allocated = list.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
-        const capacity = getTotalSeatCount(e.seatingConfig, e.totalSeats);
+        const capacity = capacityOf(e, getTotalSeatCount(e.seatingConfig, e.totalSeats));
         const fillPct = capacity > 0 ? Math.round((allocated / capacity) * 100) : 0;
         return {
           id: e.id,

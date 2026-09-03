@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import type { Event, RSVP } from "@/types";
 import { getTotalSeatCount } from "@/lib/seating";
+import { capacityOf } from "@/lib/capacity";
 import { formatEventDayRange } from "@/lib/eventDays";
 
 interface EventCardProps {
@@ -132,7 +133,7 @@ export default function EventCard({
   })();
   const dateLabel = formatEventDayRange(event);
 
-  const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+  const totalSeats = capacityOf(event, getTotalSeatCount(event.seatingConfig, event.totalSeats));
   const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
   const fillPct = totalSeats > 0 ? Math.round((allocated / totalSeats) * 100) : 0;
   const pending = rsvps.filter((r) => r.status === "pending" && r.attending).length;

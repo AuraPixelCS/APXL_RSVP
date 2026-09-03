@@ -359,8 +359,10 @@ interface HeroActions {
 
 function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; actions: HeroActions }) {
   const freeSeating = event.assignmentMode === "free";
-  const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
-  const vipSeats = totalSeats - event.totalSeats;
+  const physicalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+  // Show the organiser's cap when one is set — the room may hold more than we sell.
+  const totalSeats = capacityOf(event, physicalSeats);
+  const vipSeats = physicalSeats - event.totalSeats;
   const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
   const fillPct = totalSeats > 0 ? Math.round((allocated / totalSeats) * 100) : 0;
   const dateLabel = formatEventDayRange(event);
@@ -533,7 +535,7 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
 // ─── Event Day hero ───────────────────────────────────────────────────────────
 
 function EventDayHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; actions: HeroActions }) {
-  const totalSeats = getTotalSeatCount(event.seatingConfig, event.totalSeats);
+  const totalSeats = capacityOf(event, getTotalSeatCount(event.seatingConfig, event.totalSeats));
   const checkedIn = rsvps.filter((r) => r.status === "checked_in").length;
   const allocated = rsvps.filter((r) => r.status === "allocated" || r.status === "checked_in").length;
   const checkInPct = allocated > 0 ? Math.round((checkedIn / allocated) * 100) : 0;
