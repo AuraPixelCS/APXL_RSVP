@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.3.4] — 2026-09-03
+
+### Added
+- `scripts/add-sending-domain.sh --verify` — asks Resend to check the DNS for `events.imaiready.asia` and prints the status (client confirmed all three records live + DMARC `rua=` added, verified independently via dig).
+- `scripts/probe-imaiready-sender.sh <inboxes…>` — sends DKIM-alignment probes from `PEOPLElogy Events <passes@events.imaiready.asia>` (Reply-To `secretariat@imaiready.asia`) with header-checking instructions; the agreed pre-flip gate across Gmail/Outlook/Yahoo/M365.
+
+### Changed
+- `scripts/switch-sender-imaiready.js` now also sets `replyToEmail: secretariat@imaiready.asia` on every event (client's request — no mailbox exists on the sending subdomain, and delegates do reply to pass emails); `--revert` clears it back to the global default. All four send paths (entry pass, intake, notify, blast) already honour per-event Reply-To via `resolveEventSender`.
+
 ## [3.3.3] — 2026-09-02
 
 ### Fixed

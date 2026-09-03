@@ -26,6 +26,9 @@ const ROOT = path.resolve(__dirname, '..');
 const APPLY = process.argv.includes('--apply');
 const REVERT = process.argv.includes('--revert');
 const SENDER = REVERT ? 'events@aurapixel.live' : 'passes@events.imaiready.asia';
+// No mailbox exists on the sending subdomain, so replies must go to the
+// client's real secretariat address (their 3 Sep request) — delegates do reply.
+const REPLY_TO = REVERT ? '' : 'secretariat@imaiready.asia';
 
 const env = {};
 for (const line of fs.readFileSync(path.join(ROOT, '.env.local'), 'utf8').split('\n')) {
@@ -43,12 +46,12 @@ if (!admin.apps.length) {
   for (const doc of events.docs) {
     const d = doc.data();
     if (!String(d.code || '').startsWith('E')) continue;
-    if (d.senderEmail === SENDER) {
-      console.log(`${d.code}: already ${SENDER}`);
+    if (d.senderEmail === SENDER && (d.replyToEmail || '') === REPLY_TO) {
+      console.log(`${d.code}: already ${SENDER} (reply-to "${REPLY_TO}")`);
       continue;
     }
-    console.log(`${d.code}: "${d.senderEmail || ''}" -> "${SENDER}"${APPLY ? '' : '  (dry run)'}`);
-    if (APPLY) await doc.ref.update({ senderName: 'PEOPLElogy Events', senderEmail: SENDER });
+    console.log(`${d.code}: "${d.senderEmail || ''}" -> "${SENDER}", reply-to "${d.replyToEmail || ''}" -> "${REPLY_TO}"${APPLY ? '' : '  (dry run)'}`);
+    if (APPLY) await doc.ref.update({ senderName: 'PEOPLElogy Events', senderEmail: SENDER, replyToEmail: REPLY_TO });
   }
   console.log(APPLY ? 'Done.' : 'Dry run — re-run with --apply to write.');
   process.exit(0);

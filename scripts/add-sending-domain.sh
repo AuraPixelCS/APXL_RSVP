@@ -5,6 +5,7 @@
 #
 #   sh scripts/add-sending-domain.sh                 # create events.imaiready.asia + print records
 #   sh scripts/add-sending-domain.sh --show          # just re-print the records
+#   sh scripts/add-sending-domain.sh --verify        # ask Resend to check the DNS now (repeat until "verified")
 #   sh scripts/add-sending-domain.sh other.dom.tld   # different subdomain
 #
 # Region ap-northeast-1 (Tokyo) — closest Resend region to Malaysia, same as
@@ -22,15 +23,16 @@ KEY=$(grep '^RESEND_API_KEY=' .env.local | cut -d= -f2- | tr -d '"'"'")
 [ -n "$KEY" ] || { echo "RESEND_API_KEY not found in .env.local" >&2; exit 1; }
 
 DOMAIN="events.imaiready.asia"
-SHOW_ONLY=""
+MODE="create"
 for a in "$@"; do
   case "$a" in
-    --show) SHOW_ONLY=1 ;;
+    --show) MODE="show" ;;
+    --verify) MODE="verify" ;;
     *) DOMAIN="$a" ;;
   esac
 done
 
-if [ -z "$SHOW_ONLY" ]; then
+if [ "$MODE" = "create" ]; then
   curl -s -X POST https://api.resend.com/domains \
     -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
     -d "{\"name\":\"$DOMAIN\",\"region\":\"ap-northeast-1\"}" >/dev/null
@@ -44,6 +46,13 @@ matches = [d["id"] for d in json.load(sys.stdin).get("data", []) if d["name"] ==
 print(matches[0] if matches else "")
 ')
 [ -n "$DOMAIN_ID" ] || { echo "Domain $DOMAIN not found — creation may have failed; re-run without --show." >&2; exit 1; }
+
+if [ "$MODE" = "verify" ]; then
+  curl -s -X POST "https://api.resend.com/domains/$DOMAIN_ID/verify" \
+    -H "Authorization: Bearer $KEY" >/dev/null
+  echo "Verification requested — status below (re-run --verify or --show until it reads \"verified\"; usually under a minute once DNS has propagated)."
+  echo ""
+fi
 
 curl -s "https://api.resend.com/domains/$DOMAIN_ID" -H "Authorization: Bearer $KEY" |
 DOMAIN="$DOMAIN" python3 -c '
