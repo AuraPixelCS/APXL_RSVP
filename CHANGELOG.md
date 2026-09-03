@@ -7,6 +7,7 @@
 - `scripts/probe-imaiready-sender.sh <inboxes…>` — sends DKIM-alignment probes from `PEOPLElogy Events <passes@events.imaiready.asia>` (Reply-To `secretariat@imaiready.asia`) with header-checking instructions; the agreed pre-flip gate across Gmail/Outlook/Yahoo/M365.
 
 ### Changed
+- **Google Sheet tabs now carry the event names** ("BAFT Conference", "Asia AI Excellence Award Gala Dinner", "Summit (NAIRW)") instead of the E1/E2/E3 codes; existing code-named tabs are renamed in place on the next sync, so no duplicate tabs are left behind. Falls back to the code if a title is empty; forbidden tab characters stripped.
 - `scripts/switch-sender-imaiready.js` now also sets `replyToEmail: secretariat@imaiready.asia` on every event (client's request — no mailbox exists on the sending subdomain, and delegates do reply to pass emails); `--revert` clears it back to the global default. All four send paths (entry pass, intake, notify, blast) already honour per-event Reply-To via `resolveEventSender`.
 
 ## [3.3.3] — 2026-09-02

@@ -170,13 +170,28 @@ function guestRow(r: any): (string | number)[] {
 // ─── Sync ───────────────────────────────────────────────────────────────────
 
 function tabTitle(event: { code?: string; title?: string }): string {
-  return event.code || (event.title ?? "Event").slice(0, 90);
+  // Human names, not codes — the sheet belongs to the client's ops team.
+  // Strip the characters Sheets forbids in tab names; fall back to the code.
+  const raw = (event.title || event.code || "Event").replace(/[[\]:\\/?*]/g, " ").replace(/\s+/g, " ").trim();
+  return raw.slice(0, 90) || event.code || "Event";
 }
 
-async function ensureTab(title: string): Promise<void> {
-  const meta = await sheetsFetch("?fields=sheets.properties.title");
-  const existing: string[] = (meta.sheets ?? []).map((s: any) => s.properties?.title);
-  if (existing.includes(title)) return;
+async function ensureTab(title: string, legacyTitle?: string): Promise<void> {
+  const meta = await sheetsFetch("?fields=sheets.properties(sheetId,title)");
+  const sheets: { sheetId: number; title: string }[] = (meta.sheets ?? []).map((s: any) => s.properties);
+  if (sheets.some((s) => s.title === title)) return;
+  // A tab under the old name (the event code, or a previous event title) is
+  // renamed in place rather than abandoned, so the sheet never grows stale twins.
+  const legacy = legacyTitle ? sheets.find((s) => s.title === legacyTitle) : undefined;
+  if (legacy) {
+    await sheetsFetch(":batchUpdate", {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{ updateSheetProperties: { properties: { sheetId: legacy.sheetId, title }, fields: "title" } }],
+      }),
+    });
+    return;
+  }
   await sheetsFetch(":batchUpdate", {
     method: "POST",
     body: JSON.stringify({ requests: [{ addSheet: { properties: { title } } }] }),
@@ -206,7 +221,7 @@ async function syncEventTab(event: any): Promise<void> {
   ];
 
   const title = tabTitle(event);
-  await ensureTab(title);
+  await ensureTab(title, event.code);
   await writeTab(title, rows);
 }
 
