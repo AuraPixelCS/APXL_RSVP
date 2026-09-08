@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.3.8] — 2026-09-04
+
+### Changed
+- Event cards no longer reserve blank space when an event has no description — the row collapses; cards in a row stay aligned since real events now have no descriptions and test twins all have one. (`scripts/clear-event-descriptions.js` strips the internal build notes from the three real events.)
+
 ## [3.3.7] — 2026-09-04
 
 ### Changed

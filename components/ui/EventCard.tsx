@@ -214,13 +214,13 @@ export default function EventCard({
         >
           {event.title}
         </h3>
-        {/* Description — slot always reserved so rows line up across cards */}
-        <p
-          className="text-[11px] mt-1 line-clamp-1"
-          style={{ color: "var(--muted)", minHeight: 16 }}
-        >
-          {event.description ?? ""}
-        </p>
+        {/* Description — omitted entirely when empty; cards in a row stay aligned
+            because real events all have none and test twins all have one */}
+        {event.description ? (
+          <p className="text-[11px] mt-1 line-clamp-1" style={{ color: "var(--muted)", minHeight: 16 }}>
+            {event.description}
+          </p>
+        ) : null}
 
         {/* Meta — fixed height (single line, truncated overflow) so the fill bar aligns */}
         <div
