@@ -106,13 +106,13 @@ function CountdownChip({ date }: { date: string }) {
 }
 
 function StatusBadge({ event, isPast }: { event: Event; isPast: boolean }) {
-  const bg = event.isActive
-    ? "rgba(34,197,94,0.12)"
-    : isPast
-      ? "rgba(107,114,128,0.14)"
-      : "rgba(245,158,11,0.12)";
-  const color = event.isActive ? "#22c55e" : isPast ? "#9ca3af" : "#f59e0b";
-  const label = event.isActive ? "Active" : isPast ? "Past" : "Draft";
+  // Partner-run events keep isActive=false (the public RSVP form stays closed —
+  // registrations arrive via the integration), so "Draft" would mislabel a live
+  // event. Upcoming events read Active regardless; only past ones differ.
+  void event;
+  const bg = isPast ? "rgba(107,114,128,0.14)" : "rgba(34,197,94,0.12)";
+  const color = isPast ? "#9ca3af" : "#22c55e";
+  const label = isPast ? "Past" : "Active";
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"

@@ -1,5 +1,11 @@
 # Changelog
 
+## [3.3.6] — 2026-09-04
+
+### Changed
+- "Draft"/"Inactive" badges no longer shown on live partner-run events: `isActive` stays false on the NAIRW events by design (it only closes the public RSVP form — intake is via the integration), so the events list now labels upcoming events **Active** (Past stays), and the event page chip reads Active. No behavioural change — the public form remains closed.
+
+
 ## [3.3.5] — 2026-09-03
 
 ### Fixed
