@@ -3,9 +3,10 @@
  * Set the confirmed venue capacities (PEOPLElogy, 3 Sep 2026):
  *   BAFT (E1)   300
  *   Gala (E2)   300  (30 round tables × 10 chairs — matches table allocation)
- *   Summit (E3) 500  (client says "500/day"; every current pass covers all
- *                     3 days, so per-day == per-event until single-day passes
- *                     exist — revisit if F12/F13/F14 ever go on sale)
+ *   Summit (E3) 1500 (client venue cap is 500/day x 3 days; Mandy chose to
+ *                     display/allow the full 1500 so every registration is
+ *                     visible rather than waitlisting at 500 — the per-day 500
+ *                     is managed at the door, not at registration)
  *
  * Summit gets waitlistEnabled so free F3 registrations past 500 are
  * waitlisted rather than turned away (paid passes are never capacity-blocked
@@ -25,7 +26,7 @@ const APPLY = process.argv.includes('--apply');
 const CAPS = {
   E1: { capacityLimit: 300 },
   E2: { capacityLimit: 300 },
-  E3: { capacityLimit: 500, waitlistEnabled: true },
+  E3: { capacityLimit: 1500, waitlistEnabled: true },
 };
 
 const env = {};
