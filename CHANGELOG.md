@@ -1,5 +1,10 @@
 # Changelog
 
+## [3.3.7] — 2026-09-04
+
+### Changed
+- Test twins (codes ending "-TEST") badge as **Test** (amber) instead of Active, on the events list and the event page.
+
 ## [3.3.6] — 2026-09-04
 
 ### Changed

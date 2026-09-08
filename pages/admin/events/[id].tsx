@@ -383,15 +383,18 @@ function EventHero({ event, rsvps, actions }: { event: Event; rsvps: RSVP[]; act
             <span
               className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase"
               style={{
-                background: "rgba(34,197,94,0.12)",
-                color: "#22c55e",
+                background: (event.code ?? "").endsWith("-TEST") ? "rgba(245,158,11,0.12)" : "rgba(34,197,94,0.12)",
+                color: (event.code ?? "").endsWith("-TEST") ? "#f59e0b" : "#22c55e",
                 letterSpacing: "0.06em",
               }}
             >
               {/* Partner-run events keep isActive=false (public form closed; intake
                   is via the integration) — "Inactive" would mislabel a live event. */}
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#22c55e" }} />
-              Active
+              <span
+                className="w-1.5 h-1.5 rounded-full"
+                style={{ background: (event.code ?? "").endsWith("-TEST") ? "#f59e0b" : "#22c55e" }}
+              />
+              {(event.code ?? "").endsWith("-TEST") ? "Test" : "Active"}
             </span>
           </div>
 
